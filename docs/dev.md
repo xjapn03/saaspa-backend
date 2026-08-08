@@ -103,10 +103,25 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (46 tests)
+npm test              # Unit tests (46 tests) — no requiere BD
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 npm run test:cov      # Cobertura
 ```
+
+### Bases de datos por entorno
+
+| Archivo | Base de datos | Cuándo se usa |
+|---------|---------------|---------------|
+| `.env` | `kamerinos_db` | Desarrollo (`npm run start:dev`) |
+| `.env.test` | `kamerinos_db_tests` | E2E tests (`npm run test:e2e`) |
+| VPS/Docker | `kamerinos_db` | Producción |
+
+El flujo de E2E:
+1. `test/e2e/setup.ts` (Jest `setupFiles`) carga `.env.test` ANTES de que `@nestjs/config` lea `.env`. Como dotenv no sobreescribe variables existentes en `process.env`, `DATABASE_URL` apunta a `kamerinos_db_tests`.
+2. Cada test E2E ejecuta `npx prisma migrate deploy` en `beforeAll` contra la BD de tests.
+3. Los datos de prueba se limpian con `DELETE FROM` en `beforeEach`.
+
+> **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
 | Suite | Archivo | Tests |
 |-------|---------|-------|

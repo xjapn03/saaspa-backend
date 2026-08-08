@@ -1,3 +1,4 @@
+import { execSync } from 'child_process';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
@@ -9,6 +10,9 @@ describe('Auth (e2e)', () => {
   let prisma: PrismaService;
 
   beforeAll(async () => {
+    // Aplica migraciones a la BD de tests (kamerinos_db_tests, ver setup.ts)
+    execSync('npx prisma migrate deploy', { stdio: 'pipe' });
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
