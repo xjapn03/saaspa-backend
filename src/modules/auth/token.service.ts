@@ -12,6 +12,9 @@ export abstract class ITokenService {
     refreshToken: string;
   };
   abstract verifyToken(token: string): { sub: string; email: string; role: string };
+  abstract decodeToken(
+    token: string,
+  ): { sub: string; email: string; role: string; exp?: number } | null;
 }
 
 @Injectable()
@@ -36,5 +39,14 @@ export class TokenService extends ITokenService {
     return this.jwtService.verify<{ sub: string; email: string; role: string }>(token, {
       secret: this.configService.get<string>('JWT_SECRET'),
     });
+  }
+
+  decodeToken(token: string) {
+    return this.jwtService.decode<{
+      sub: string;
+      email: string;
+      role: string;
+      exp?: number;
+    }>(token);
   }
 }

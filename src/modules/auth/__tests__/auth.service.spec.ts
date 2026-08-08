@@ -4,6 +4,7 @@ import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from '../auth.service';
 import { IUsersRepository } from '../../../repositories/interfaces/users.repository';
+import { TokenBlacklistService } from '../../../common/redis/token-blacklist.service';
 import { TokenService } from '../token.service';
 import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
@@ -13,6 +14,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let usersRepo: DeepMockProxy<IUsersRepository>;
   let tokenService: DeepMockProxy<TokenService>;
+  let tokenBlacklist: DeepMockProxy<TokenBlacklistService>;
 
   const mockUser = {
     id: 'user-1',
@@ -33,12 +35,14 @@ describe('AuthService', () => {
   beforeEach(async () => {
     usersRepo = mockDeep<IUsersRepository>();
     tokenService = mockDeep<TokenService>();
+    tokenBlacklist = mockDeep<TokenBlacklistService>();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: IUsersRepository, useValue: usersRepo },
         { provide: TokenService, useValue: tokenService },
+        { provide: TokenBlacklistService, useValue: tokenBlacklist },
       ],
     }).compile();
     service = module.get<AuthService>(AuthService);
@@ -193,6 +197,68 @@ describe('AuthService', () => {
 
       // Act & Assert
       await expect(service.refresh('invalid-token')).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('logout', () => {
+    it('should blacklist access token and clear refresh token', async () => {
+      // Arrange
+      const accessToken = 'access-token-abc';
+      const refreshToken = 'refresh-token-abc';
+      tokenService.decodeToken.mockReturnValue({
+        sub: 'user-1',
+        email: 'test@test.com',
+        role: 'CLIENTE',
+        exp: Math.floor(Date.now() / 1000) + 900,
+      });
+      tokenService.verifyToken.mockReturnValue({
+        sub: 'user-1',
+        email: 'test@test.com',
+        role: 'CLIENTE',
+      });
+
+      // Act
+      await service.logout(accessToken, refreshToken);
+
+      // Assert
+      expect(tokenService.decodeToken).toHaveBeenCalledWith(accessToken);
+      expect(tokenBlacklist.add).toHaveBeenCalledWith(accessToken, expect.any(Number));
+      expect(usersRepo.setRefreshToken).toHaveBeenCalledWith('user-1', '');
+    });
+
+    it('should not blacklist an already expired access token', async () => {
+      // Arrange
+      tokenService.decodeToken.mockReturnValue({
+        sub: 'user-1',
+        email: 'test@test.com',
+        role: 'CLIENTE',
+        exp: Math.floor(Date.now() / 1000) - 100,
+      });
+
+      // Act
+      await service.logout('expired-token');
+
+      // Assert
+      expect(tokenBlacklist.add).not.toHaveBeenCalled();
+    });
+
+    it('should not throw when Redis is unavailable', async () => {
+      // Arrange
+      tokenService.decodeToken.mockReturnValue({
+        sub: 'user-1',
+        email: 'test@test.com',
+        role: 'CLIENTE',
+        exp: Math.floor(Date.now() / 1000) + 900,
+      });
+      tokenBlacklist.add.mockRejectedValue(new Error('Redis down'));
+
+      // Act & Assert
+      await expect(service.logout('access-token')).resolves.not.toThrow();
+    });
+
+    it('should not throw when no tokens are provided', async () => {
+      // Act & Assert
+      await expect(service.logout('', '')).resolves.not.toThrow();
     });
   });
 

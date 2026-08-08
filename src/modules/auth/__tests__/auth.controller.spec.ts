@@ -97,4 +97,28 @@ describe('AuthController', () => {
       expect(authService.refresh).toHaveBeenCalledWith('old-refresh-token');
     });
   });
+
+  describe('logout', () => {
+    it('should call service with access token from header and refresh token from body', async () => {
+      // Arrange
+      authService.logout.mockResolvedValue(undefined);
+
+      // Act
+      await controller.logout('Bearer access-token-abc', 'refresh-token-abc');
+
+      // Assert
+      expect(authService.logout).toHaveBeenCalledWith('access-token-abc', 'refresh-token-abc');
+    });
+
+    it('should handle logout without refresh token', async () => {
+      // Arrange
+      authService.logout.mockResolvedValue(undefined);
+
+      // Act
+      await controller.logout('Bearer access-token-abc', undefined);
+
+      // Assert
+      expect(authService.logout).toHaveBeenCalledWith('access-token-abc', undefined);
+    });
+  });
 });

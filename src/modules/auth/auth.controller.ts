@@ -1,5 +1,5 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Controller, Post, Body, HttpCode, HttpStatus, Headers } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -36,5 +36,19 @@ export class AuthController {
   @ApiOperation({ summary: 'Refrescar access token' })
   refresh(@Body('refreshToken') refreshToken: string) {
     return this.authService.refresh(refreshToken);
+  }
+
+  @Public()
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cerrar sesión — invalida tokens' })
+  @ApiResponse({ status: 204, description: 'Tokens invalidados correctamente' })
+  async logout(
+    @Headers('authorization') authorization: string,
+    @Body('refreshToken') refreshToken?: string,
+  ) {
+    const accessToken = authorization?.replace('Bearer ', '');
+    await this.authService.logout(accessToken, refreshToken);
   }
 }

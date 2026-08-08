@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { IUsersRepository } from '../../repositories/interfaces/users.repository';
+import { TokenBlacklistService } from '../../common/redis/token-blacklist.service';
 import { TokenService } from './token.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -12,6 +13,7 @@ export class AuthService {
   constructor(
     private usersRepo: IUsersRepository,
     private tokenService: TokenService,
+    private tokenBlacklist: TokenBlacklistService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -70,6 +72,31 @@ export class AuthService {
       return tokens;
     } catch {
       throw new UnauthorizedException('Token inválido o expirado');
+    }
+  }
+
+  async logout(accessToken: string, refreshToken?: string): Promise<void> {
+    if (accessToken) {
+      try {
+        const payload = this.tokenService.decodeToken(accessToken);
+        if (payload?.exp) {
+          const remaining = payload.exp - Math.floor(Date.now() / 1000);
+          if (remaining > 0) {
+            await this.tokenBlacklist.add(accessToken, remaining);
+          }
+        }
+      } catch {
+        this.logger.warn('No se pudo blacklistear el access token.');
+      }
+    }
+
+    if (refreshToken) {
+      try {
+        const payload = this.tokenService.verifyToken(refreshToken);
+        await this.usersRepo.setRefreshToken(payload.sub, '');
+      } catch {
+        this.logger.warn('Refresh token inválido al hacer logout.');
+      }
     }
   }
 
