@@ -202,6 +202,39 @@
           }
         },
         {
+          "name": "Logout — Cerrar sesión",
+          "description": "Invalida el access token (blacklist en Redis) y el refresh token (se limpia de la DB).\n\nDespués de ejecutarlo, el accessToken ya no funciona y el refreshToken no puede generar nuevos tokens.\nRequiere volver a hacer login para obtener tokens nuevos.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204 No Content', function () {",
+                  "  pm.response.to.have.status(204);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        },
+        {
           "name": "Register — Email duplicado (error 401)",
           "event": [
             {

@@ -124,6 +124,44 @@ El seed usa `upsert` en `prisma/seed.ts`, así que es idempotente:
 Es una clase `@Injectable()` reusable: si en el futuro se necesita enviar logs a
 CloudWatch/Datadog, se inyecta un servicio de logging dentro del interceptor.
 
+## Autenticación y Logout
+
+### Ciclo de vida de tokens
+
+```
+Login/Register ──► accessToken (15m) + refreshToken (7d, guardado en DB)
+                         │
+Refresco ──► refreshToken válido ──► nuevos tokens (rotación)
+                         │
+Logout ──► accessToken → blacklist en Redis (TTL = tiempo restante)
+           refreshToken → se limpia de la DB (ya no se puede rotar)
+```
+
+### Endpoints
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| POST | `/api/auth/register` | Crear usuario + tokens |
+| POST | `/api/auth/login` | Autenticar + tokens |
+| POST | `/api/auth/refresh` | Rotar tokens (body: refreshToken) |
+| POST | `/api/auth/logout` | Invalidar tokens (header Bearer + body refreshToken) |
+
+### Cómo funciona el logout (Token Blacklist)
+
+1. **`TokenBlacklistService`** (`src/common/redis/token-blacklist.service.ts`) guarda el
+   accessToken en Redis con `EX` (expiración = tiempo de vida restante del token).
+   Redis lo elimina automáticamente al expirar.
+2. El refreshToken se limpia de la columna `users.refreshToken` en la DB.
+3. **`JwtAuthGuard`** verifica en cada request si el token está en la blacklist →
+   devuelve 401 si fue revocado.
+
+### Redis
+
+- `src/common/redis/redis.service.ts` — wrapper de ioredis con `lazyConnect` y
+  degradación elegante: si Redis no está disponible, la API sigue funcionando
+  (el logout no crashea, y el blacklist check devuelve `false`).
+- Variables: `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` (default: localhost:6379).
+
 ## Arquitectura (SOLID + Repository Pattern)
 
 ```
