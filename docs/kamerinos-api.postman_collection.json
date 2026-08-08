@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Kamerinos SPA API",
-    "description": "Colección de pruebas para la API de Kamerinos SPA Bogotá.\n\nFlujo recomendado:\n1. Ejecutar \"Login Admin (seed)\" — guarda el accessToken automáticamente\n2. Probar los endpoints de Users (ya están autenticados)\n3. Registrar un cliente nuevo con \"Register Cliente\"\n4. Hacer login con ese cliente y probar /me, PATCH /me\n\nSeeds incluidos:\n- Admin: admin@kamerinosspa.com / admin123\n- Servicios: Masaje Relajante, Limpieza Facial, Manicure, Depilación",
+    "description": "Colección de pruebas para la API de Kamerinos SPA Bogotá.\n\nFlujo recomendado:\n1. Ejecutar \"Login Admin (seed)\" — guarda el accessToken automáticamente\n2. Ejecutar \"GET / — Listar usuarios (Admin)\" — llena {{userId}} con el primer usuario\n3. Probar \"PATCH /:id — Editar cualquier usuario (Admin)\" para editar a un cliente/empleado\n4. Registrar un cliente nuevo con \"Register Cliente\" y hacer login con él para probar /me, PATCH /me\n\nSeeds incluidos (se ejecutan automáticamente con RUN_SEED=true en el .env):\n- Admin: admin@kamerinosspa.com / admin123\n- Servicios: Masaje Relajante, Limpieza Facial, Manicure, Depilación\n\nNota: si Login Admin da 401, reinicia el backend — el seed automático crea el admin en el primer arranque.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "kamerinos-dev"
   },
@@ -87,6 +87,7 @@
         },
         {
           "name": "Login Admin (seed)",
+          "description": "Si da 401: reinicia el backend con RUN_SEED=true en el .env. El seed automático crea el admin admin@kamerinosspa.com / admin123 la primera vez que arranca la app.",
           "event": [
             {
               "listen": "test",
@@ -327,6 +328,11 @@
                   "    pm.expect(user.isActive).to.eql(true);",
                   "    pm.expect(user.passwordHash).to.be.undefined;",
                   "  });",
+                  "  if (json.length > 0) {",
+                  "    pm.collectionVariables.set('userId', json[0].id);",
+                  "    pm.expect(json[0].id).to.be.a('string');",
+                  "  }",
+                  "});",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -347,6 +353,7 @@
         },
         {
           "name": "GET /:id — Ver usuario (Admin)",
+          "description": "Consulta un usuario por ID. {{userId}} se llena automáticamente al ejecutar GET /users.",
           "event": [
             {
               "listen": "test",
@@ -373,7 +380,47 @@
           }
         },
         {
+          "name": "PATCH /:id — Editar cualquier usuario (Admin)",
+          "description": "Como administrador puedes editar el perfil de un cliente o empleado: role, firstName, lastName, phone, birthday, description.\n\n{{userId}} se llena automáticamente al ejecutar GET /users. Si quieres editar otro usuario, copia su id de la respuesta de GET /users y pégalo en la variable userId.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Retorna usuario actualizado', function () {",
+                  "  var json = pm.response.json();",
+                  "  pm.expect(json.id).to.eql(pm.collectionVariables.get('userId'));",
+                  "  pm.expect(json.role).to.be.a('string');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Maria\",\n  \"lastName\": \"Gomez\",\n  \"phone\": \"3001234567\",\n  \"birthday\": \"1990-05-15\",\n  \"description\": \"Cliente frecuente editado por el administrador\",\n  \"role\": \"CLIENTE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            }
+          }
+        },
+        {
           "name": "DELETE /:id — Soft delete (Admin)",
+          "description": "Desactiva un usuario (isActive=false). No lo borra físicamente.\n\n{{userId}} se llena automáticamente al ejecutar GET /users.",
           "event": [
             {
               "listen": "test",

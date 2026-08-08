@@ -1,5 +1,15 @@
 # Notas de Desarrollo — Kamerinos SPA Backend
 
+## Stack actual
+
+| Componente   | Versión            | Estado                        |
+|-------------|--------------------|-------------------------------|
+| NestJS      | v11.1.28           | Actualizado (nov 2026)        |
+| TypeScript  | v5.x               | —                             |
+| Prisma      | v5.22              | —                             |
+| PostgreSQL  | 15 (pgvector)      | —                             |
+| npm audit   | **0 vulnerabilidades** | Auditado tras migrar a v11 |
+
 ## Inicio rápido
 
 ```bash
@@ -7,7 +17,7 @@
 docker compose up -d postgres redis
 
 # Backend
-npm run start:dev        # Levanta en :3001
+npm run start:dev        # Levanta en :3001 (aplica migraciones + seed si RUN_SEED=true)
 npm run test             # Tests unitarios
 npm run test:e2e         # Tests end-to-end
 npm run prisma:studio    # Explorar DB con Prisma Studio
@@ -79,6 +89,40 @@ Esto aplica las migraciones pendientes sin generar nuevas. Para crear nuevas mig
 npx prisma migrate dev --name <descripcion>   # crea la migración a partir de schema.prisma
 npm run start:dev                              # auto-aplica la migración al arrancar
 ```
+
+## Auto-Seed (RUN_SEED)
+
+El seed solo se ejecuta si `RUN_SEED=true` en el `.env` **y** el admin no existe en la DB.
+Así se protege producción: si no está definida la variable, no se ejecuta.
+
+```bash
+# .env (desarrollo)
+RUN_SEED=true
+
+# .env.test (tests E2E)
+RUN_SEED=false
+
+# Producción: NO definir la variable (o false)
+```
+
+El seed usa `upsert` en `prisma/seed.ts`, así que es idempotente:
+- Crea admin `admin@kamerinosspa.com` / `admin123` si no existe
+- Crea 4 servicios de ejemplo
+- Si ya existe el admin, no duplica nada
+
+## Logging de Requests
+
+`src/common/interceptors/logging.interceptor.ts` loguea cada request HTTP en consola
+(format: `método URL statusCode duración - ip`). Registrado como `APP_INTERCEPTOR` global:
+
+```
+[Nest] LOG [HTTP] POST /api/auth/login 201 45ms - ::1
+[Nest] LOG [HTTP] GET /api/users 200 12ms - ::1
+[Nest] WARN [HTTP] GET /api/users/me 401 8ms - ::1
+```
+
+Es una clase `@Injectable()` reusable: si en el futuro se necesita enviar logs a
+CloudWatch/Datadog, se inyecta un servicio de logging dentro del interceptor.
 
 ## Arquitectura (SOLID + Repository Pattern)
 
