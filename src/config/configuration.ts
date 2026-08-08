@@ -4,6 +4,12 @@ export default () => ({
   apiPrefix: process.env.API_PREFIX || 'api',
   runSeed: process.env.RUN_SEED === 'true',
 
+  redis: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
+  },
+
   jwt: {
     secret: process.env.JWT_SECRET || 'dev-secret',
     expiration: process.env.JWT_EXPIRATION || '15m',
