@@ -80,7 +80,43 @@ npx prisma migrate dev --name <descripcion>   # crea la migración a partir de s
 npm run start:dev                              # auto-aplica la migración al arrancar
 ```
 
-## Guards Globales
+## Arquitectura (SOLID + Repository Pattern)
 
-- **JwtAuthGuard**: Protege todas las rutas por defecto. Usar `@Public()` para eximir.
-- **RolesGuard**: Verifica roles. Usar `@Roles(Role.ADMIN)` para restringir.
+```
+Controller → Service → Repository Interface (abstract class) ← Repository (Prisma)
+                ↕
+          TokenService (JWT)
+```
+
+| Capa | Ubicación | Responsabilidad |
+|------|-----------|-----------------|
+| Controller | `src/modules/*/` | HTTP, DTOs, delega al Service |
+| Service | `src/modules/*/` | Lógica de negocio, depende de abstracciones |
+| Repository Interface | `src/repositories/interfaces/` | Contrato (`IUsersRepository` abstract class) |
+| Repository | `src/repositories/` | Implementación concreta con PrismaService |
+
+**Principios SOLID aplicados:**
+- **S**: AuthService delega tokens a TokenService, repositorio maneja solo data access
+- **O**: Interfaces abstractas permiten extender sin modificar
+- **D**: Services dependen de `IUsersRepository`, no de `PrismaService` directamente
+
+## Tests
+
+```bash
+npm test              # Unit tests (46 tests)
+npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
+npm run test:cov      # Cobertura
+```
+
+| Suite | Archivo | Tests |
+|-------|---------|-------|
+| Unit | `users.repository.spec.ts` | findById, findByEmail, findAll, create, update, remove, setRefreshToken, error cases |
+| Unit | `token.service.spec.ts` | generateTokens, verifyToken |
+| Unit | `auth.service.spec.ts` | register, login, refresh con casos de error |
+| Unit | `users.service.spec.ts` | Delegación al repositorio |
+| Unit | `auth.controller.spec.ts` | HTTP status, formato de respuesta |
+| Unit | `users.controller.spec.ts` | CRUD, admin vs cliente |
+| Unit | `jwt-auth.guard.spec.ts` | Rutas @Public(), autenticación |
+| Unit | `roles.guard.spec.ts` | Validación de roles |
+| E2E | `auth.e2e-spec.ts` | Register, Login, Refresh flujo completo |
+| E2E | `users.e2e-spec.ts` | CRUD con tokens reales, admin vs cliente 403 |

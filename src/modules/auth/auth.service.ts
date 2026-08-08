@@ -1,8 +1,7 @@
 import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
-import { UsersService } from '../users/users.service';
+import { IUsersRepository } from '../../repositories/interfaces/users.repository';
+import { TokenService } from './token.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 
@@ -11,19 +10,18 @@ export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
-    private usersService: UsersService,
-    private jwtService: JwtService,
-    private configService: ConfigService,
+    private usersRepo: IUsersRepository,
+    private tokenService: TokenService,
   ) {}
 
   async register(dto: RegisterDto) {
-    const existing = await this.usersService.findByEmail(dto.email);
+    const existing = await this.usersRepo.findByEmail(dto.email);
     if (existing) {
       throw new UnauthorizedException('El email ya está registrado');
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    const user = await this.usersService.create({
+    const user = await this.usersRepo.create({
       email: dto.email,
       passwordHash,
       firstName: dto.firstName,
@@ -34,14 +32,14 @@ export class AuthService {
       role: dto.role,
     });
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
-    await this.usersService.setRefreshToken(user.id, tokens.refreshToken);
+    const tokens = this.tokenService.generateTokens(user.id, user.email, user.role);
+    await this.usersRepo.setRefreshToken(user.id, tokens.refreshToken);
 
     return { user: this.sanitizeUser(user), ...tokens };
   }
 
   async login(dto: LoginDto) {
-    const user = await this.usersService.findByEmail(dto.email);
+    const user = await this.usersRepo.findByEmail(dto.email);
     if (!user) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
@@ -51,25 +49,23 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
-    await this.usersService.setRefreshToken(user.id, tokens.refreshToken);
+    const tokens = this.tokenService.generateTokens(user.id, user.email, user.role);
+    await this.usersRepo.setRefreshToken(user.id, tokens.refreshToken);
 
     return { user: this.sanitizeUser(user), ...tokens };
   }
 
   async refresh(refreshToken: string) {
     try {
-      const payload = this.jwtService.verify(refreshToken, {
-        secret: this.configService.get<string>('JWT_SECRET'),
-      });
+      const payload = this.tokenService.verifyToken(refreshToken);
+      const user = await this.usersRepo.findByIdWithCredentials(payload.sub);
 
-      const user = await this.validateUserForRefresh(payload.sub);
       if (!user || user.refreshToken !== refreshToken) {
         throw new UnauthorizedException('Token inválido');
       }
 
-      const tokens = await this.generateTokens(user.id, user.email, user.role);
-      await this.usersService.setRefreshToken(user.id, tokens.refreshToken);
+      const tokens = this.tokenService.generateTokens(user.id, user.email, user.role);
+      await this.usersRepo.setRefreshToken(user.id, tokens.refreshToken);
 
       return tokens;
     } catch {
@@ -78,23 +74,7 @@ export class AuthService {
   }
 
   async validateUser(userId: string) {
-    return this.usersService.findById(userId);
-  }
-
-  private async validateUserForRefresh(userId: string) {
-    return this.usersService.findByIdWithCredentials(userId);
-  }
-
-  private async generateTokens(userId: string, email: string, role: string) {
-    const payload = { sub: userId, email, role };
-
-    const accessToken = this.jwtService.sign(payload);
-
-    const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d'),
-    });
-
-    return { accessToken, refreshToken };
+    return this.usersRepo.findById(userId);
   }
 
   private sanitizeUser(user: any) {
