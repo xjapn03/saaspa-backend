@@ -181,4 +181,67 @@ describe('Auth (e2e)', () => {
       expect(response.status).toBe(401);
     });
   });
+
+  describe('POST /api/auth/logout', () => {
+    it('should logout and revoke access token (204)', async () => {
+      // Arrange — login to get tokens
+      const loginRes = await request(app.getHttpServer())
+        .post('/api/auth/login')
+        .send({ email: 'admin@kamerinosspa.com', password: 'admin123' });
+      const accessToken = loginRes.body.accessToken;
+      const refreshToken = loginRes.body.refreshToken;
+
+      // Act
+      const logoutRes = await request(app.getHttpServer())
+        .post('/api/auth/logout')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ refreshToken });
+
+      // Assert
+      expect(logoutRes.status).toBe(204);
+    });
+
+    it('should return 401 using a revoked access token', async () => {
+      // Arrange — login, then logout to revoke the access token
+      const loginRes = await request(app.getHttpServer())
+        .post('/api/auth/login')
+        .send({ email: 'admin@kamerinosspa.com', password: 'admin123' });
+      const accessToken = loginRes.body.accessToken;
+
+      await request(app.getHttpServer())
+        .post('/api/auth/logout')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({});
+
+      // Act — try to use the revoked access token
+      const response = await request(app.getHttpServer())
+        .get('/api/users/me')
+        .set('Authorization', `Bearer ${accessToken}`);
+
+      // Assert
+      expect(response.status).toBe(401);
+    });
+
+    it('should return 401 refreshing with revoked refresh token', async () => {
+      // Arrange — login, then logout with refresh token to revoke it
+      const loginRes = await request(app.getHttpServer())
+        .post('/api/auth/login')
+        .send({ email: 'admin@kamerinosspa.com', password: 'admin123' });
+      const accessToken = loginRes.body.accessToken;
+      const refreshToken = loginRes.body.refreshToken;
+
+      await request(app.getHttpServer())
+        .post('/api/auth/logout')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ refreshToken });
+
+      // Act — try to refresh with the revoked refresh token
+      const response = await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken });
+
+      // Assert
+      expect(response.status).toBe(401);
+    });
+  });
 });
