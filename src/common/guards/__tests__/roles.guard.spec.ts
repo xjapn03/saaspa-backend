@@ -3,7 +3,6 @@ import { Reflector } from '@nestjs/core';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { Role } from '@prisma/client';
 import { RolesGuard } from '../roles.guard';
-import { ROLES_KEY } from '../../decorators/roles.decorator';
 
 describe('RolesGuard', () => {
   let guard: RolesGuard;

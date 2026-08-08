@@ -27,7 +27,7 @@ export class TokenService extends ITokenService {
     const payload = { sub: userId, email, role };
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d'),
+      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d') as `${number}d`,
     });
     return { accessToken, refreshToken };
   }

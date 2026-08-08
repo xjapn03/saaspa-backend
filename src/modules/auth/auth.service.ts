@@ -78,7 +78,9 @@ export class AuthService {
   }
 
   private sanitizeUser(user: any) {
-    const { passwordHash, refreshToken, ...rest } = user;
+    const rest = { ...user };
+    delete rest.passwordHash;
+    delete rest.refreshToken;
     return rest;
   }
 }
