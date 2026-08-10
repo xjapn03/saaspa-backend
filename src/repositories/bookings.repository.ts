@@ -39,7 +39,7 @@ export class BookingsRepository extends IBookingsRepository {
       where,
       select: bookingSelect,
       orderBy: { startTime: 'asc' },
-    }) as Promise<IBookingSafe[]>;
+    }) as unknown as IBookingSafe[];
   }
 
   async findById(id: string) {
@@ -48,7 +48,7 @@ export class BookingsRepository extends IBookingsRepository {
       select: bookingSelect,
     });
     if (!booking) throw new NotFoundException('Cita no encontrada');
-    return booking as IBookingSafe;
+    return booking as unknown as IBookingSafe;
   }
 
   async findBySlot(serviceId: string, startTime: Date, endTime: Date) {
@@ -89,6 +89,6 @@ export class BookingsRepository extends IBookingsRepository {
       where: { id },
       data,
       select: bookingSelect,
-    }) as Promise<IBookingSafe>;
+    }) as unknown as IBookingSafe;
   }
 }

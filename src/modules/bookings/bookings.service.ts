@@ -33,12 +33,15 @@ export class BookingsService {
     const occupied = await this.bookingsRepo.findOccupied(serviceId, date);
 
     const lockedKeys = await this.redis.keys(`slot:${serviceId}:${date}:*`);
-    const lockedSlots: { start: Date; end: Date }[] = [];
+    const lockedSlots: { startTime: Date; endTime: Date }[] = [];
     for (const key of lockedKeys) {
       const raw = await this.redis.get(key);
       if (raw) {
         const parsed = JSON.parse(raw);
-        lockedSlots.push({ start: new Date(parsed.start), end: new Date(parsed.end) });
+        lockedSlots.push({
+          startTime: new Date(parsed.start),
+          endTime: new Date(parsed.end),
+        });
       }
     }
 
