@@ -3,6 +3,7 @@ export default () => ({
   nodeEnv: process.env.NODE_ENV || 'development',
   apiPrefix: process.env.API_PREFIX || 'api',
   runSeed: process.env.RUN_SEED === 'true',
+  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
 
   redis: {
     host: process.env.REDIS_HOST || 'localhost',

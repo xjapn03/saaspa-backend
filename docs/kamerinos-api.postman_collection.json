@@ -1,9 +1,8 @@
 {
   "info": {
     "name": "Kamerinos SPA API",
-    "description": "Colección de pruebas para la API de Kamerinos SPA Bogotá.\n\nFlujo recomendado:\n1. Ejecutar \"Login Admin (seed)\" — guarda el accessToken automáticamente\n2. Ejecutar \"GET / — Listar usuarios (Admin)\" — llena {{userId}} con el primer usuario\n3. Probar \"PATCH /:id — Editar cualquier usuario (Admin)\" para editar a un cliente/empleado\n4. Registrar un cliente nuevo con \"Register Cliente\" y hacer login con él para probar /me, PATCH /me\n\nSeeds incluidos (se ejecutan automáticamente con RUN_SEED=true en el .env):\n- Admin: admin@kamerinosspa.com / admin123\n- Servicios: Masaje Relajante, Limpieza Facial, Manicure, Depilación\n\nNota: si Login Admin da 401, reinicia el backend — el seed automático crea el admin en el primer arranque.",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "_exporter_id": "kamerinos-dev"
+    "description": "Colección de pruebas para la API de Kamerinos SPA Bogotá.\n\nFlujo recomendado:\n1. Login Admin → guarda accessToken\n2. Crear servicios → prueba sitio público\n3. Registrar cliente + login → prueba /agendar (crear cita)\n4. Admin: confirmar cita, completar, cancelar\n\nSeed automático (RUN_SEED=true): admin@kamerinosspa.com / admin123 + 4 servicios de ejemplo.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
@@ -11,259 +10,28 @@
       "item": [
         {
           "name": "Register Cliente",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 201 Created', function () {",
-                  "  pm.response.to.have.status(201);",
-                  "});",
-                  "",
-                  "pm.test('Retorna accessToken y refreshToken', function () {",
-                  "  var json = pm.response.json();",
-                  "  pm.expect(json.accessToken).to.be.a('string');",
-                  "  pm.expect(json.refreshToken).to.be.a('string');",
-                  "  pm.expect(json.user.email).to.eql('cliente@test.com');",
-                  "  pm.collectionVariables.set('clientAccessToken', json.accessToken);",
-                  "  pm.collectionVariables.set('clientRefreshToken', json.refreshToken);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"cliente@test.com\",\n  \"firstName\": \"Maria\",\n  \"lastName\": \"Gomez\",\n  \"phone\": \"3001234567\",\n  \"birthday\": \"1990-05-15\",\n  \"description\": \"Cliente frecuente, prefiere masajes relajantes\",\n  \"password\": \"password123\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "register"]
-            }
-          }
-        },
-        {
-          "name": "Register Empleado",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 201 Created', function () {",
-                  "  pm.response.to.have.status(201);",
-                  "});",
-                  "",
-                  "pm.test('Rol es EMPLEADO', function () {",
-                  "  var json = pm.response.json();",
-                  "  pm.expect(json.user.role).to.eql('EMPLEADO');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"estilista@kamerinosspa.com\",\n  \"firstName\": \"Carlos\",\n  \"lastName\": \"Rodriguez\",\n  \"phone\": \"3009876543\",\n  \"birthday\": \"1988-10-20\",\n  \"description\": \"Estilista senior, especialista en colorimetría\",\n  \"password\": \"password123\",\n  \"role\": \"EMPLEADO\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "register"]
-            }
-          }
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', function () { pm.response.to.have.status(201); });", "var json = pm.response.json();", "pm.collectionVariables.set('clientAccessToken', json.accessToken);", "pm.collectionVariables.set('clientRefreshToken', json.refreshToken);"], "type": "text/javascript" } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"cliente@test.com\",\n  \"firstName\": \"Maria\",\n  \"lastName\": \"Gomez\",\n  \"phone\": \"3001234567\",\n  \"password\": \"password123\"\n}" }, "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] } }
         },
         {
           "name": "Login Admin (seed)",
-          "description": "Si da 401: reinicia el backend con RUN_SEED=true en el .env. El seed automático crea el admin admin@kamerinosspa.com / admin123 la primera vez que arranca la app.",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200 OK', function () {",
-                  "  pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Retorna tokens y guarda en variables', function () {",
-                  "  var json = pm.response.json();",
-                  "  pm.expect(json.accessToken).to.be.a('string');",
-                  "  pm.expect(json.refreshToken).to.be.a('string');",
-                  "  pm.expect(json.user.email).to.eql('admin@kamerinosspa.com');",
-                  "  pm.expect(json.user.role).to.eql('ADMIN');",
-                  "  pm.collectionVariables.set('accessToken', json.accessToken);",
-                  "  pm.collectionVariables.set('refreshToken', json.refreshToken);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@kamerinosspa.com\",\n  \"password\": \"admin123\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "login"]
-            }
-          }
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "pm.collectionVariables.set('accessToken', json.accessToken);", "pm.collectionVariables.set('refreshToken', json.refreshToken);"], "type": "text/javascript" } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@kamerinosspa.com\",\n  \"password\": \"admin123\"\n}" }, "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] } }
         },
         {
           "name": "Login Cliente",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200 OK', function () {",
-                  "  pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "var json = pm.response.json();",
-                  "pm.collectionVariables.set('clientAccessToken', json.accessToken);",
-                  "pm.collectionVariables.set('clientRefreshToken', json.refreshToken);"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"cliente@test.com\",\n  \"password\": \"password123\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "login"]
-            }
-          }
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "pm.collectionVariables.set('clientAccessToken', json.accessToken);", "pm.collectionVariables.set('clientRefreshToken', json.refreshToken);"], "type": "text/javascript" } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"cliente@test.com\",\n  \"password\": \"password123\"\n}" }, "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] } }
         },
         {
           "name": "Refresh Token",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200 OK', function () {",
-                  "  pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Nuevos tokens generados', function () {",
-                  "  var json = pm.response.json();",
-                  "  pm.expect(json.accessToken).to.be.a('string');",
-                  "  pm.expect(json.refreshToken).to.be.a('string');",
-                  "  pm.collectionVariables.set('accessToken', json.accessToken);",
-                  "  pm.collectionVariables.set('refreshToken', json.refreshToken);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/refresh",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "refresh"]
-            }
-          }
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "pm.collectionVariables.set('accessToken', json.accessToken);", "pm.collectionVariables.set('refreshToken', json.refreshToken);"], "type": "text/javascript" } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }, "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] } }
         },
         {
           "name": "Logout — Cerrar sesión",
-          "description": "Invalida el access token (blacklist en Redis) y el refresh token (se limpia de la DB).\n\nDespués de ejecutarlo, el accessToken ya no funciona y el refreshToken no puede generar nuevos tokens.\nRequiere volver a hacer login para obtener tokens nuevos.",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 204 No Content', function () {",
-                  "  pm.response.to.have.status(204);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/logout",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "logout"]
-            }
-          }
-        },
-        {
-          "name": "Register — Email duplicado (error 401)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 401 Unauthorized', function () {",
-                  "  pm.response.to.have.status(401);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@kamerinosspa.com\",\n  \"firstName\": \"Duplicado\",\n  \"lastName\": \"Test\",\n  \"password\": \"password123\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "register"]
-            }
-          }
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 204', function () { pm.response.to.have.status(204); });"], "type": "text/javascript" } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }, "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] } }
         }
       ]
     },
@@ -272,237 +40,107 @@
       "item": [
         {
           "name": "GET /me — Perfil propio",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200 OK', function () {",
-                  "  pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Retorna datos del usuario autenticado', function () {",
-                  "  var json = pm.response.json();",
-                  "  pm.expect(json.email).to.be.a('string');",
-                  "  pm.expect(json.role).to.be.a('string');",
-                  "  pm.expect(json.passwordHash).to.be.undefined;",
-                  "  pm.expect(json.refreshToken).to.be.undefined;",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/users/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "me"]
-            }
-          }
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] } }
         },
         {
           "name": "PATCH /me — Editar perfil propio",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200 OK', function () {",
-                  "  pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Campos actualizados correctamente', function () {",
-                  "  var json = pm.response.json();",
-                  "  pm.expect(json.birthday).to.include('1990-01-01');",
-                  "  pm.expect(json.description).to.eql('Perfil actualizado desde Postman');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"birthday\": \"1990-01-01\",\n  \"description\": \"Perfil actualizado desde Postman\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "me"]
-            }
-          }
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"phone\": \"3001112233\"\n}" }, "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] } }
         },
         {
           "name": "GET / — Listar usuarios (Admin)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200 OK', function () {",
-                  "  pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Retorna array de usuarios activos', function () {",
-                  "  var json = pm.response.json();",
-                  "  pm.expect(json).to.be.an('array');",
-                  "  json.forEach(function (user) {",
-                  "    pm.expect(user.isActive).to.eql(true);",
-                  "    pm.expect(user.passwordHash).to.be.undefined;",
-                  "  });",
-                  "  if (json.length > 0) {",
-                  "    pm.collectionVariables.set('userId', json[0].id);",
-                  "    pm.expect(json[0].id).to.be.a('string');",
-                  "  }",
-                  "});",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/users",
-              "host": ["{{baseUrl}}"],
-              "path": ["users"]
-            }
-          }
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "if (json.length > 0) pm.collectionVariables.set('userId', json[0].id);"], "type": "text/javascript" } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] } }
         },
         {
           "name": "GET /:id — Ver usuario (Admin)",
-          "description": "Consulta un usuario por ID. {{userId}} se llena automáticamente al ejecutar GET /users.",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200 OK o 404', function () {",
-                  "  pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}"]
-            }
-          }
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] } }
         },
         {
-          "name": "PATCH /:id — Editar cualquier usuario (Admin)",
-          "description": "Como administrador puedes editar el perfil de un cliente o empleado: role, firstName, lastName, phone, birthday, description.\n\n{{userId}} se llena automáticamente al ejecutar GET /users. Si quieres editar otro usuario, copia su id de la respuesta de GET /users y pégalo en la variable userId.",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200 OK', function () {",
-                  "  pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Retorna usuario actualizado', function () {",
-                  "  var json = pm.response.json();",
-                  "  pm.expect(json.id).to.eql(pm.collectionVariables.get('userId'));",
-                  "  pm.expect(json.role).to.be.a('string');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"firstName\": \"Maria\",\n  \"lastName\": \"Gomez\",\n  \"phone\": \"3001234567\",\n  \"birthday\": \"1990-05-15\",\n  \"description\": \"Cliente frecuente editado por el administrador\",\n  \"role\": \"CLIENTE\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}"]
-            }
-          }
+          "name": "PATCH /:id — Editar usuario (Admin)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"firstName\": \"Editado\",\n  \"role\": \"CLIENTE\"\n}" }, "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] } }
         },
         {
           "name": "DELETE /:id — Soft delete (Admin)",
-          "description": "Desactiva un usuario (isActive=false). No lo borra físicamente.\n\n{{userId}} se llena automáticamente al ejecutar GET /users.",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 204 No Content', function () {",
-                  "  pm.response.to.have.status(204);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "DELETE",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/users/{{userId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "{{userId}}"]
-            }
-          }
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 204', function () { pm.response.to.have.status(204); });"], "type": "text/javascript" } }],
+          "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] } }
+        }
+      ]
+    },
+    {
+      "name": "Services",
+      "item": [
+        {
+          "name": "GET /public — Listar servicios activos (Público)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "if (json.length > 0) pm.collectionVariables.set('serviceId', json[0].id);"], "type": "text/javascript" } }],
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/services/public", "host": ["{{baseUrl}}"], "path": ["services", "public"] } }
         },
         {
-          "name": "GET /me — Sin token (error 401)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 401 Unauthorized', function () {",
-                  "  pm.response.to.have.status(401);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/users/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "me"]
-            }
-          }
+          "name": "GET / — Listar todos (Admin/Empleado)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "if (json.length > 0) pm.collectionVariables.set('serviceId', json[0].id);"], "type": "text/javascript" } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/services", "host": ["{{baseUrl}}"], "path": ["services"] } }
+        },
+        {
+          "name": "GET /:id — Detalle servicio",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/services/{{serviceId}}", "host": ["{{baseUrl}}"], "path": ["services", "{{serviceId}}"] } }
+        },
+        {
+          "name": "POST / — Crear servicio (Admin)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', function () { pm.response.to.have.status(201); });", "var json = pm.response.json();", "pm.collectionVariables.set('serviceId', json.id);"], "type": "text/javascript" } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Facial Premium\",\n  \"description\": \"Limpieza profunda con ácido hialurónico.\",\n  \"price\": 180000,\n  \"duration\": 75,\n  \"category\": \"Facial\"\n}" }, "url": { "raw": "{{baseUrl}}/services", "host": ["{{baseUrl}}"], "path": ["services"] } }
+        },
+        {
+          "name": "PATCH /:id — Actualizar servicio (Admin)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"price\": 200000,\n  \"category\": \"Facial Premium\"\n}" }, "url": { "raw": "{{baseUrl}}/services/{{serviceId}}", "host": ["{{baseUrl}}"], "path": ["services", "{{serviceId}}"] } }
+        },
+        {
+          "name": "DELETE /:id — Desactivar (Admin)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 204', function () { pm.response.to.have.status(204); });"], "type": "text/javascript" } }],
+          "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/services/{{serviceId}}", "host": ["{{baseUrl}}"], "path": ["services", "{{serviceId}}"] } }
+        }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "item": [
+        {
+          "name": "GET /slots — Disponibilidad (Público)",
+          "description": "Requiere haber creado un servicio y tener su {{serviceId}}. Usa la fecha actual o una futura.",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "pm.test('Retorna array de slots', function () { pm.expect(pm.response.json()).to.be.an('array'); });"], "type": "text/javascript" } }],
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/bookings/slots?serviceId={{serviceId}}&date=2026-08-15", "host": ["{{baseUrl}}"], "path": ["bookings", "slots"], "query": [{ "key": "serviceId", "value": "{{serviceId}}" }, { "key": "date", "value": "2026-08-15" }] } }
+        },
+        {
+          "name": "POST / — Crear cita (Cliente)",
+          "description": "Crea una cita con status PENDIENTE_PAGO. Usa un slot obtenido de GET /slots.",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', function () { pm.response.to.have.status(201); });", "var json = pm.response.json();", "pm.collectionVariables.set('bookingId', json.id);"], "type": "text/javascript" } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{clientAccessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"serviceId\": \"{{serviceId}}\",\n  \"startTime\": \"2026-08-15T10:00:00.000Z\"\n}" }, "url": { "raw": "{{baseUrl}}/bookings", "host": ["{{baseUrl}}"], "path": ["bookings"] } }
+        },
+        {
+          "name": "GET / — Listar citas (Auth)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings", "host": ["{{baseUrl}}"], "path": ["bookings"] } }
+        },
+        {
+          "name": "GET /:id — Detalle cita",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings/{{bookingId}}", "host": ["{{baseUrl}}"], "path": ["bookings", "{{bookingId}}"] } }
+        },
+        {
+          "name": "PATCH /:id/confirm — Confirmar (Admin/Empleado)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "pm.test('Status cambia a CONFIRMADA', function () { pm.expect(pm.response.json().status).to.eql('CONFIRMADA'); });"], "type": "text/javascript" } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings/{{bookingId}}/confirm", "host": ["{{baseUrl}}"], "path": ["bookings", "{{bookingId}}", "confirm"] } }
+        },
+        {
+          "name": "PATCH /:id/complete — Completar (Admin/Empleado)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings/{{bookingId}}/complete", "host": ["{{baseUrl}}"], "path": ["bookings", "{{bookingId}}", "complete"] } }
+        },
+        {
+          "name": "PATCH /:id/cancel — Cancelar (Dueño/Admin)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
+          "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings/{{bookingId}}/cancel", "host": ["{{baseUrl}}"], "path": ["bookings", "{{bookingId}}", "cancel"] } }
         }
       ]
     },
@@ -511,44 +149,19 @@
       "item": [
         {
           "name": "Swagger Docs",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Swagger disponible', function () {",
-                  "  pm.response.to.have.status(200);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/docs",
-              "host": ["{{baseUrl}}"],
-              "path": ["docs"]
-            }
-          }
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/docs", "host": ["{{baseUrl}}"], "path": ["docs"] } }
         }
       ]
     }
   ],
-  "auth": {
-    "type": "bearer",
-    "bearer": [
-      { "key": "token", "value": "{{accessToken}}", "type": "string" }
-    ]
-  },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:3001/api", "type": "string" },
     { "key": "accessToken", "value": "", "type": "string" },
     { "key": "refreshToken", "value": "", "type": "string" },
     { "key": "clientAccessToken", "value": "", "type": "string" },
     { "key": "clientRefreshToken", "value": "", "type": "string" },
-    { "key": "userId", "value": "", "type": "string", "description": "ID del usuario a consultar/editar/eliminar" }
+    { "key": "userId", "value": "", "type": "string" },
+    { "key": "serviceId", "value": "", "type": "string" },
+    { "key": "bookingId", "value": "", "type": "string" }
   ]
 }

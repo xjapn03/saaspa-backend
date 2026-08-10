@@ -38,8 +38,8 @@ npx prisma generate                      # Regenerar cliente
 |---|-------------|-------------|--------------------------------------------|
 | 1 | Auth        | **Completo** | `POST /api/auth/register`, `/login`, `/refresh` |
 | 2 | Users       | **Completo** | `GET /me`, `PATCH /me`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` |
-| 3 | Services    | Pendiente   | —                                          |
-| 4 | Bookings    | Pendiente   | Users, Services, Redis                     |
+| 3 | Services    | **Completo** | `GET /`, `GET /public`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` |
+| 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete` |
 | 5 | Payments    | Pendiente   | Bookings, Wompi API                        |
 | 6 | Calendar    | Pendiente   | Bookings, Google API                       |
 | 7 | Coupons     | Pendiente   | Users                                      |

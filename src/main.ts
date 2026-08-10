@@ -35,8 +35,18 @@ async function bootstrap() {
   app.use(helmet());
   app.use(compression());
 
+  const corsOrigins = (config.get<string>('corsOrigin') || 'http://localhost:3000')
+    .split(',')
+    .map((o: string) => o.trim());
+
   app.enableCors({
-    origin: config.get<string>('CORS_ORIGIN', '*'),
+    origin: (origin: string | undefined, callback: (err: Error | null, allowed?: boolean) => void) => {
+      if (!origin || corsOrigins.includes('*') || corsOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
