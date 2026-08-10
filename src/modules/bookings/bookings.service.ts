@@ -3,6 +3,7 @@ import { IBookingsRepository } from '../../repositories/interfaces/bookings.repo
 import { IServicesRepository } from '../../repositories/interfaces/services.repository';
 import { RedisService } from '../../common/redis/redis.service';
 import { GoogleCalendarService } from '../../common/google-calendar/google-calendar.service';
+import { MetaCapiService } from '../meta/meta-capi.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 
 const SLOT_INTERVAL = 30;
@@ -18,6 +19,7 @@ export class BookingsService {
     private servicesRepo: IServicesRepository,
     private redis: RedisService,
     private calendar: GoogleCalendarService,
+    private metaCapi: MetaCapiService,
   ) {}
 
   async findAll(filters: { userId?: string; date?: string; status?: string }) {
@@ -122,6 +124,16 @@ export class BookingsService {
     if (googleEventId) {
       await this.bookingsRepo.update(id, { googleEventId } as any);
     }
+
+    this.metaCapi.sendEvent({
+      eventName: 'Schedule',
+      customData: {
+        currency: 'COP',
+        value: (booking.service as any)?.price ? Number((booking.service as any).price) : undefined,
+        contentName: (booking.service as any)?.name,
+        bookingId: booking.id,
+      },
+    });
 
     return updated;
   }

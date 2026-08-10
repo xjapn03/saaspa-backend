@@ -4,11 +4,13 @@ import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { PaymentsService } from '../payments.service';
 import { IPaymentsRepository } from '../../../repositories/interfaces/payments.repository';
 import { IBookingsRepository } from '../../../repositories/interfaces/bookings.repository';
+import { MetaCapiService } from '../../meta/meta-capi.service';
 
 describe('PaymentsService', () => {
   let service: PaymentsService;
   let paymentsRepo: DeepMockProxy<IPaymentsRepository>;
   let bookingsRepo: DeepMockProxy<IBookingsRepository>;
+  let metaCapi: DeepMockProxy<MetaCapiService>;
 
   const mockBooking = {
     id: 'booking-1',
@@ -27,12 +29,14 @@ describe('PaymentsService', () => {
   beforeEach(async () => {
     paymentsRepo = mockDeep<IPaymentsRepository>();
     bookingsRepo = mockDeep<IBookingsRepository>();
+    metaCapi = mockDeep<MetaCapiService>();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentsService,
         { provide: IPaymentsRepository, useValue: paymentsRepo },
         { provide: IBookingsRepository, useValue: bookingsRepo },
+        { provide: MetaCapiService, useValue: metaCapi },
         {
           provide: ConfigService,
           useValue: new ConfigService({
