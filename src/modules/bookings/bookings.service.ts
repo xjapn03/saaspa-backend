@@ -133,4 +133,41 @@ export class BookingsService {
     }
     return this.bookingsRepo.update(id, { status: 'COMPLETADA' });
   }
+
+  async reschedule(id: string, newStartTime: string, userId: string, isAdmin: boolean) {
+    const oldBooking = await this.bookingsRepo.findById(id);
+    if (!isAdmin && oldBooking.userId !== userId) {
+      throw new ForbiddenException('Solo el dueño o un admin puede reagendar');
+    }
+    if (oldBooking.status === 'COMPLETADA' || oldBooking.status === 'CANCELADA') {
+      throw new BadRequestException('No se puede reagendar una cita ya finalizada');
+    }
+
+    const service = await this.servicesRepo.findById(oldBooking.serviceId);
+    const startTime = new Date(newStartTime);
+    const endTime = new Date(startTime.getTime() + service.duration * 60000);
+
+    const existing = await this.bookingsRepo.findBySlot(oldBooking.serviceId, startTime, endTime);
+    if (existing && existing.id !== id) {
+      throw new ConflictException('El nuevo horario ya está reservado');
+    }
+
+    const oldDateKey = new Date(oldBooking.startTime).toISOString().split('T')[0];
+    const oldLockKey = `slot:${oldBooking.serviceId}:${oldDateKey}:${new Date(oldBooking.startTime).toISOString()}`;
+    try { await this.redis.del(oldLockKey); } catch {}
+
+    await this.bookingsRepo.update(id, { status: 'CANCELADA' });
+
+    const dateKey = startTime.toISOString().split('T')[0];
+    const lockKey = `slot:${oldBooking.serviceId}:${dateKey}:${startTime.toISOString()}`;
+    const lockValue = JSON.stringify({ start: startTime.toISOString(), end: endTime.toISOString() });
+    await this.redis.setex(lockKey, LOCK_TTL, lockValue);
+
+    return this.bookingsRepo.create({
+      user: { connect: { id: userId } },
+      service: { connect: { id: oldBooking.serviceId } },
+      startTime,
+      endTime,
+    });
+  }
 }

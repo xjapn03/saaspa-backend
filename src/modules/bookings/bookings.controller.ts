@@ -83,4 +83,16 @@ export class BookingsController {
   complete(@Param('id') id: string) {
     return this.bookingsService.complete(id);
   }
+
+  @Patch(':id/reschedule')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Reagendar cita — dueño o admin' })
+  reschedule(
+    @Param('id') id: string,
+    @Body('startTime') startTime: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
+  ) {
+    return this.bookingsService.reschedule(id, startTime, userId, role === 'ADMIN');
+  }
 }
