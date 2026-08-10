@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, ConflictException, ForbiddenException,
 import { IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
 import { IServicesRepository } from '../../repositories/interfaces/services.repository';
 import { RedisService } from '../../common/redis/redis.service';
+import { GoogleCalendarService } from '../../common/google-calendar/google-calendar.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 
 const SLOT_INTERVAL = 30;
@@ -16,6 +17,7 @@ export class BookingsService {
     private bookingsRepo: IBookingsRepository,
     private servicesRepo: IServicesRepository,
     private redis: RedisService,
+    private calendar: GoogleCalendarService,
   ) {}
 
   async findAll(filters: { userId?: string; date?: string; status?: string }) {
@@ -107,7 +109,21 @@ export class BookingsService {
     const lockKey = `slot:${booking.serviceId}:${dateKey}:${new Date(booking.startTime).toISOString()}`;
     try { await this.redis.del(lockKey); } catch {}
 
-    return this.bookingsRepo.update(id, { status: 'CONFIRMADA' });
+    const updated = await this.bookingsRepo.update(id, { status: 'CONFIRMADA' } as any);
+
+    const googleEventId = await this.calendar.createEvent({
+      id: booking.id,
+      startTime: new Date(booking.startTime),
+      endTime: new Date(booking.endTime),
+      user: booking.user as any,
+      service: booking.service as any,
+    });
+
+    if (googleEventId) {
+      await this.bookingsRepo.update(id, { googleEventId } as any);
+    }
+
+    return updated;
   }
 
   async cancel(id: string, userId: string, isAdmin: boolean) {
@@ -119,11 +135,15 @@ export class BookingsService {
       throw new BadRequestException('No se puede cancelar una cita ya finalizada');
     }
 
+    if (booking.googleEventId) {
+      await this.calendar.deleteEvent(booking.googleEventId);
+    }
+
     const dateKey = new Date(booking.startTime).toISOString().split('T')[0];
     const lockKey = `slot:${booking.serviceId}:${dateKey}:${new Date(booking.startTime).toISOString()}`;
     try { await this.redis.del(lockKey); } catch {}
 
-    return this.bookingsRepo.update(id, { status: 'CANCELADA' });
+    return this.bookingsRepo.update(id, { status: 'CANCELADA' } as any);
   }
 
   async complete(id: string) {
@@ -152,11 +172,22 @@ export class BookingsService {
       throw new ConflictException('El nuevo horario ya está reservado');
     }
 
+    const googleEventId = oldBooking.googleEventId;
+
+    if (googleEventId) {
+      await this.calendar.updateEvent(googleEventId, {
+        startTime,
+        endTime,
+        user: oldBooking.user as any,
+        service: oldBooking.service as any,
+      });
+    }
+
     const oldDateKey = new Date(oldBooking.startTime).toISOString().split('T')[0];
     const oldLockKey = `slot:${oldBooking.serviceId}:${oldDateKey}:${new Date(oldBooking.startTime).toISOString()}`;
     try { await this.redis.del(oldLockKey); } catch {}
 
-    await this.bookingsRepo.update(id, { status: 'CANCELADA' });
+    await this.bookingsRepo.update(id, { status: 'CANCELADA' } as any);
 
     const dateKey = startTime.toISOString().split('T')[0];
     const lockKey = `slot:${oldBooking.serviceId}:${dateKey}:${startTime.toISOString()}`;
@@ -168,6 +199,7 @@ export class BookingsService {
       service: { connect: { id: oldBooking.serviceId } },
       startTime,
       endTime,
+      ...(googleEventId ? { googleEventId } : {}),
     });
   }
 }

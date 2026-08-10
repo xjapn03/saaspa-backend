@@ -9,7 +9,7 @@ import { UsersModule } from './modules/users/users.module';
 import { ServicesModule } from './modules/services/services.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
 import { PaymentsModule } from './modules/payments/payments.module';
-import { CalendarModule } from './modules/calendar/calendar.module';
+import { GoogleCalendarModule } from './common/google-calendar/google-calendar.module';
 import { CouponsModule } from './modules/coupons/coupons.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { MetaModule } from './modules/meta/meta.module';
@@ -28,7 +28,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
     ServicesModule,
     BookingsModule,
     PaymentsModule,
-    CalendarModule,
+    GoogleCalendarModule,
     CouponsModule,
     WhatsappModule,
     MetaModule,
