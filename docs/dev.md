@@ -45,6 +45,7 @@ npx prisma generate                      # Regenerar cliente
 | 7 | Coupons     | **Completo** | Cupones y descuentos (feature/06-coupons)  |
 | 8 | Whatsapp    | Pendiente   | Meta API, IA Bot                           |
 | 9 | Meta        | **Completo** | Meta CAPI (feature/05-meta-pixel)          |
+| 10| Auth (rec)  | **Completo** | Recuperación de contraseña (feature/09)    |
 
 ## Modelo de Datos
 

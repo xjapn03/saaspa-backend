@@ -1,6 +1,9 @@
 import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
+import { ConfigService } from '@nestjs/config';
 import { IUsersRepository } from '../../repositories/interfaces/users.repository';
+import { PrismaService } from '../../database/prisma.service';
 import { TokenBlacklistService } from '../../common/redis/token-blacklist.service';
 import { TokenService } from './token.service';
 import { RegisterDto } from './dto/register.dto';
@@ -14,6 +17,8 @@ export class AuthService {
     private usersRepo: IUsersRepository,
     private tokenService: TokenService,
     private tokenBlacklist: TokenBlacklistService,
+    private prisma: PrismaService,
+    private config: ConfigService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -102,6 +107,62 @@ export class AuthService {
 
   async validateUser(userId: string) {
     return this.usersRepo.findById(userId);
+  }
+
+  async forgotPassword(email: string) {
+    const user = await this.usersRepo.findByEmail(email);
+    if (!user) {
+      this.logger.warn(`Intento de recuperación para email inexistente: ${email}`);
+      return { message: 'Si el correo existe en nuestro sistema, recibirás instrucciones para restablecer tu contraseña.' };
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+    await this.prisma.resetToken.deleteMany({ where: { email } });
+    await this.prisma.resetToken.create({ data: { email, token, expiresAt } });
+
+    const resetUrl = `${this.config.get('CORS_ORIGIN')?.split(',')[0] || 'http://localhost:3000'}/recuperar/${token}`;
+
+    this.logger.log(`Password reset token generated for ${email}. URL: ${resetUrl}`);
+
+    const sendgridKey = this.config.get('SENDGRID_API_KEY');
+    if (sendgridKey) {
+      try {
+        await fetch('https://api.sendgrid.com/v3/mail/send', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${sendgridKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            personalizations: [{ to: [{ email }] }],
+            from: { email: 'info@kamerinosspa.com', name: 'Kamerinos SPA' },
+            subject: 'Restablece tu contraseña — Kamerinos SPA',
+            content: [{ type: 'text/html', value: `<p>Hola,</p><p>Recibimos una solicitud para restablecer tu contraseña. Haz clic en el enlace para continuar:</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>Este enlace expira en 1 hora. Si no solicitaste este cambio, ignora este mensaje.</p>` }],
+          }),
+        });
+      } catch (err: any) {
+        this.logger.warn(`SendGrid falló: ${err.message}. El token se generó pero no se envió por email.`);
+      }
+    }
+
+    return { message: 'Si el correo existe en nuestro sistema, recibirás instrucciones para restablecer tu contraseña.' };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    const resetToken = await this.prisma.resetToken.findUnique({ where: { token } });
+    if (!resetToken || resetToken.expiresAt < new Date()) {
+      throw new UnauthorizedException('El enlace de recuperación no es válido o ha expirado.');
+    }
+
+    const user = await this.usersRepo.findByEmail(resetToken.email);
+    if (!user) {
+      throw new UnauthorizedException('Usuario no encontrado.');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.usersRepo.update(user.id, { passwordHash } as any);
+    await this.prisma.resetToken.delete({ where: { id: resetToken.id } });
+
+    return { message: 'Contraseña actualizada correctamente. Ya puedes iniciar sesión.' };
   }
 
   private sanitizeUser(user: any) {
