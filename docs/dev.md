@@ -40,8 +40,8 @@ npx prisma generate                      # Regenerar cliente
 | 2 | Users       | **Completo** | `GET /me`, `PATCH /me`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` |
 | 3 | Services    | **Completo** | `GET /`, `GET /public`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` |
 | 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reschedule` |
-| 5 | Payments    | En desarrollo | Bookings, Wompi API (feature/05-payments-wompi) |
-| 6 | Calendar    | Pendiente   | Bookings, Google API                       |
+| 5 | Payments    | **Completo** | Wompi API (feature/05-payments-wompi)      |
+| 6 | Calendar    | **Completo** | Google Calendar sync (feature/06-calendar-sync) |
 | 7 | Coupons     | Pendiente   | Users                                      |
 | 8 | Whatsapp    | Pendiente   | Meta API, IA Bot                           |
 | 9 | Meta        | Pendiente   | Meta CAPI, Payments                        |
