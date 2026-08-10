@@ -22,6 +22,9 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts"
   },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "dependencies": {
     "@nestjs/common": "^11.1.28",
     "@nestjs/config": "^4.0.4",
@@ -71,6 +74,9 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.4.0"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   },
   "overrides": {
     "js-yaml": "5.2.3"

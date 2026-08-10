@@ -207,7 +207,7 @@ export class BookingsService {
     await this.redis.setex(lockKey, LOCK_TTL, lockValue);
 
     return this.bookingsRepo.create({
-      user: { connect: { id: userId } },
+      user: { connect: { id: oldBooking.userId } },
       service: { connect: { id: oldBooking.serviceId } },
       startTime,
       endTime,
