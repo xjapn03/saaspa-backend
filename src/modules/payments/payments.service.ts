@@ -1,0 +1,120 @@
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as crypto from 'crypto';
+import { IPaymentsRepository } from '../../repositories/interfaces/payments.repository';
+import { IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
+
+@Injectable()
+export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
+  constructor(
+    private paymentsRepo: IPaymentsRepository,
+    private bookingsRepo: IBookingsRepository,
+    private config: ConfigService,
+  ) {}
+
+  generateIntegritySignature(reference: string, amountInCents: number, currency: string): string {
+    const secret = this.config.get<string>('WOMPI_INTEGRITY_SECRET') || 'integ_test_xxx';
+    const data = `${reference}${amountInCents}${currency}${secret}`;
+    return crypto.createHash('sha256').update(data).digest('hex');
+  }
+
+  async initPayment(bookingId: string) {
+    const booking = await this.bookingsRepo.findById(bookingId);
+    if (booking.status !== 'PENDIENTE_PAGO') {
+      throw new BadRequestException('La cita no está pendiente de pago');
+    }
+
+    const reference = `kamerinos-${bookingId.slice(0, 8)}-${Date.now().toString(36)}`;
+    const amountInCents = Math.round((booking.service as any).price * 100 * 0.3);
+    const currency = 'COP';
+    const publicKey = this.config.get<string>('WOMPI_PUBLIC_KEY') || 'pub_test_xxx';
+
+    const signature = this.generateIntegritySignature(reference, amountInCents, currency);
+
+    await this.paymentsRepo.create({
+      booking: { connect: { id: bookingId } },
+      user: { connect: { id: booking.userId } },
+      amount: booking.service ? (booking.service as any).price * 0.3 : 0,
+      wompiReference: reference,
+    } as any);
+
+    return {
+      publicKey,
+      reference,
+      amountInCents,
+      currency,
+      signature,
+    };
+  }
+
+  validateWebhookSignature(
+    transactionId: string,
+    status: string,
+    amountInCents: string,
+    timestamp: string,
+    checksum: string,
+  ): boolean {
+    const secret = this.config.get<string>('WOMPI_EVENTS_KEY') || 'events_test_xxx';
+    const data = `${transactionId}${status}${amountInCents}${timestamp}${secret}`;
+    const computed = crypto.createHash('sha256').update(data).digest('hex');
+    return computed.toUpperCase() === checksum.toUpperCase();
+  }
+
+  async handleWebhook(body: any, rawChecksum: string) {
+    const event = body.event;
+    const data = body.data?.transaction;
+    const timestamp = body.timestamp?.toString();
+    const checksum = rawChecksum || body.signature?.checksum;
+
+    if (!data || !timestamp || !checksum) {
+      throw new BadRequestException('Payload de webhook inválido');
+    }
+
+    const isValid = this.validateWebhookSignature(
+      data.id, data.status, data.amount_in_cents?.toString(), timestamp, checksum,
+    );
+
+    if (!isValid) {
+      this.logger.warn('Firma de webhook inválida');
+      throw new BadRequestException('Firma de webhook inválida');
+    }
+
+    if (event !== 'transaction.updated') return { received: true };
+
+    const reference = data.reference;
+    const status = data.status;
+
+    const payment = await this.paymentsRepo.findByWompiId(data.id).catch(() => null);
+    if (!payment) {
+      this.logger.warn(`Pago no encontrado para referencia: ${reference}`);
+      return { received: true };
+    }
+
+    if (status === 'APPROVED') {
+      await this.paymentsRepo.update(payment.id, {
+        status: 'APROBADO',
+        wompiPaymentId: data.id,
+        paidAt: new Date(),
+      } as any);
+
+      await this.bookingsRepo.update(payment.bookingId, { status: 'CONFIRMADA' } as any);
+    } else if (status === 'DECLINED' || status === 'ERROR' || status === 'VOIDED') {
+      await this.paymentsRepo.update(payment.id, { status: 'RECHAZADO' } as any);
+    }
+
+    return { received: true };
+  }
+
+  async getPaymentStatus(bookingId: string) {
+    const payment = await this.paymentsRepo.findByBookingId(bookingId);
+    if (!payment) throw new BadRequestException('Pago no encontrado');
+    return {
+      id: payment.id,
+      status: payment.status,
+      amount: payment.amount,
+      paidAt: payment.paidAt,
+    };
+  }
+}
