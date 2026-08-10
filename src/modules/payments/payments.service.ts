@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { IPaymentsRepository } from '../../repositories/interfaces/payments.repository';
 import { IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
+import { MetaCapiService } from '../meta/meta-capi.service';
 
 @Injectable()
 export class PaymentsService {
@@ -12,6 +13,7 @@ export class PaymentsService {
     private paymentsRepo: IPaymentsRepository,
     private bookingsRepo: IBookingsRepository,
     private config: ConfigService,
+    private metaCapi: MetaCapiService,
   ) {}
 
   generateIntegritySignature(reference: string, amountInCents: number, currency: string): string {
@@ -100,6 +102,17 @@ export class PaymentsService {
       } as any);
 
       await this.bookingsRepo.update(payment.bookingId, { status: 'CONFIRMADA' } as any);
+
+      const booking = await this.bookingsRepo.findById(payment.bookingId).catch(() => null);
+      this.metaCapi.sendEvent({
+        eventName: 'Purchase',
+        customData: {
+          currency: 'COP',
+          value: data.amount_in_cents ? data.amount_in_cents / 100 : undefined,
+          contentName: (booking as any)?.service?.name,
+          bookingId: payment.bookingId,
+        },
+      });
     } else if (status === 'DECLINED' || status === 'ERROR' || status === 'VOIDED') {
       await this.paymentsRepo.update(payment.id, { status: 'RECHAZADO' } as any);
     }

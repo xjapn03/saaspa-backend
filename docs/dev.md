@@ -42,9 +42,9 @@ npx prisma generate                      # Regenerar cliente
 | 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reschedule` |
 | 5 | Payments    | **Completo** | Wompi API (feature/05-payments-wompi)      |
 | 6 | Calendar    | **Completo** | Google Calendar sync (feature/06-calendar-sync) |
-| 7 | Coupons     | Pendiente   | Users                                      |
+| 7 | Coupons     | **Completo** | Cupones y descuentos (feature/06-coupons)  |
 | 8 | Whatsapp    | Pendiente   | Meta API, IA Bot                           |
-| 9 | Meta        | Pendiente   | Meta CAPI, Payments                        |
+| 9 | Meta        | **Completo** | Meta CAPI (feature/05-meta-pixel)          |
 
 ## Modelo de Datos
 

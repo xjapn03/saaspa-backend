@@ -1,8 +1,11 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
+import { MetaCapiService } from './meta-capi.service';
 
+@Global()
 @Module({
   imports: [],
   controllers: [],
-  providers: [],
+  providers: [MetaCapiService],
+  exports: [MetaCapiService],
 })
 export class MetaModule {}
