@@ -1,0 +1,86 @@
+import {
+  Controller, Get, Post, Patch, Param, Body, Query, HttpCode, HttpStatus,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
+import { BookingsService } from './bookings.service';
+import { CreateBookingDto } from './dto/create-booking.dto';
+import { Public } from '../../common/decorators/public.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+
+@ApiTags('Bookings')
+@Controller('bookings')
+export class BookingsController {
+  constructor(private bookingsService: BookingsService) {}
+
+  @Get()
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Listar citas — admin/empleado ve todas, cliente ve las suyas' })
+  @ApiQuery({ name: 'date', required: false })
+  @ApiQuery({ name: 'status', required: false })
+  findAll(
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
+    @Query('date') date?: string,
+    @Query('status') status?: string,
+  ) {
+    const filters: any = { date, status };
+    if (role === 'CLIENTE') filters.userId = userId;
+    return this.bookingsService.findAll(filters);
+  }
+
+  @Get('slots')
+  @Public()
+  @ApiOperation({ summary: 'Consultar slots disponibles para un servicio en una fecha' })
+  @ApiQuery({ name: 'serviceId', required: true })
+  @ApiQuery({ name: 'date', required: true, example: '2026-08-15' })
+  getAvailability(
+    @Query('serviceId') serviceId: string,
+    @Query('date') date: string,
+  ) {
+    return this.bookingsService.getAvailability(serviceId, date);
+  }
+
+  @Get(':id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener detalle de cita' })
+  findById(@Param('id') id: string) {
+    return this.bookingsService.findById(id);
+  }
+
+  @Post()
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Crear cita (status: PENDIENTE_PAGO)' })
+  @ApiResponse({ status: 201, description: 'Cita creada' })
+  create(@CurrentUser('id') userId: string, @Body() dto: CreateBookingDto) {
+    return this.bookingsService.create(userId, dto);
+  }
+
+  @Patch(':id/confirm')
+  @Roles(Role.ADMIN, Role.EMPLEADO)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Confirmar cita (Admin/Empleado)' })
+  confirm(@Param('id') id: string) {
+    return this.bookingsService.confirm(id);
+  }
+
+  @Patch(':id/cancel')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cancelar cita — dueño o admin' })
+  cancel(
+    @Param('id') id: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
+  ) {
+    return this.bookingsService.cancel(id, userId, role === 'ADMIN');
+  }
+
+  @Patch(':id/complete')
+  @Roles(Role.ADMIN, Role.EMPLEADO)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Marcar cita como completada' })
+  complete(@Param('id') id: string) {
+    return this.bookingsService.complete(id);
+  }
+}
