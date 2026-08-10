@@ -57,6 +57,16 @@ export class BookingsController {
     return this.bookingsService.create(userId, dto);
   }
 
+  @Post('admin')
+  @Roles(Role.ADMIN, Role.EMPLEADO)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Crear cita para un cliente (Admin/Empleado)' })
+  @ApiResponse({ status: 201, description: 'Cita creada' })
+  createForUser(@Body() dto: CreateBookingDto) {
+    if (!dto.userId) throw new Error('userId es requerido para crear citas a nombre de un cliente');
+    return this.bookingsService.create(dto.userId, dto);
+  }
+
   @Patch(':id/confirm')
   @Roles(Role.ADMIN, Role.EMPLEADO)
   @ApiBearerAuth()

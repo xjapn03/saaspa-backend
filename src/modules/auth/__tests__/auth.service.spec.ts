@@ -1,9 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from '../auth.service';
 import { IUsersRepository } from '../../../repositories/interfaces/users.repository';
+import { PrismaService } from '../../../database/prisma.service';
 import { TokenBlacklistService } from '../../../common/redis/token-blacklist.service';
 import { TokenService } from '../token.service';
 import { RegisterDto } from '../dto/register.dto';
@@ -15,6 +17,7 @@ describe('AuthService', () => {
   let usersRepo: DeepMockProxy<IUsersRepository>;
   let tokenService: DeepMockProxy<TokenService>;
   let tokenBlacklist: DeepMockProxy<TokenBlacklistService>;
+  let prisma: DeepMockProxy<PrismaService>;
 
   const mockUser = {
     id: 'user-1',
@@ -36,6 +39,7 @@ describe('AuthService', () => {
     usersRepo = mockDeep<IUsersRepository>();
     tokenService = mockDeep<TokenService>();
     tokenBlacklist = mockDeep<TokenBlacklistService>();
+    prisma = mockDeep<PrismaService>();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -43,6 +47,8 @@ describe('AuthService', () => {
         { provide: IUsersRepository, useValue: usersRepo },
         { provide: TokenService, useValue: tokenService },
         { provide: TokenBlacklistService, useValue: tokenBlacklist },
+        { provide: PrismaService, useValue: prisma },
+        { provide: ConfigService, useValue: new ConfigService({ CORS_ORIGIN: 'http://localhost:3000' }) },
       ],
     }).compile();
     service = module.get<AuthService>(AuthService);

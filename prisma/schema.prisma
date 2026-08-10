@@ -127,3 +127,13 @@ model ConversationState {
 
   @@map("conversation_states")
 }
+
+model ResetToken {
+  id        String   @id @default(uuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("reset_tokens")
+}

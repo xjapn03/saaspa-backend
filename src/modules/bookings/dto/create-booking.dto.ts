@@ -1,5 +1,5 @@
-import { IsString, IsISO8601, IsNotEmpty } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsISO8601, IsNotEmpty, IsOptional } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateBookingDto {
   @ApiProperty({ example: 'uuid-service-123' })
@@ -11,4 +11,9 @@ export class CreateBookingDto {
   @IsISO8601({ strict: true })
   @IsNotEmpty()
   startTime: string;
+
+  @ApiPropertyOptional({ example: 'uuid-user-456', description: 'ID del cliente (solo admin)' })
+  @IsOptional()
+  @IsString()
+  userId?: string;
 }

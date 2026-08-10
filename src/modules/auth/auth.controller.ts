@@ -51,4 +51,23 @@ export class AuthController {
     const accessToken = authorization?.replace('Bearer ', '');
     await this.authService.logout(accessToken, refreshToken);
   }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Solicitar recuperación de contraseña' })
+  @ApiResponse({ status: 200, description: 'Instrucciones enviadas si el email existe' })
+  forgotPassword(@Body('email') email: string) {
+    return this.authService.forgotPassword(email);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Restablecer contraseña con token' })
+  @ApiResponse({ status: 200, description: 'Contraseña actualizada' })
+  @ApiResponse({ status: 401, description: 'Token inválido o expirado' })
+  resetPassword(@Body('token') token: string, @Body('newPassword') newPassword: string) {
+    return this.authService.resetPassword(token, newPassword);
+  }
 }
