@@ -29,4 +29,7 @@ export interface BookingFilters {
   userId?: string;
   date?: string;
   status?: string;
+  search?: string;
+  sortBy?: string;
+  order?: 'asc' | 'desc';
 }

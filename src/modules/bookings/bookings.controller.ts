@@ -23,13 +23,19 @@ export class BookingsController {
   @ApiOperation({ summary: 'Listar citas — admin/empleado ve todas, cliente ve las suyas' })
   @ApiQuery({ name: 'date', required: false })
   @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'sortBy', required: false })
+  @ApiQuery({ name: 'order', required: false })
   findAll(
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
     @Query('date') date?: string,
     @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('order') order?: string,
   ) {
-    const filters: any = { date, status };
+    const filters: any = { date, status, search, sortBy, order };
     if (role === 'CLIENTE') filters.userId = userId;
     return this.bookingsService.findAll(filters);
   }

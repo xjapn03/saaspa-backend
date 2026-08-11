@@ -34,10 +34,24 @@ export class BookingsRepository extends IBookingsRepository {
       const dayEnd = new Date(yyyy, mm - 1, dd, 23, 59, 59, 999);
       where.startTime = { gte: dayStart, lte: dayEnd };
     }
+    if (filters.search) {
+      where.OR = [
+        { user: { firstName: { contains: filters.search, mode: 'insensitive' } } },
+        { user: { lastName: { contains: filters.search, mode: 'insensitive' } } },
+        { service: { name: { contains: filters.search, mode: 'insensitive' } } },
+      ];
+    }
+    const orderBy: Prisma.BookingOrderByWithRelationInput = {};
+    const sortBy = filters.sortBy || 'startTime';
+    const order = filters.order || 'desc';
+    if (sortBy === 'startTime') orderBy.startTime = order;
+    else if (sortBy === 'createdAt') orderBy.createdAt = order;
+    else orderBy.startTime = 'desc';
+
     return this.prisma.booking.findMany({
       where,
       select: bookingSelect,
-      orderBy: { startTime: 'asc' },
+      orderBy,
     }) as unknown as IBookingSafe[];
   }
 
