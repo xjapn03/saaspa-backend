@@ -50,7 +50,7 @@ describe('PaymentsRepository', () => {
     });
 
     it('should return payment with user info', async () => {
-      prisma.payment.findFirst.mockResolvedValue(mockPayment);
+      prisma.payment.findFirst.mockResolvedValue(mockPayment as any);
       const result = await repo.findByWompiId('wompi-1');
       expect(result.wompiPaymentId).toBe('wompi-1');
     });

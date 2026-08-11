@@ -54,7 +54,7 @@ describe('CartService', () => {
 
     it('should upsert when quantity > 0', async () => {
       repo.upsert.mockResolvedValue({ ...mockCartItem, quantity: 5 });
-      const result = await service.updateQuantity('user-1', 'prod-1', 5);
+      const result = (await service.updateQuantity('user-1', 'prod-1', 5)) as any;
       expect(result.quantity).toBe(5);
       expect(repo.upsert).toHaveBeenCalledWith('user-1', 'prod-1', 5);
     });

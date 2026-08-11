@@ -77,7 +77,7 @@ describe('BookingsRepository', () => {
 
   describe('findById', () => {
     it('should return booking when found', async () => {
-      prisma.booking.findUnique.mockResolvedValue(mockRow);
+      prisma.booking.findUnique.mockResolvedValue(mockRow as any);
       const result = await repo.findById('booking-1');
       expect(result.id).toBe('booking-1');
     });
@@ -90,7 +90,7 @@ describe('BookingsRepository', () => {
 
   describe('findBySlot', () => {
     it('should find booking by service + time excluding CANCELADA', async () => {
-      prisma.booking.findFirst.mockResolvedValue(mockRow);
+      prisma.booking.findFirst.mockResolvedValue(mockRow as any);
       const result = await repo.findBySlot('svc-1', mockRow.startTime, mockRow.endTime);
       expect(result).toBeDefined();
       expect(prisma.booking.findFirst).toHaveBeenCalledWith(
@@ -107,7 +107,7 @@ describe('BookingsRepository', () => {
     it('should return occupied time ranges for a date', async () => {
       prisma.booking.findMany.mockResolvedValue([
         { startTime: mockRow.startTime, endTime: mockRow.endTime },
-      ]);
+      ] as any);
       const result = await repo.findOccupied('svc-1', '2026-08-15');
       expect(result).toHaveLength(1);
       expect(result[0].startTime).toBeDefined();
@@ -131,7 +131,7 @@ describe('BookingsRepository', () => {
 
   describe('update', () => {
     it('should update booking and return safe data', async () => {
-      prisma.booking.findUnique.mockResolvedValue(mockRow);
+      prisma.booking.findUnique.mockResolvedValue(mockRow as any);
       prisma.booking.update.mockResolvedValue({ ...mockRow, status: 'CONFIRMADA' } as any);
       const result = await repo.update('booking-1', { status: 'CONFIRMADA' } as any);
       expect(result.status).toBe('CONFIRMADA');

@@ -68,7 +68,7 @@ describe('ProductsRepository', () => {
 
   describe('remove', () => {
     it('should soft-delete (set isActive = false)', async () => {
-      prisma.product.findUnique.mockResolvedValue(mockRow);
+      prisma.product.findUnique.mockResolvedValue(mockRow as any);
       prisma.product.update.mockResolvedValue({ ...mockRow, isActive: false } as any);
       await repo.remove('prod-1');
       expect(prisma.product.update).toHaveBeenCalledWith(

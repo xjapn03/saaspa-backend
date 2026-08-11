@@ -50,7 +50,7 @@ describe('ServicesRepository', () => {
 
   describe('remove', () => {
     it('should soft-delete (set isActive = false)', async () => {
-      prisma.service.findUnique.mockResolvedValue(mockService);
+      prisma.service.findUnique.mockResolvedValue(mockService as any);
       prisma.service.update.mockResolvedValue({ ...mockService, isActive: false } as any);
       const result = await repo.remove('svc-1');
       expect(result.isActive).toBe(false);
