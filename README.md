@@ -1,8 +1,9 @@
 # Kamerinos SPA — Backend API
 
 Backend Core de Kamerinos SPA Bogotá. Monolito modular construido con
-NestJS (TypeScript) que gestiona usuarios, catálogo de servicios,
-agendamiento con abono (Wompi), sincronización con Google Calendar y
+NestJS (TypeScript) que gestiona usuarios, catálogo de servicios y productos,
+agendamiento con pagos fraccionados (Wompi), e-commerce con carrito de compras,
+sincronización con Google Calendar, emails transaccionales (SendGrid) y
 atribución de conversiones (Meta CAPI).
 
 ## Stack
@@ -13,7 +14,8 @@ atribución de conversiones (Meta CAPI).
 | Framework   | NestJS                            |
 | ORM         | Prisma + PostgreSQL 15 (pgvector) |
 | Caché       | Redis                             |
-| Pagos       | Wompi (webhooks)                  |
+| Pagos       | Wompi (webhooks + widget)         |
+| Email       | SendGrid                          |
 | Docs API    | Swagger (`/docs`)                 |
 | DevOps      | Docker Compose                    |
 
@@ -21,19 +23,22 @@ atribución de conversiones (Meta CAPI).
 
 ```
 src/
-├── common/          # Guards, decorators, filters compartidos
+├── common/          # Guards, decorators, filters, email, google-calendar, redis
 ├── config/          # Variables de entorno (Joi + @nestjs/config)
 ├── database/        # PrismaService global
 ├── modules/
-│   ├── auth/        # JWT, registro, login, refresh token
-│   ├── users/       # Gestión de usuarios
-│   ├── services/    # Catálogo de servicios
+│   ├── auth/        # JWT, registro, login, refresh, forgot/reset password
+│   ├── users/       # Gestión de usuarios con sort/filtros
+│   ├── services/    # Catálogo de servicios (con category FK)
 │   ├── bookings/    # Reservas con Redis slot locking
-│   ├── payments/    # Wompi (checkout + webhooks)
-│   ├── calendar/    # Google Calendar API
+│   ├── payments/    # Wompi (ABONO + SALDO, webhooks, cart checkout)
 │   ├── coupons/     # Cupones de descuento y fidelización
-│   ├── whatsapp/    # Webhooks Meta Cloud API → IA Bot
-│   └── meta/        # Meta Conversions API (CAPI)
+│   ├── calendar/    # Google Calendar API
+│   ├── categories/  # Categorías con subcategorías (tree)
+│   ├── products/    # Productos e-commerce (Shop)
+│   ├── meta/        # Meta Conversions API (CAPI)
+│   └── whatsapp/    # Webhooks Meta Cloud API → IA Bot
+├── repositories/    # Repository Pattern (interfaces + implementaciones Prisma)
 ├── app.module.ts
 └── main.ts
 ```
