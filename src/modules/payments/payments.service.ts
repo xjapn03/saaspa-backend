@@ -24,14 +24,33 @@ export class PaymentsService {
     return crypto.createHash('sha256').update(data).digest('hex');
   }
 
-  async initPayment(bookingId: string) {
+  async initPayment(bookingId: string, type: 'ABONO' | 'SALDO' = 'ABONO') {
     const booking = await this.bookingsRepo.findById(bookingId);
-    if (booking.status !== 'PENDIENTE_PAGO') {
-      throw new BadRequestException('La cita no está pendiente de pago');
+    const servicePrice = Number((booking.service as any).price);
+    let amountInCents: number;
+    let amount: number;
+
+    if (type === 'ABONO') {
+      if (booking.status !== 'PENDIENTE_PAGO') {
+        throw new BadRequestException('La cita no está pendiente de pago');
+      }
+      amount = servicePrice * 0.3;
+      amountInCents = Math.round(amount * 100);
+    } else {
+      if (booking.status !== 'CONFIRMADA') {
+        throw new BadRequestException('Solo citas confirmadas pueden recibir pago de saldo');
+      }
+      const approved = await this.paymentsRepo.findApprovedByBookingId(bookingId);
+      const totalPaid = approved.reduce((sum, p) => sum + p.amount, 0);
+      const remaining = servicePrice - totalPaid;
+      if (remaining <= 0) {
+        throw new BadRequestException('La cita ya está completamente pagada');
+      }
+      amount = remaining;
+      amountInCents = Math.round(remaining * 100);
     }
 
     const reference = `kamerinos-${bookingId.slice(0, 8)}-${Date.now().toString(36)}`;
-    const amountInCents = Math.round((booking.service as any).price * 100 * 0.3);
     const currency = 'COP';
     const publicKey = this.config.get<string>('WOMPI_PUBLIC_KEY') || 'pub_test_xxx';
 
@@ -40,7 +59,8 @@ export class PaymentsService {
     await this.paymentsRepo.create({
       booking: { connect: { id: bookingId } },
       user: { connect: { id: booking.userId } },
-      amount: booking.service ? (booking.service as any).price * 0.3 : 0,
+      amount,
+      type,
       wompiReference: reference,
     } as any);
 
@@ -87,12 +107,13 @@ export class PaymentsService {
 
     if (event !== 'transaction.updated') return { received: true };
 
-    const reference = data.reference;
     const status = data.status;
 
-    const payment = await this.paymentsRepo.findByWompiId(data.id).catch(() => null);
-    if (!payment) {
-      this.logger.warn(`Pago no encontrado para referencia: ${reference}`);
+    let payment: any;
+    try {
+      payment = await this.paymentsRepo.findByWompiId(data.id);
+    } catch {
+      this.logger.warn(`Pago no encontrado para wompiPaymentId: ${data.id}`);
       return { received: true };
     }
 
@@ -103,7 +124,9 @@ export class PaymentsService {
         paidAt: new Date(),
       } as any);
 
-      await this.bookingsRepo.update(payment.bookingId, { status: 'CONFIRMADA' } as any);
+      if (payment.type === 'ABONO') {
+        await this.bookingsRepo.update(payment.bookingId, { status: 'CONFIRMADA' } as any);
+      }
 
       const booking = await this.bookingsRepo.findById(payment.bookingId).catch(() => null);
       if (booking) {
