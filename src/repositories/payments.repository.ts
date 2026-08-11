@@ -12,10 +12,16 @@ const paymentSelect = {
   status: true,
   wompiPaymentId: true,
   wompiReference: true,
+  metadata: true,
   paidAt: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.PaymentSelect;
+
+const paymentSelectWithUser = {
+  ...paymentSelect,
+  user: { select: { firstName: true, lastName: true, email: true } },
+};
 
 const toSafe = (p: any): IPaymentSafe => ({
   ...p,
@@ -53,7 +59,7 @@ export class PaymentsRepository extends IPaymentsRepository {
   async findByWompiId(wompiPaymentId: string): Promise<IPaymentSafe> {
     const payment = await this.prisma.payment.findFirst({
       where: { wompiPaymentId },
-      select: paymentSelect,
+      select: paymentSelectWithUser,
     });
     if (!payment) throw new NotFoundException('Pago no encontrado');
     return toSafe(payment);
