@@ -21,6 +21,11 @@ enum BookingStatus {
   NO_ASISTIO
 }
 
+enum PaymentType {
+  ABONO
+  SALDO
+}
+
 enum PaymentStatus {
   PENDIENTE
   APROBADO

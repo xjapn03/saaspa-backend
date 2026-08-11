@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import { IPaymentsRepository } from '../../repositories/interfaces/payments.repository';
 import { IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
 import { MetaCapiService } from '../meta/meta-capi.service';
+import { EmailService } from '../../common/email/email.service';
 
 @Injectable()
 export class PaymentsService {
@@ -14,6 +15,7 @@ export class PaymentsService {
     private bookingsRepo: IBookingsRepository,
     private config: ConfigService,
     private metaCapi: MetaCapiService,
+    private emailService: EmailService,
   ) {}
 
   generateIntegritySignature(reference: string, amountInCents: number, currency: string): string {
@@ -22,14 +24,33 @@ export class PaymentsService {
     return crypto.createHash('sha256').update(data).digest('hex');
   }
 
-  async initPayment(bookingId: string) {
+  async initPayment(bookingId: string, type: 'ABONO' | 'SALDO' = 'ABONO') {
     const booking = await this.bookingsRepo.findById(bookingId);
-    if (booking.status !== 'PENDIENTE_PAGO') {
-      throw new BadRequestException('La cita no está pendiente de pago');
+    const servicePrice = Number((booking.service as any).price);
+    let amountInCents: number;
+    let amount: number;
+
+    if (type === 'ABONO') {
+      if (booking.status !== 'PENDIENTE_PAGO') {
+        throw new BadRequestException('La cita no está pendiente de pago');
+      }
+      amount = servicePrice * 0.3;
+      amountInCents = Math.round(amount * 100);
+    } else {
+      if (booking.status !== 'CONFIRMADA') {
+        throw new BadRequestException('Solo citas confirmadas pueden recibir pago de saldo');
+      }
+      const approved = await this.paymentsRepo.findApprovedByBookingId(bookingId);
+      const totalPaid = approved.reduce((sum, p) => sum + p.amount, 0);
+      const remaining = servicePrice - totalPaid;
+      if (remaining <= 0) {
+        throw new BadRequestException('La cita ya está completamente pagada');
+      }
+      amount = remaining;
+      amountInCents = Math.round(remaining * 100);
     }
 
     const reference = `kamerinos-${bookingId.slice(0, 8)}-${Date.now().toString(36)}`;
-    const amountInCents = Math.round((booking.service as any).price * 100 * 0.3);
     const currency = 'COP';
     const publicKey = this.config.get<string>('WOMPI_PUBLIC_KEY') || 'pub_test_xxx';
 
@@ -38,7 +59,8 @@ export class PaymentsService {
     await this.paymentsRepo.create({
       booking: { connect: { id: bookingId } },
       user: { connect: { id: booking.userId } },
-      amount: booking.service ? (booking.service as any).price * 0.3 : 0,
+      amount,
+      type,
       wompiReference: reference,
     } as any);
 
@@ -85,12 +107,13 @@ export class PaymentsService {
 
     if (event !== 'transaction.updated') return { received: true };
 
-    const reference = data.reference;
     const status = data.status;
 
-    const payment = await this.paymentsRepo.findByWompiId(data.id).catch(() => null);
-    if (!payment) {
-      this.logger.warn(`Pago no encontrado para referencia: ${reference}`);
+    let payment: any;
+    try {
+      payment = await this.paymentsRepo.findByWompiId(data.id);
+    } catch {
+      this.logger.warn(`Pago no encontrado para wompiPaymentId: ${data.id}`);
       return { received: true };
     }
 
@@ -101,18 +124,44 @@ export class PaymentsService {
         paidAt: new Date(),
       } as any);
 
-      await this.bookingsRepo.update(payment.bookingId, { status: 'CONFIRMADA' } as any);
+      if (payment.type === 'ABONO') {
+        await this.bookingsRepo.update(payment.bookingId, { status: 'CONFIRMADA' } as any);
+      }
 
       const booking = await this.bookingsRepo.findById(payment.bookingId).catch(() => null);
-      this.metaCapi.sendEvent({
-        eventName: 'Purchase',
-        customData: {
-          currency: 'COP',
-          value: data.amount_in_cents ? data.amount_in_cents / 100 : undefined,
-          contentName: (booking as any)?.service?.name,
+      if (booking) {
+        this.metaCapi.sendEvent({
+          eventName: 'Purchase',
+          customData: {
+            currency: 'COP',
+            value: data.amount_in_cents ? data.amount_in_cents / 100 : undefined,
+            contentName: (booking as any)?.service?.name,
+            bookingId: payment.bookingId,
+          },
+        });
+
+        const clientName = `${(booking as any)?.user?.firstName || ''} ${(booking as any)?.user?.lastName || ''}`.trim();
+        const servicePrice = Number((booking as any)?.service?.price || 0);
+        const depositPaid = Number(payment.amount || 0);
+        const dateStr = new Date(booking.startTime).toLocaleDateString('es-CO', {
+          day: 'numeric', month: 'long', year: 'numeric',
+        });
+        const timeStr = new Date(booking.startTime).toLocaleTimeString('es-CO', {
+          hour: '2-digit', minute: '2-digit', hour12: true,
+        });
+
+        this.emailService.sendBookingReceipt({
+          clientName: clientName || 'Cliente',
+          clientEmail: (booking as any)?.user?.email || '',
+          serviceName: (booking as any)?.service?.name || 'Servicio',
+          date: dateStr,
+          time: timeStr,
+          depositAmount: depositPaid,
+          remainingAmount: Math.round((servicePrice - depositPaid) * 100) / 100,
           bookingId: payment.bookingId,
-        },
-      });
+          paymentReference: payment.wompiReference || data.reference || '',
+        });
+      }
     } else if (status === 'DECLINED' || status === 'ERROR' || status === 'VOIDED') {
       await this.paymentsRepo.update(payment.id, { status: 'RECHAZADO' } as any);
     }
@@ -121,13 +170,23 @@ export class PaymentsService {
   }
 
   async getPaymentStatus(bookingId: string) {
-    const payment = await this.paymentsRepo.findByBookingId(bookingId);
-    if (!payment) throw new BadRequestException('Pago no encontrado');
+    const payments = await this.paymentsRepo.findApprovedByBookingId(bookingId);
+    const booking = await this.bookingsRepo.findById(bookingId).catch(() => null);
+    const servicePrice = booking ? Number((booking.service as any)?.price) : 0;
+    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+
     return {
-      id: payment.id,
-      status: payment.status,
-      amount: payment.amount,
-      paidAt: payment.paidAt,
+      payments: payments.map((p) => ({
+        id: p.id,
+        type: p.type,
+        status: p.status,
+        amount: p.amount,
+        paidAt: p.paidAt,
+        wompiReference: p.wompiReference,
+      })),
+      total: servicePrice,
+      paid: Math.round(totalPaid * 100) / 100,
+      remaining: Math.round((servicePrice - totalPaid) * 100) / 100,
     };
   }
 }
