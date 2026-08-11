@@ -52,7 +52,8 @@ export class BookingsService {
     const allOccupied = [...occupied, ...lockedSlots];
 
     const slots: string[] = [];
-    const day = new Date(date);
+    const [yyyy, mm, dd] = date.split('-').map(Number);
+    const day = new Date(yyyy, mm - 1, dd, 0, 0, 0);
     const slotStart = new Date(day);
     slotStart.setHours(BUSINESS_HOURS.start, 0, 0, 0);
     const slotEnd = new Date(day);
