@@ -13,6 +13,11 @@ export class UpdateUserDto {
   @IsString()
   lastName?: string;
 
+  @ApiPropertyOptional({ example: 'maria@email.com' })
+  @IsOptional()
+  @IsString()
+  email?: string;
+
   @ApiPropertyOptional({ example: '3001234567' })
   @IsOptional()
   @IsString()

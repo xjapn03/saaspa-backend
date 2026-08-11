@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsInt, Min } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsInt, IsBoolean, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateServiceDto {
@@ -30,4 +30,9 @@ export class CreateServiceDto {
   @IsOptional()
   @IsString()
   imageUrl?: string;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

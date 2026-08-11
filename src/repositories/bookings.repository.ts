@@ -29,10 +29,9 @@ export class BookingsRepository extends IBookingsRepository {
     if (filters.userId) where.userId = filters.userId;
     if (filters.status) where.status = filters.status as any;
     if (filters.date) {
-      const dayStart = new Date(filters.date);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(filters.date);
-      dayEnd.setHours(23, 59, 59, 999);
+      const [yyyy, mm, dd] = filters.date.split('-').map(Number);
+      const dayStart = new Date(yyyy, mm - 1, dd, 0, 0, 0);
+      const dayEnd = new Date(yyyy, mm - 1, dd, 23, 59, 59, 999);
       where.startTime = { gte: dayStart, lte: dayEnd };
     }
     return this.prisma.booking.findMany({
@@ -63,10 +62,9 @@ export class BookingsRepository extends IBookingsRepository {
   }
 
   async findOccupied(serviceId: string, date: string) {
-    const dayStart = new Date(date);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(date);
-    dayEnd.setHours(23, 59, 59, 999);
+    const [yyyy, mm, dd] = date.split('-').map(Number);
+    const dayStart = new Date(yyyy, mm - 1, dd, 0, 0, 0);
+    const dayEnd = new Date(yyyy, mm - 1, dd, 23, 59, 59, 999);
 
     const bookings = await this.prisma.booking.findMany({
       where: {
