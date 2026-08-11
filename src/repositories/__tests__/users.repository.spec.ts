@@ -46,6 +46,7 @@ describe('UsersRepository', () => {
       expect(prisma.user.findMany).toHaveBeenCalledWith({
         where: { isActive: true },
         select: expect.objectContaining({ email: true }),
+        orderBy: expect.any(Object),
       });
     });
   });

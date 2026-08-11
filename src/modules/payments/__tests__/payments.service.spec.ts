@@ -4,6 +4,8 @@ import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { PaymentsService } from '../payments.service';
 import { IPaymentsRepository } from '../../../repositories/interfaces/payments.repository';
 import { IBookingsRepository } from '../../../repositories/interfaces/bookings.repository';
+import { ICouponsRepository } from '../../../repositories/interfaces/coupons.repository';
+import { IProductsRepository } from '../../../repositories/interfaces/products.repository';
 import { MetaCapiService } from '../../meta/meta-capi.service';
 import { EmailService } from '../../../common/email/email.service';
 
@@ -11,6 +13,8 @@ describe('PaymentsService', () => {
   let service: PaymentsService;
   let paymentsRepo: DeepMockProxy<IPaymentsRepository>;
   let bookingsRepo: DeepMockProxy<IBookingsRepository>;
+  let couponsRepo: DeepMockProxy<ICouponsRepository>;
+  let productsRepo: DeepMockProxy<IProductsRepository>;
   let metaCapi: DeepMockProxy<MetaCapiService>;
   let emailService: DeepMockProxy<EmailService>;
 
@@ -50,6 +54,8 @@ describe('PaymentsService', () => {
   beforeEach(async () => {
     paymentsRepo = mockDeep<IPaymentsRepository>();
     bookingsRepo = mockDeep<IBookingsRepository>();
+    couponsRepo = mockDeep<ICouponsRepository>();
+    productsRepo = mockDeep<IProductsRepository>();
     metaCapi = mockDeep<MetaCapiService>();
     emailService = mockDeep<EmailService>();
 
@@ -58,6 +64,8 @@ describe('PaymentsService', () => {
         PaymentsService,
         { provide: IPaymentsRepository, useValue: paymentsRepo },
         { provide: IBookingsRepository, useValue: bookingsRepo },
+        { provide: ICouponsRepository, useValue: couponsRepo },
+        { provide: IProductsRepository, useValue: productsRepo },
         { provide: MetaCapiService, useValue: metaCapi },
         { provide: EmailService, useValue: emailService },
         {
@@ -96,7 +104,7 @@ describe('PaymentsService', () => {
       expect(result.publicKey).toBe('pub_test_test123');
       expect(result.currency).toBe('COP');
       expect(result.signature).toHaveLength(64);
-      expect(result.amountInCents).toBe(30000);
+      expect(result.amountInCents).toBe(3000000);
       expect(paymentsRepo.create).toHaveBeenCalled();
     });
 
@@ -106,7 +114,7 @@ describe('PaymentsService', () => {
 
       const result = await service.initPayment('booking-1');
 
-      expect(result.amountInCents).toBe(30000);
+      expect(result.amountInCents).toBe(3000000);
     });
   });
 
@@ -132,7 +140,7 @@ describe('PaymentsService', () => {
 
       const result = await service.initPayment('booking-1', 'SALDO');
 
-      expect(result.amountInCents).toBe(70000);
+      expect(result.amountInCents).toBe(7000000);
       expect(paymentsRepo.create).toHaveBeenCalled();
     });
   });
@@ -161,9 +169,15 @@ describe('PaymentsService', () => {
     });
 
     it('should return received for non-transaction events', async () => {
+      const crypto = require('crypto');
+      const secret = 'events_test_test123';
+      const timestamp = 1754912000;
+      const data = `tx1APPROVED50000${timestamp}${secret}`;
+      const checksum = crypto.createHash('sha256').update(data).digest('hex');
+
       const result = await service.handleWebhook(
-        { event: 'other.event', data: { transaction: { id: 'tx1', status: 'APPROVED', amount_in_cents: 50000 } }, timestamp: 1754912000 },
-        'fakechecksum',
+        { event: 'other.event', data: { transaction: { id: 'tx1', status: 'APPROVED', amount_in_cents: 50000 } }, timestamp },
+        checksum,
       );
       expect(result).toEqual({ received: true });
     });
@@ -213,6 +227,7 @@ describe('PaymentsService', () => {
         status: 'PENDIENTE',
       });
       paymentsRepo.update.mockResolvedValue(mockApprovedPayment);
+      bookingsRepo.findById.mockResolvedValue(mockConfirmedBooking as any);
 
       const result = await service.handleWebhook(
         {
