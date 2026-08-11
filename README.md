@@ -63,6 +63,16 @@ npm run start:dev
 - API: `http://localhost:3001/api`
 - Swagger: `http://localhost:3001/docs`
 
+## Tests
+
+```bash
+npm test                 # Unit tests (241 tests, 36 suites) — maxWorkers=2 optimizado
+npm run test:cov         # Cobertura
+npm run test:e2e         # End-to-end (requiere PostgreSQL corriendo)
+```
+
+Ver [`docs-general/TEST-COVERAGE.md`](../docs-general/TEST-COVERAGE.md) para el plan completo de cobertura.
+
 ## Variables de Entorno
 
 Ver `.env.example` para la lista completa. Claves principales:

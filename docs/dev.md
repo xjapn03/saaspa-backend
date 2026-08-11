@@ -39,13 +39,19 @@ npx prisma generate                      # Regenerar cliente
 | 1 | Auth        | **Completo** | `POST /api/auth/register`, `/login`, `/refresh`, `/forgot-password`, `/reset-password`, `/logout` |
 | 2 | Users       | **Completo** | `GET /me`, `PATCH /me`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` |
 | 3 | Services    | **Completo** | `GET /`, `GET /public`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` |
-| 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reschedule` |
-| 5 | Payments    | **Completo** | Wompi API (feature/05-payments-wompi)      |
-| 6 | Calendar    | **Completo** | Google Calendar sync (feature/06-calendar-sync) |
-| 7 | Coupons     | **Completo** | Cupones y descuentos (feature/06-coupons)  |
-| 8 | Whatsapp    | Pendiente   | Meta API, IA Bot                           |
-| 9 | Meta        | **Completo** | Meta CAPI (feature/05-meta-pixel)          |
-| 10| Auth (rec)  | **Completo** | Recuperación de contraseña (feature/09)    |
+| 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reschedule`, `GET /:id/balance` |
+| 5 | Payments    | **Completo** | `POST /init` (ABONO/SALDO), `POST /init-cart`, `POST /webhook`, `GET /:bookingId/status` |
+| 6 | Categories  | **Completo** | `GET /`, `GET /tree`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
+| 7 | Products    | **Completo** | `GET /` (público + filtros), `GET /admin/all`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
+| 8 | Cart        | **Completo** | `GET /`, `POST /items`, `PATCH /items/:productId`, `DELETE /items/:productId`, `DELETE /`, `POST /merge` |
+| 9 | Coupons     | **Completo** | CRUD cupones + validación |
+| 10| Calendar    | **Completo** | Google Calendar sync (common/google-calendar) |
+| 11| Meta        | **Completo** | Meta CAPI (Schedule + Purchase) |
+| 12| Email       | **Completo** | SendGrid transaccional (booking receipt + payment receipt) |
+| 13| Health      | **Completo** | `GET /api/health` — DB + Redis check |
+| 14| Upload      | **Completo** | `POST /api/upload` — imágenes con multer |
+| 15| Throttler   | **Completo** | Rate limiting global (100 req/min) |
+| 16| Whatsapp    | Pendiente   | Meta API, IA Bot |
 
 ## Modelo de Datos
 
@@ -55,23 +61,43 @@ User (users)
 ├── phone?, birthday?, description? (Text)
 ├── role: CLIENTE | EMPLEADO | ADMIN
 ├── isActive, refreshToken
-├── → bookings, payments, coupons
+├── → bookings, payments, coupons, cartItems
 
 Service (services)
 ├── name, description?, price (Decimal), duration (min)
-├── category?, imageUrl?, isActive
+├── category?, categoryId?, imageUrl?, isActive
 ├── → bookings
+
+Category (categories)
+├── name, slug (unique), description?, imageUrl?
+├── parentId? (self-reference para subcategorías)
+├── isActive
+├── → services, products, children (subcategorías)
+
+Product (products)
+├── name, slug (unique), description? (Text), price (Decimal)
+├── compareAtPrice? (Decimal), stock, sku? (unique)
+├── mainImage?, carouselImages? (JSON), sponsor?
+├── isActive, isFeatured, categoryId?
+├── → cartItems
 
 Booking (bookings)
 ├── userId → User, serviceId → Service
 ├── startTime, endTime, status: PENDIENTE_PAGO → CONFIRMADA → COMPLETADA
 ├── googleEventId?, notes?
-├── → payment (1:1)
+├── → payments (1:N)
 
 Payment (payments)
-├── bookingId → Booking (unique), userId → User
-├── amount (Decimal), status: PENDIENTE → APROBADO | RECHAZADO | REEMBOLSADO
-├── wompiPaymentId?, wompiReference?, paidAt?
+├── bookingId → Booking, userId → User
+├── amount (Decimal), type: ABONO | SALDO
+├── status: PENDIENTE → APROBADO | RECHAZADO | REEMBOLSADO
+├── wompiPaymentId?, wompiReference?, metadata? (JSON)
+├── paidAt?
+
+CartItem (cart_items)
+├── userId → User, productId → Product
+├── quantity
+├── @@unique([userId, productId])
 
 Coupon (coupons)
 ├── code (unique), discount (Decimal 5,4)
@@ -193,9 +219,20 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (46 tests) — no requiere BD
-npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
+npm test              # Unit tests (241 tests, 36 suites) — no requiere BD
 npm run test:cov      # Cobertura
+npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
+```
+
+### Configuración optimizada
+
+El `jest` config en `package.json` incluye `maxWorkers: 2` y `ts-jest` con `isolatedModules: true` para evitar consumo excesivo de RAM en desarrollo (~500-800 MB vs ~3-4 GB sin optimizar). Ver `docs-general/TEST-COVERAGE.md` para el plan completo.
+
+### Comandos seguros
+
+```bash
+npx jest --runInBand --no-cache      # 1 worker, sin caché (~1 min)
+npm test                              # 2 workers (recomendado)
 ```
 
 ### Bases de datos por entorno
@@ -213,15 +250,13 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-| Suite | Archivo | Tests |
-|-------|---------|-------|
-| Unit | `users.repository.spec.ts` | findById, findByEmail, findAll, create, update, remove, setRefreshToken, error cases |
-| Unit | `token.service.spec.ts` | generateTokens, verifyToken |
-| Unit | `auth.service.spec.ts` | register, login, refresh con casos de error |
-| Unit | `users.service.spec.ts` | Delegación al repositorio |
-| Unit | `auth.controller.spec.ts` | HTTP status, formato de respuesta |
-| Unit | `users.controller.spec.ts` | CRUD, admin vs cliente |
-| Unit | `jwt-auth.guard.spec.ts` | Rutas @Public(), autenticación |
-| Unit | `roles.guard.spec.ts` | Validación de roles |
-| E2E | `auth.e2e-spec.ts` | Register, Login, Refresh flujo completo |
-| E2E | `users.e2e-spec.ts` | CRUD con tokens reales, admin vs cliente 403 |
+### Inventario de suites (36 suites, 241 tests)
+
+| Capa | Suites | Tests |
+|------|--------|-------|
+| Services | auth, users, services, bookings, payments, coupons, categories, products, cart, meta, email, google-calendar | ~150 |
+| Controllers | auth, users, services, bookings, payments, coupons, categories, products, cart, health, upload | ~50 |
+| Repositories | users, bookings, products, cart, payments, categories, services, coupons | ~55 |
+| Guards | jwt-auth, roles | ~9 |
+| Redis | redis, token-blacklist | ~8 |
+| E2E | auth, users | ~19 |
