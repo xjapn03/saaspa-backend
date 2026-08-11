@@ -16,6 +16,7 @@ import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { MetaModule } from './modules/meta/meta.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { ProductsModule } from './modules/products/products.module';
+import { CartModule } from './modules/cart/cart.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -38,6 +39,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
     MetaModule,
     CategoriesModule,
     ProductsModule,
+    CartModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
