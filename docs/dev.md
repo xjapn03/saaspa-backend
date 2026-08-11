@@ -36,10 +36,10 @@ npx prisma generate                      # Regenerar cliente
 
 | # | Módulo      | Estado       | Endpoints                                  |
 |---|-------------|-------------|--------------------------------------------|
-| 1 | Auth        | **Completo** | `POST /api/auth/register`, `/login`, `/refresh` |
+| 1 | Auth        | **Completo** | `POST /api/auth/register`, `/login`, `/refresh`, `/forgot-password`, `/reset-password`, `/logout` |
 | 2 | Users       | **Completo** | `GET /me`, `PATCH /me`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` |
 | 3 | Services    | **Completo** | `GET /`, `GET /public`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` |
-| 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reschedule` |
+| 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reschedule` |
 | 5 | Payments    | **Completo** | Wompi API (feature/05-payments-wompi)      |
 | 6 | Calendar    | **Completo** | Google Calendar sync (feature/06-calendar-sync) |
 | 7 | Coupons     | **Completo** | Cupones y descuentos (feature/06-coupons)  |
@@ -79,9 +79,16 @@ Coupon (coupons)
 
 ConversationState (conversation_states)
 ├── waId (unique), state (JSONB)
+
+ResetToken (reset_tokens)
+├── email, token (unique), expiresAt
 ```
 
-## Auto-Migrate al Arrancar
+## Módulo de Recuperación de Contraseña
+
+El módulo Auth incluye recuperación self-service:
+1. `POST /api/auth/forgot-password` — recibe `{ email }`, genera token temporal (1h), envía email vía SendGrid si `SENDGRID_API_KEY` está configurado, o loguea la URL en consola
+2. `POST /api/auth/reset-password` — recibe `{ token, newPassword }`, valida token, actualiza contraseña
 
 El `main.ts` ejecuta `npx prisma migrate deploy` automáticamente antes de levantar la API.
 Esto aplica las migraciones pendientes sin generar nuevas. Para crear nuevas migraciones:
