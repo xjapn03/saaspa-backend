@@ -67,11 +67,13 @@ Ver `.env.example` para la lista completa. Claves principales:
 | `DATABASE_URL`          | PostgreSQL connection string         |
 | `REDIS_URL`             | Redis connection string              |
 | `JWT_SECRET`            | Secreto para firmar tokens JWT       |
-| `WOMPI_PUBLIC_KEY`      | API key pública de Wompi             |
-| `WOMPI_PRIVATE_KEY`     | API key privada de Wompi             |
-| `WOMPI_WEBHOOK_SECRET`  | Firma HMAC para webhooks de Wompi   |
+| `WOMPI_PUBLIC_KEY`      | API key pública de Wompi (widget)    |
+| `WOMPI_PRIVATE_KEY`     | API key privada de Wompi (consultas) |
+| `WOMPI_EVENTS_KEY`      | Secreto para validar firma de webhooks |
+| `WOMPI_INTEGRITY_SECRET`| Secreto para generar firma de integridad |
 | `GOOGLE_CLIENT_EMAIL`   | Service account Google Calendar      |
 | `GOOGLE_PRIVATE_KEY`    | Clave privada de la service account  |
+| `SENDGRID_API_KEY`      | API key de SendGrid (recuperación de contraseña, opcional) |
 | `META_*`                | Credenciales WhatsApp Cloud API y CAPI |
 | `IA_BOT_URL`            | URL del microservicio Python IA Bot  |
 
