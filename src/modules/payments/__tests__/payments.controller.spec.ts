@@ -48,4 +48,14 @@ describe('PaymentsController', () => {
       expect(service.getPaymentStatus).toHaveBeenCalledWith('booking-1');
     });
   });
+
+  describe('initCart', () => {
+    it('should delegate to service with userId and dto', async () => {
+      service.initCartPayment.mockResolvedValue({ publicKey: 'pk', reference: 'ref', amountInCents: 5000, currency: 'COP', signature: 'sig' });
+      const dto = { items: [{ productId: 'prod-1', name: 'A', price: 1000, quantity: 2 }] };
+      const result = await controller.initCart('user-1', dto);
+      expect(result.publicKey).toBe('pk');
+      expect(service.initCartPayment).toHaveBeenCalledWith('user-1', dto);
+    });
+  });
 });

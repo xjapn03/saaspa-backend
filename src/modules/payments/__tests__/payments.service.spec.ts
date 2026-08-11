@@ -301,4 +301,56 @@ describe('PaymentsService', () => {
       expect(result.payments).toHaveLength(1);
     });
   });
+
+  describe('initCartPayment', () => {
+    const cartDto = {
+      items: [
+        { productId: 'prod-1', name: 'Product A', price: 50000, quantity: 2 },
+        { productId: 'prod-2', name: 'Product B', price: 30000, quantity: 1 },
+      ],
+    };
+
+    it('should return widget config for cart total', async () => {
+      paymentsRepo.create.mockResolvedValue({ id: 'pay-cart-1' } as any);
+
+      const result = await service.initCartPayment('user-1', cartDto);
+
+      expect(result.publicKey).toBe('pub_test_test123');
+      expect(result.currency).toBe('COP');
+      expect(result.signature).toHaveLength(64);
+      expect(result.amountInCents).toBe(13000000);
+      expect(paymentsRepo.create).toHaveBeenCalled();
+    });
+
+    it('should apply coupon discount when valid coupon provided', async () => {
+      couponsRepo.findById.mockResolvedValue({
+        id: 'coupon-1', code: 'DESC10', discount: 0.1, isUsed: false,
+        expiresAt: new Date('2027-01-01'),
+      } as any);
+      paymentsRepo.create.mockResolvedValue({ id: 'pay-cart-2' } as any);
+
+      const result = await service.initCartPayment('user-1', {
+        ...cartDto, couponId: 'coupon-1',
+      });
+
+      expect(result.amountInCents).toBe(11700000);
+      expect(couponsRepo.findById).toHaveBeenCalledWith('coupon-1');
+    });
+
+    it('should throw if total is <= 0', async () => {
+      await expect(service.initCartPayment('user-1', { items: [] }))
+        .rejects.toThrow('total debe ser mayor a 0');
+    });
+
+    it('should ignore invalid coupon gracefully', async () => {
+      couponsRepo.findById.mockRejectedValue(new Error('Not found'));
+      paymentsRepo.create.mockResolvedValue({ id: 'pay-cart-3' } as any);
+
+      const result = await service.initCartPayment('user-1', {
+        ...cartDto, couponId: 'bad-coupon',
+      });
+
+      expect(result.amountInCents).toBe(13000000);
+    });
+  });
 });
