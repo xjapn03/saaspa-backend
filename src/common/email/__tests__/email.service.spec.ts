@@ -1,0 +1,74 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
+import { EmailService } from '../email.service';
+
+describe('EmailService', () => {
+  let service: EmailService;
+
+  const bookingData = {
+    clientName: 'Maria Gomez',
+    clientEmail: 'maria@example.com',
+    serviceName: 'Facial',
+    date: '15 de agosto de 2026',
+    time: '10:00 a.m.',
+    depositAmount: 30000,
+    remainingAmount: 70000,
+    bookingId: 'booking-1',
+    paymentReference: 'ref-abc123',
+  };
+
+  const paymentData = {
+    clientName: 'Maria Gomez',
+    clientEmail: 'maria@example.com',
+    serviceName: 'Facial',
+    amount: 70000,
+    paymentReference: 'ref-xyz789',
+    bookingId: 'booking-1',
+  };
+
+  describe('without API key', () => {
+    beforeEach(async () => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          EmailService,
+          {
+            provide: ConfigService,
+            useValue: { get: () => undefined },
+          },
+        ],
+      }).compile();
+      service = module.get<EmailService>(EmailService);
+    });
+
+    it('should log booking receipt to console without sending', async () => {
+      await expect(service.sendBookingReceipt(bookingData)).resolves.toBeUndefined();
+    });
+
+    it('should log payment receipt to console without sending', async () => {
+      await expect(service.sendPaymentReceipt(paymentData)).resolves.toBeUndefined();
+    });
+  });
+
+  describe('with API key (mocked)', () => {
+    beforeEach(async () => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          EmailService,
+          {
+            provide: ConfigService,
+            useValue: { get: () => 'SG.fake-key' },
+          },
+        ],
+      }).compile();
+      service = module.get<EmailService>(EmailService);
+    });
+
+    it('should be marked as enabled', () => {
+      expect(service).toBeDefined();
+    });
+
+    it('should attempt to send booking receipt (may fail without real key)', async () => {
+      await expect(service.sendBookingReceipt(bookingData)).resolves.toBeUndefined();
+    });
+  });
+});

@@ -5,12 +5,14 @@ import { PaymentsService } from '../payments.service';
 import { IPaymentsRepository } from '../../../repositories/interfaces/payments.repository';
 import { IBookingsRepository } from '../../../repositories/interfaces/bookings.repository';
 import { MetaCapiService } from '../../meta/meta-capi.service';
+import { EmailService } from '../../../common/email/email.service';
 
 describe('PaymentsService', () => {
   let service: PaymentsService;
   let paymentsRepo: DeepMockProxy<IPaymentsRepository>;
   let bookingsRepo: DeepMockProxy<IBookingsRepository>;
   let metaCapi: DeepMockProxy<MetaCapiService>;
+  let emailService: DeepMockProxy<EmailService>;
 
   const mockBooking = {
     id: 'booking-1',
@@ -49,6 +51,7 @@ describe('PaymentsService', () => {
     paymentsRepo = mockDeep<IPaymentsRepository>();
     bookingsRepo = mockDeep<IBookingsRepository>();
     metaCapi = mockDeep<MetaCapiService>();
+    emailService = mockDeep<EmailService>();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -56,6 +59,7 @@ describe('PaymentsService', () => {
         { provide: IPaymentsRepository, useValue: paymentsRepo },
         { provide: IBookingsRepository, useValue: bookingsRepo },
         { provide: MetaCapiService, useValue: metaCapi },
+        { provide: EmailService, useValue: emailService },
         {
           provide: ConfigService,
           useValue: new ConfigService({
