@@ -33,6 +33,7 @@ enum PaymentStatus {
   REEMBOLSADO
 }
 
+
 model User {
   id           String    @id @default(uuid())
   email        String    @unique
@@ -146,6 +147,7 @@ model Payment {
   status          PaymentStatus @default(PENDIENTE)
   wompiPaymentId  String?
   wompiReference  String?
+  metadata        Json?
   paidAt          DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt

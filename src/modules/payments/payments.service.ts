@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import { IPaymentsRepository } from '../../repositories/interfaces/payments.repository';
 import { IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
 import { ICouponsRepository } from '../../repositories/interfaces/coupons.repository';
+import { IProductsRepository } from '../../repositories/interfaces/products.repository';
 import { MetaCapiService } from '../meta/meta-capi.service';
 import { EmailService } from '../../common/email/email.service';
 
@@ -15,6 +16,7 @@ export class PaymentsService {
     private paymentsRepo: IPaymentsRepository,
     private bookingsRepo: IBookingsRepository,
     private couponsRepo: ICouponsRepository,
+    private productsRepo: IProductsRepository,
     private config: ConfigService,
     private metaCapi: MetaCapiService,
     private emailService: EmailService,
@@ -164,6 +166,32 @@ export class PaymentsService {
           paymentReference: payment.wompiReference || data.reference || '',
         });
       }
+
+      const metadata = (payment as any).metadata;
+      if (!booking && metadata?.items) {
+        if (metadata.couponId) {
+          try { await this.couponsRepo.update(metadata.couponId, { isUsed: true } as any); } catch {}
+        }
+        for (const item of metadata.items) {
+          try {
+            const product = await this.productsRepo.findById(item.productId).catch(() => null);
+            if (product && product.stock > 0) {
+              await this.productsRepo.update(item.productId, { stock: product.stock - item.quantity } as any);
+            }
+          } catch {}
+        }
+        const user = (payment as any).user;
+        if (user?.email) {
+          this.emailService.sendPaymentReceipt({
+            clientName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Cliente',
+            clientEmail: user.email,
+            serviceName: `Compra — ${metadata.items.length} producto(s)`,
+            amount: Number(payment.amount || 0),
+            paymentReference: payment.wompiReference || '',
+            bookingId: payment.id,
+          });
+        }
+      }
     } else if (status === 'DECLINED' || status === 'ERROR' || status === 'VOIDED') {
       await this.paymentsRepo.update(payment.id, { status: 'RECHAZADO' } as any);
     }
@@ -219,6 +247,7 @@ export class PaymentsService {
       amount: total,
       type: 'SALDO',
       wompiReference: reference,
+      metadata: { items: dto.items, couponId: dto.couponId || null, couponCode: dto.couponCode || null },
     } as any);
 
     return { publicKey, reference, amountInCents, currency, signature };
