@@ -6,6 +6,7 @@ export interface IPaymentSafe {
   bookingId: string;
   userId: string;
   amount: number;
+  type: string;
   status: string;
   wompiPaymentId: string | null;
   wompiReference: string | null;
@@ -16,7 +17,8 @@ export interface IPaymentSafe {
 
 export abstract class IPaymentsRepository {
   abstract create(data: Prisma.PaymentCreateInput): Promise<Payment>;
-  abstract findByBookingId(bookingId: string): Promise<Payment | null>;
-  abstract findByWompiId(wompiPaymentId: string): Promise<Payment | null>;
+  abstract findByBookingId(bookingId: string): Promise<IPaymentSafe[]>;
+  abstract findApprovedByBookingId(bookingId: string): Promise<IPaymentSafe[]>;
+  abstract findByWompiId(wompiPaymentId: string): Promise<IPaymentSafe>;
   abstract update(id: string, data: Prisma.PaymentUpdateInput): Promise<IPaymentSafe>;
 }
