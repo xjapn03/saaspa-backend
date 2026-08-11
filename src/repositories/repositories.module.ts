@@ -11,6 +11,8 @@ import { ICategoriesRepository } from './interfaces/categories.repository';
 import { CategoriesRepository } from './categories.repository';
 import { IProductsRepository } from './interfaces/products.repository';
 import { ProductsRepository } from './products.repository';
+import { ICouponsRepository } from './interfaces/coupons.repository';
+import { CouponsRepository } from './coupons.repository';
 
 @Global()
 @Module({

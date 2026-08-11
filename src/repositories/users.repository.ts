@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
-import { IUsersRepository } from './interfaces/users.repository';
+import { IUsersRepository, UserFilters } from './interfaces/users.repository';
 
 const userSelect = {
   id: true,
@@ -23,10 +23,20 @@ export class UsersRepository extends IUsersRepository {
     super();
   }
 
-  async findAll() {
+  async findAll(filters: UserFilters = {}) {
+    const where: Prisma.UserWhereInput = { isActive: true };
+    if (filters.role) where.role = filters.role as any;
+    const orderBy: Prisma.UserOrderByWithRelationInput = {};
+    const sortBy = filters.sortBy || 'firstName';
+    const order = filters.order || 'asc';
+    if (sortBy === 'firstName') orderBy.firstName = order;
+    else if (sortBy === 'createdAt') orderBy.createdAt = order;
+    else orderBy.firstName = 'asc';
+
     return this.prisma.user.findMany({
-      where: { isActive: true },
+      where,
       select: userSelect,
+      orderBy,
     });
   }
 

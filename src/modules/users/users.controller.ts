@@ -1,5 +1,5 @@
-import { Controller, Get, Patch, Delete, Param, Body, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Patch, Delete, Param, Body, Query, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -16,8 +16,11 @@ export class UsersController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Listar todos los usuarios (Admin)' })
   @ApiResponse({ status: 200, description: 'Lista de usuarios activos' })
-  findAll() {
-    return this.usersService.findAll();
+  @ApiQuery({ name: 'role', required: false, enum: Role })
+  @ApiQuery({ name: 'sortBy', required: false })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  findAll(@Query('role') role?: string, @Query('sortBy') sortBy?: string, @Query('order') order?: string) {
+    return this.usersService.findAll({ role, sortBy, order: order as 'asc' | 'desc' });
   }
 
   @Get('me')

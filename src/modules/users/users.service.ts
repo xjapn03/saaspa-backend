@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { IUsersRepository } from '../../repositories/interfaces/users.repository';
+import type { UserFilters } from '../../repositories/interfaces/users.repository';
 
 @Injectable()
 export class UsersService {
   constructor(private usersRepo: IUsersRepository) {}
 
-  async findAll() {
-    return this.usersRepo.findAll();
+  async findAll(filters?: UserFilters) {
+    return this.usersRepo.findAll(filters);
   }
 
   async findById(id: string) {

@@ -15,8 +15,14 @@ export interface IUserSafe {
   updatedAt: Date;
 }
 
+export interface UserFilters {
+  role?: string;
+  sortBy?: string;
+  order?: 'asc' | 'desc';
+}
+
 export abstract class IUsersRepository {
-  abstract findAll(): Promise<IUserSafe[]>;
+  abstract findAll(filters?: UserFilters): Promise<IUserSafe[]>;
   abstract findById(id: string): Promise<IUserSafe>;
   abstract findByEmail(email: string): Promise<User | null>;
   abstract findByIdWithCredentials(id: string): Promise<User | null>;
