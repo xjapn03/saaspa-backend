@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { IPaymentsRepository } from '../../repositories/interfaces/payments.repository';
 import { IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
+import { ICouponsRepository } from '../../repositories/interfaces/coupons.repository';
 import { MetaCapiService } from '../meta/meta-capi.service';
 import { EmailService } from '../../common/email/email.service';
 
@@ -13,6 +14,7 @@ export class PaymentsService {
   constructor(
     private paymentsRepo: IPaymentsRepository,
     private bookingsRepo: IBookingsRepository,
+    private couponsRepo: ICouponsRepository,
     private config: ConfigService,
     private metaCapi: MetaCapiService,
     private emailService: EmailService,
@@ -188,5 +190,37 @@ export class PaymentsService {
       paid: Math.round(totalPaid * 100) / 100,
       remaining: Math.round((servicePrice - totalPaid) * 100) / 100,
     };
+  }
+
+  async initCartPayment(userId: string, dto: { items: { productId: string; name: string; price: number; quantity: number }[]; couponCode?: string; couponId?: string }) {
+    let subtotal = dto.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+    let discount = 0;
+
+    if (dto.couponId) {
+      try {
+        const coupon = await this.couponsRepo.findById(dto.couponId);
+        if (!coupon.isUsed && new Date(coupon.expiresAt) > new Date()) {
+          discount = Math.round(subtotal * Number(coupon.discount) * 100) / 100;
+        }
+      } catch {}
+    }
+
+    const total = Math.round((subtotal - discount) * 100) / 100;
+    if (total <= 0) throw new BadRequestException('El monto total debe ser mayor a 0');
+
+    const reference = `kamerinos-cart-${userId.slice(0, 8)}-${Date.now().toString(36)}`;
+    const amountInCents = Math.round(total * 100);
+    const currency = 'COP';
+    const publicKey = this.config.get<string>('WOMPI_PUBLIC_KEY') || 'pub_test_xxx';
+    const signature = this.generateIntegritySignature(reference, amountInCents, currency);
+
+    await this.paymentsRepo.create({
+      user: { connect: { id: userId } },
+      amount: total,
+      type: 'SALDO',
+      wompiReference: reference,
+    } as any);
+
+    return { publicKey, reference, amountInCents, currency, signature };
   }
 }

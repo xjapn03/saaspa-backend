@@ -4,7 +4,9 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 import { InitPaymentDto } from './dto/init-payment.dto';
+import { InitCartPaymentDto } from './dto/init-cart-payment.dto';
 import { Public } from '../../common/decorators/public.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Payments')
 @Controller('payments')
@@ -17,6 +19,14 @@ export class PaymentsController {
   @ApiResponse({ status: 201, description: 'Configuración de pago generada' })
   init(@Body() dto: InitPaymentDto) {
     return this.paymentsService.initPayment(dto.bookingId, (dto.type as 'ABONO' | 'SALDO') || 'ABONO');
+  }
+
+  @Post('init-cart')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Iniciar pago del carrito de compras' })
+  @ApiResponse({ status: 201, description: 'Configuración de pago generada' })
+  initCart(@CurrentUser('id') userId: string, @Body() dto: InitCartPaymentDto) {
+    return this.paymentsService.initCartPayment(userId, dto);
   }
 
   @Get(':bookingId/status')
