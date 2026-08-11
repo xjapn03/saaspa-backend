@@ -121,13 +121,23 @@ export class PaymentsService {
   }
 
   async getPaymentStatus(bookingId: string) {
-    const payment = await this.paymentsRepo.findByBookingId(bookingId);
-    if (!payment) throw new BadRequestException('Pago no encontrado');
+    const payments = await this.paymentsRepo.findApprovedByBookingId(bookingId);
+    const booking = await this.bookingsRepo.findById(bookingId).catch(() => null);
+    const servicePrice = booking ? Number((booking.service as any)?.price) : 0;
+    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+
     return {
-      id: payment.id,
-      status: payment.status,
-      amount: payment.amount,
-      paidAt: payment.paidAt,
+      payments: payments.map((p) => ({
+        id: p.id,
+        type: p.type,
+        status: p.status,
+        amount: p.amount,
+        paidAt: p.paidAt,
+        wompiReference: p.wompiReference,
+      })),
+      total: servicePrice,
+      paid: Math.round(totalPaid * 100) / 100,
+      remaining: Math.round((servicePrice - totalPaid) * 100) / 100,
     };
   }
 }
