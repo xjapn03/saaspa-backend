@@ -33,6 +33,11 @@ enum PaymentStatus {
   REEMBOLSADO
 }
 
+enum PaymentType {
+  ABONO
+  SALDO
+}
+
 model User {
   id           String    @id @default(uuid())
   email        String    @unique
@@ -63,13 +68,57 @@ model Service {
   duration    Int
   isActive    Boolean  @default(true)
   category    String?
+  categoryId  String?
   imageUrl    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  categoryRel  Category? @relation(fields: [categoryId], references: [id])
   bookings    Booking[]
 
   @@map("services")
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  description String?
+  imageUrl    String?
+  parentId    String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryTree")
+  services    Service[]
+  products    Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id              String    @id @default(uuid())
+  name            String
+  slug            String    @unique
+  description     String?   @db.Text
+  price           Decimal   @db.Decimal(10, 2)
+  compareAtPrice  Decimal?  @db.Decimal(10, 2)
+  stock           Int       @default(0)
+  sku             String?   @unique
+  mainImage       String?
+  carouselImages  Json?
+  sponsor         String?
+  isActive        Boolean   @default(true)
+  isFeatured      Boolean   @default(false)
+  categoryId      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  category        Category? @relation(fields: [categoryId], references: [id])
+
+  @@map("products")
 }
 
 model Booking {
