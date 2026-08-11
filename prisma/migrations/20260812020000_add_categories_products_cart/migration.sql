@@ -1,4 +1,7 @@
 -- AlterTable
+ALTER TABLE "payments" ADD COLUMN     "metadata" JSONB;
+
+-- AlterTable
 ALTER TABLE "services" ADD COLUMN     "categoryId" TEXT;
 
 -- CreateTable
