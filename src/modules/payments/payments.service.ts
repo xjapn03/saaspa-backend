@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import { IPaymentsRepository } from '../../repositories/interfaces/payments.repository';
 import { IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
 import { MetaCapiService } from '../meta/meta-capi.service';
+import { EmailService } from '../../common/email/email.service';
 
 @Injectable()
 export class PaymentsService {
@@ -14,6 +15,7 @@ export class PaymentsService {
     private bookingsRepo: IBookingsRepository,
     private config: ConfigService,
     private metaCapi: MetaCapiService,
+    private emailService: EmailService,
   ) {}
 
   generateIntegritySignature(reference: string, amountInCents: number, currency: string): string {
@@ -104,15 +106,39 @@ export class PaymentsService {
       await this.bookingsRepo.update(payment.bookingId, { status: 'CONFIRMADA' } as any);
 
       const booking = await this.bookingsRepo.findById(payment.bookingId).catch(() => null);
-      this.metaCapi.sendEvent({
-        eventName: 'Purchase',
-        customData: {
-          currency: 'COP',
-          value: data.amount_in_cents ? data.amount_in_cents / 100 : undefined,
-          contentName: (booking as any)?.service?.name,
+      if (booking) {
+        this.metaCapi.sendEvent({
+          eventName: 'Purchase',
+          customData: {
+            currency: 'COP',
+            value: data.amount_in_cents ? data.amount_in_cents / 100 : undefined,
+            contentName: (booking as any)?.service?.name,
+            bookingId: payment.bookingId,
+          },
+        });
+
+        const clientName = `${(booking as any)?.user?.firstName || ''} ${(booking as any)?.user?.lastName || ''}`.trim();
+        const servicePrice = Number((booking as any)?.service?.price || 0);
+        const depositPaid = Number(payment.amount || 0);
+        const dateStr = new Date(booking.startTime).toLocaleDateString('es-CO', {
+          day: 'numeric', month: 'long', year: 'numeric',
+        });
+        const timeStr = new Date(booking.startTime).toLocaleTimeString('es-CO', {
+          hour: '2-digit', minute: '2-digit', hour12: true,
+        });
+
+        this.emailService.sendBookingReceipt({
+          clientName: clientName || 'Cliente',
+          clientEmail: (booking as any)?.user?.email || '',
+          serviceName: (booking as any)?.service?.name || 'Servicio',
+          date: dateStr,
+          time: timeStr,
+          depositAmount: depositPaid,
+          remainingAmount: Math.round((servicePrice - depositPaid) * 100) / 100,
           bookingId: payment.bookingId,
-        },
-      });
+          paymentReference: payment.wompiReference || data.reference || '',
+        });
+      }
     } else if (status === 'DECLINED' || status === 'ERROR' || status === 'VOIDED') {
       await this.paymentsRepo.update(payment.id, { status: 'RECHAZADO' } as any);
     }
@@ -121,13 +147,23 @@ export class PaymentsService {
   }
 
   async getPaymentStatus(bookingId: string) {
-    const payment = await this.paymentsRepo.findByBookingId(bookingId);
-    if (!payment) throw new BadRequestException('Pago no encontrado');
+    const payments = await this.paymentsRepo.findApprovedByBookingId(bookingId);
+    const booking = await this.bookingsRepo.findById(bookingId).catch(() => null);
+    const servicePrice = booking ? Number((booking.service as any)?.price) : 0;
+    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+
     return {
-      id: payment.id,
-      status: payment.status,
-      amount: payment.amount,
-      paidAt: payment.paidAt,
+      payments: payments.map((p) => ({
+        id: p.id,
+        type: p.type,
+        status: p.status,
+        amount: p.amount,
+        paidAt: p.paidAt,
+        wompiReference: p.wompiReference,
+      })),
+      total: servicePrice,
+      paid: Math.round(totalPaid * 100) / 100,
+      remaining: Math.round((servicePrice - totalPaid) * 100) / 100,
     };
   }
 }
