@@ -21,6 +21,11 @@ enum BookingStatus {
   NO_ASISTIO
 }
 
+enum PaymentType {
+  ABONO
+  SALDO
+}
+
 enum PaymentStatus {
   PENDIENTE
   APROBADO
@@ -81,16 +86,17 @@ model Booking {
 
   user          User          @relation(fields: [userId], references: [id])
   service       Service       @relation(fields: [serviceId], references: [id])
-  payment       Payment?
+  payments      Payment[]
 
   @@map("bookings")
 }
 
 model Payment {
   id              String        @id @default(uuid())
-  bookingId       String        @unique
+  bookingId       String
   userId          String
   amount          Decimal       @db.Decimal(10, 2)
+  type            PaymentType   @default(ABONO)
   status          PaymentStatus @default(PENDIENTE)
   wompiPaymentId  String?
   wompiReference  String?

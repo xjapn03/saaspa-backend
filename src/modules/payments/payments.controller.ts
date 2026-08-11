@@ -13,10 +13,10 @@ export class PaymentsController {
 
   @Post('init')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Iniciar pago — retorna config para widget Wompi' })
+  @ApiOperation({ summary: 'Iniciar pago — retorna config para widget Wompi. type=ABONO (default) o SALDO' })
   @ApiResponse({ status: 201, description: 'Configuración de pago generada' })
   init(@Body() dto: InitPaymentDto) {
-    return this.paymentsService.initPayment(dto.bookingId);
+    return this.paymentsService.initPayment(dto.bookingId, (dto.type as 'ABONO' | 'SALDO') || 'ABONO');
   }
 
   @Get(':bookingId/status')

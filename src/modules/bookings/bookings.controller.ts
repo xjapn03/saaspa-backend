@@ -4,6 +4,7 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { BookingsService } from './bookings.service';
+import { PaymentsService } from '../payments/payments.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -12,7 +13,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @ApiTags('Bookings')
 @Controller('bookings')
 export class BookingsController {
-  constructor(private bookingsService: BookingsService) {}
+  constructor(
+    private bookingsService: BookingsService,
+    private paymentsService: PaymentsService,
+  ) {}
 
   @Get()
   @ApiBearerAuth()
@@ -47,6 +51,13 @@ export class BookingsController {
   @ApiOperation({ summary: 'Obtener detalle de cita' })
   findById(@Param('id') id: string) {
     return this.bookingsService.findById(id);
+  }
+
+  @Get(':id/balance')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Consultar balance de pagos de una cita' })
+  getBalance(@Param('id') id: string) {
+    return this.paymentsService.getPaymentStatus(id);
   }
 
   @Post()
