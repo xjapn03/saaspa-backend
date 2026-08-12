@@ -9,7 +9,7 @@ describe('CouponsRepository', () => {
   let prisma: DeepMockProxy<PrismaService>;
 
   const mockCoupon = {
-    id: 'coupon-1', code: 'DESC20', discount: 0.2, isUsed: false,
+    id: 'coupon-1', code: 'DESC20', discount: 0.2, isActive: true, maxUses: null, usedCount: 0, perUserLimit: 1,
     expiresAt: new Date('2026-12-31'), userId: null, createdAt: new Date(),
     user: null,
   };

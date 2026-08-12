@@ -15,6 +15,10 @@ export class CouponsService {
     return this.couponsRepo.findById(id);
   }
 
+  async findUsages(id: string) {
+    return this.couponsRepo.findUsages(id);
+  }
+
   async create(dto: CreateCouponDto) {
     const existing = await this.couponsRepo.findByCode(dto.code);
     if (existing) {
@@ -25,16 +29,10 @@ export class CouponsService {
       code: dto.code.toUpperCase(),
       discount: dto.discount,
       expiresAt: new Date(dto.expiresAt),
+      maxUses: dto.maxUses ?? null,
+      perUserLimit: dto.perUserLimit ?? 1,
       ...(dto.userId ? { user: { connect: { id: dto.userId } } } : {}),
     });
-  }
-
-  async markAsUsed(id: string) {
-    const coupon = await this.couponsRepo.findById(id);
-    if (coupon.isUsed) {
-      throw new BadRequestException('El cupón ya fue usado');
-    }
-    return this.couponsRepo.update(id, { isUsed: true });
   }
 
   async remove(id: string) {
@@ -46,8 +44,11 @@ export class CouponsService {
     if (!coupon) {
       throw new BadRequestException('Cupón no válido');
     }
-    if (coupon.isUsed) {
-      throw new BadRequestException('Este cupón ya fue usado');
+    if (!coupon.isActive) {
+      throw new BadRequestException('Este cupón ya no está activo');
+    }
+    if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
+      throw new BadRequestException('Este cupón alcanzó su límite de usos');
     }
     if (new Date(coupon.expiresAt) < new Date()) {
       throw new BadRequestException('Este cupón expiró');
@@ -58,5 +59,10 @@ export class CouponsService {
       discount: Number(coupon.discount),
       valid: true,
     };
+  }
+
+  async canUserUse(couponId: string, userId: string): Promise<boolean> {
+    const usage = await this.couponsRepo.findUsage(couponId, userId);
+    return !usage;
   }
 }

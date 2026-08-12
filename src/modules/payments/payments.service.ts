@@ -186,9 +186,6 @@ export class PaymentsService {
           return { received: true };
         }
 
-        if (metadata.couponId) {
-          try { await this.couponsRepo.update(metadata.couponId, { isUsed: true } as any); } catch {}
-        }
         for (const item of metadata.items) {
           try {
             const product = await this.productsRepo.findById(item.productId).catch(() => null);
@@ -198,8 +195,9 @@ export class PaymentsService {
           } catch {}
         }
         const user = (payment as any).user;
+        let orderId: string | undefined;
         try {
-          await this.ordersRepo.create({
+          const order = await this.ordersRepo.create({
             userId: payment.userId,
             total: Number(payment.amount || 0),
             status: 'CONFIRMADO' as any,
@@ -217,6 +215,7 @@ export class PaymentsService {
               quantity: i.quantity,
             })),
           } as any);
+          orderId = order.id;
         } catch (err: any) {
           this.logger.error('No se pudo crear la orden automáticamente', {
             error: err?.message,
@@ -224,6 +223,13 @@ export class PaymentsService {
             meta: err?.meta,
             paymentId: payment.id,
           });
+        }
+        if (metadata.couponId && payment.userId) {
+          try {
+            await this.couponsRepo.consumeCoupon(metadata.couponId, payment.userId, orderId);
+          } catch (err: any) {
+            this.logger.warn(`No se pudo registrar el uso del cupón ${metadata.couponId}: ${err?.message}`);
+          }
         }
         if (user?.email || metadata.shippingEmail) {
           this.emailService.sendPaymentReceipt({
@@ -271,7 +277,12 @@ export class PaymentsService {
     if (dto.couponId) {
       try {
         const coupon = await this.couponsRepo.findById(dto.couponId);
-        if (!coupon.isUsed && new Date(coupon.expiresAt) > new Date()) {
+        const withinLimits =
+          coupon.isActive &&
+          new Date(coupon.expiresAt) > new Date() &&
+          (coupon.maxUses === null || coupon.usedCount < coupon.maxUses);
+        const usage = await this.couponsRepo.findUsage(dto.couponId, userId);
+        if (withinLimits && !usage) {
           discount = Math.round(subtotal * Number(coupon.discount) * 100) / 100;
         }
       } catch {}

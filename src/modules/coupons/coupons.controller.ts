@@ -41,21 +41,21 @@ export class CouponsController {
     return this.couponsService.create(dto);
   }
 
+  @Get(':id/usages')
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Listar usos de un cupón (Admin)' })
+  findUsages(@Param('id') id: string) {
+    return this.couponsService.findUsages(id);
+  }
+
   @Post('validate')
   @Public()
   @ApiOperation({ summary: 'Validar código de cupón (público)' })
   @ApiResponse({ status: 200, description: 'Cupón válido' })
-  @ApiResponse({ status: 400, description: 'Cupón inválido, usado o expirado' })
+  @ApiResponse({ status: 400, description: 'Cupón inválido, agotado o expirado' })
   validate(@Body() dto: ValidateCouponDto) {
     return this.couponsService.validate(dto);
-  }
-
-  @Post(':id/use')
-  @Roles(Role.ADMIN, Role.EMPLEADO)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Marcar cupón como usado (Admin/Empleado)' })
-  markAsUsed(@Param('id') id: string) {
-    return this.couponsService.markAsUsed(id);
   }
 
   @Delete(':id')

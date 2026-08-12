@@ -355,7 +355,7 @@ describe('PaymentsService', () => {
 
     it('should apply coupon discount when valid coupon provided', async () => {
       couponsRepo.findById.mockResolvedValue({
-        id: 'coupon-1', code: 'DESC10', discount: 0.1, isUsed: false,
+        id: 'coupon-1', code: 'DESC10', discount: 0.1, isActive: true, maxUses: null, usedCount: 0, perUserLimit: 1,
         expiresAt: new Date('2027-01-01'),
       } as any);
       paymentsRepo.create.mockResolvedValue({ id: 'pay-cart-2' } as any);

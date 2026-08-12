@@ -11,7 +11,10 @@ describe('CouponsController', () => {
     id: 'coupon-1',
     code: 'BIENVENIDA15',
     discount: 0.15,
-    isUsed: false,
+    isActive: true,
+    maxUses: null,
+    usedCount: 0,
+    perUserLimit: 1,
     expiresAt: new Date('2026-12-31'),
     userId: null,
     createdAt: new Date(),
@@ -66,11 +69,11 @@ describe('CouponsController', () => {
     });
   });
 
-  describe('markAsUsed', () => {
-    it('should mark coupon as used', async () => {
-      service.markAsUsed.mockResolvedValue({ ...mockCoupon, isUsed: true } as any);
-      const result = await controller.markAsUsed('coupon-1');
-      expect(result.isUsed).toBe(true);
+  describe('findUsages', () => {
+    it('should return usages for a coupon', async () => {
+      service.findUsages.mockResolvedValue([]);
+      const result = await controller.findUsages('coupon-1');
+      expect(result).toEqual([]);
     });
   });
 
