@@ -141,8 +141,10 @@ RUN_SEED=false
 
 El seed usa `upsert` en `prisma/seed.ts`, así que es idempotente:
 - Crea admin `admin@kamerinosspa.com` / `admin123` si no existe
-- Crea 4 servicios de ejemplo
-- Si ya existe el admin, no duplica nada
+- Crea 8 categorías (Masajes, Faciales, Uñas, Depilación, Corporal, Cremas, Sérums, Mascarillas)
+- Crea 8 servicios con `categoryId` FK apuntando a las categorías
+- Crea 8 productos con `slug`, `sku`, `sponsor`, `categoryId` FK
+- Si ya existen los datos, no duplica nada (usa `upsert`)
 
 ## Logging de Requests
 

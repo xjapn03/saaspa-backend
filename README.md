@@ -55,8 +55,8 @@ src/
 cp .env.example .env
 npm install
 docker compose up -d postgres redis
-npx prisma migrate dev --name init
-npx prisma db seed
+npx prisma migrate deploy      # aplicar migraciones
+npx prisma db seed             # poblar datos (admin + 8 categorías + 8 servicios + 8 productos)
 npm run start:dev
 ```
 
