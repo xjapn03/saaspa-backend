@@ -1,156 +1,118 @@
 {
   "info": {
     "name": "Kamerinos SPA API",
-    "description": "Colección de pruebas para la API de Kamerinos SPA Bogotá.\n\nFlujo recomendado:\n1. Login Admin → guarda accessToken\n2. Crear servicios → prueba sitio público\n3. Registrar cliente + login → prueba /agendar (crear cita)\n4. Admin: confirmar cita, completar, cancelar\n\nSeed automático (RUN_SEED=true): admin@kamerinosspa.com / admin123 + 4 servicios de ejemplo.",
+    "description": "Colección de pruebas para la API de Kamerinos SPA Bogotá.\n\nFlujo recomendado:\n1. Login Admin → guarda accessToken\n2. Crear servicios → prueba sitio público\n3. Registrar cliente + login → prueba /agendar (crear cita)\n4. Admin: confirmar cita, completar, cancelar\n\nSeed automático (RUN_SEED=true): admin@kamerinosspa.com / admin123 + 8 categorías + 8 servicios + 8 productos.\n\nÚltima actualización: Agosto 2026 — 41 endpoints.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
       "name": "Auth",
       "item": [
-        {
-          "name": "Register Cliente",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', function () { pm.response.to.have.status(201); });", "var json = pm.response.json();", "pm.collectionVariables.set('clientAccessToken', json.accessToken);", "pm.collectionVariables.set('clientRefreshToken', json.refreshToken);"], "type": "text/javascript" } }],
-          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"cliente@test.com\",\n  \"firstName\": \"Maria\",\n  \"lastName\": \"Gomez\",\n  \"phone\": \"3001234567\",\n  \"password\": \"password123\"\n}" }, "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] } }
-        },
-        {
-          "name": "Login Admin (seed)",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "pm.collectionVariables.set('accessToken', json.accessToken);", "pm.collectionVariables.set('refreshToken', json.refreshToken);"], "type": "text/javascript" } }],
-          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@kamerinosspa.com\",\n  \"password\": \"admin123\"\n}" }, "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] } }
-        },
-        {
-          "name": "Login Cliente",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "pm.collectionVariables.set('clientAccessToken', json.accessToken);", "pm.collectionVariables.set('clientRefreshToken', json.refreshToken);"], "type": "text/javascript" } }],
-          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"cliente@test.com\",\n  \"password\": \"password123\"\n}" }, "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] } }
-        },
-        {
-          "name": "Refresh Token",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "pm.collectionVariables.set('accessToken', json.accessToken);", "pm.collectionVariables.set('refreshToken', json.refreshToken);"], "type": "text/javascript" } }],
-          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }, "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] } }
-        },
-        {
-          "name": "Logout — Cerrar sesión",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 204', function () { pm.response.to.have.status(204); });"], "type": "text/javascript" } }],
-          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }, "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] } }
-        }
+        { "name": "Register Cliente", "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', function () { pm.response.to.have.status(201); });", "var json = pm.response.json();", "pm.collectionVariables.set('clientAccessToken', json.accessToken);", "pm.collectionVariables.set('clientRefreshToken', json.refreshToken);"], "type": "text/javascript" } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"cliente@test.com\",\n  \"firstName\": \"Maria\",\n  \"lastName\": \"Gomez\",\n  \"phone\": \"3001234567\",\n  \"password\": \"password123\"\n}" }, "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] } } },
+        { "name": "Login Admin (seed)", "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "pm.collectionVariables.set('accessToken', json.accessToken);", "pm.collectionVariables.set('refreshToken', json.refreshToken);"], "type": "text/javascript" } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@kamerinosspa.com\",\n  \"password\": \"admin123\"\n}" }, "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] } } },
+        { "name": "Login Cliente", "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "pm.collectionVariables.set('clientAccessToken', json.accessToken);", "pm.collectionVariables.set('clientRefreshToken', json.refreshToken);"], "type": "text/javascript" } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"cliente@test.com\",\n  \"password\": \"password123\"\n}" }, "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] } } },
+        { "name": "Refresh Token", "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "pm.collectionVariables.set('accessToken', json.accessToken);", "pm.collectionVariables.set('refreshToken', json.refreshToken);"], "type": "text/javascript" } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }, "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] } } },
+        { "name": "Logout — Cerrar sesión", "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 204', function () { pm.response.to.have.status(204); });"], "type": "text/javascript" } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }, "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] } } }
       ]
     },
     {
       "name": "Users",
       "item": [
-        {
-          "name": "GET /me — Perfil propio",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
-          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] } }
-        },
-        {
-          "name": "PATCH /me — Editar perfil propio",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
-          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"phone\": \"3001112233\"\n}" }, "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] } }
-        },
-        {
-          "name": "GET / — Listar usuarios (Admin)",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "if (json.length > 0) pm.collectionVariables.set('userId', json[0].id);"], "type": "text/javascript" } }],
-          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] } }
-        },
-        {
-          "name": "GET /:id — Ver usuario (Admin)",
-          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] } }
-        },
-        {
-          "name": "PATCH /:id — Editar usuario (Admin)",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
-          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"firstName\": \"Editado\",\n  \"role\": \"CLIENTE\"\n}" }, "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] } }
-        },
-        {
-          "name": "DELETE /:id — Soft delete (Admin)",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 204', function () { pm.response.to.have.status(204); });"], "type": "text/javascript" } }],
-          "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] } }
-        }
+        { "name": "GET /me — Perfil propio", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] } } },
+        { "name": "PATCH /me — Editar perfil propio", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"phone\": \"3001112233\"\n}" }, "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] } } },
+        { "name": "GET / — Listar usuarios (Admin)", "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "if (json.length > 0) pm.collectionVariables.set('userId', json[0].id);"], "type": "text/javascript" } }], "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] } } },
+        { "name": "POST / — Crear usuario (Admin)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"nuevo@test.com\",\n  \"firstName\": \"Nuevo\",\n  \"lastName\": \"Usuario\",\n  \"password\": \"password123\",\n  \"phone\": \"3009998888\",\n  \"role\": \"CLIENTE\"\n}" }, "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] } } },
+        { "name": "GET /:id — Ver usuario (Admin)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] } } },
+        { "name": "PATCH /:id — Editar usuario (Admin)", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"firstName\": \"Editado\",\n  \"role\": \"CLIENTE\"\n}" }, "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] } } },
+        { "name": "DELETE /:id — Soft delete (Admin)", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] } } }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        { "name": "GET / — Listar activas (Público)", "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }], "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/categories", "host": ["{{baseUrl}}"], "path": ["categories"] } } },
+        { "name": "GET /tree — Árbol (padres + hijos)", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/categories/tree", "host": ["{{baseUrl}}"], "path": ["categories", "tree"] } } },
+        { "name": "GET /:slug — Por slug", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/categories/masajes", "host": ["{{baseUrl}}"], "path": ["categories", "masajes"] } } },
+        { "name": "POST / — Crear (Admin)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Nueva Categoría\",\n  \"slug\": \"nueva-categoria\",\n  \"description\": \"Descripción opcional\"\n}" }, "url": { "raw": "{{baseUrl}}/categories", "host": ["{{baseUrl}}"], "path": ["categories"] } } },
+        { "name": "PATCH /:id — Actualizar (Admin)", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Categoría Actualizada\"\n}" }, "url": { "raw": "{{baseUrl}}/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["categories", "{{categoryId}}"] } } },
+        { "name": "DELETE /:id — Soft delete (Admin)", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["categories", "{{categoryId}}"] } } }
       ]
     },
     {
       "name": "Services",
       "item": [
-        {
-          "name": "GET /public — Listar servicios activos (Público)",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "if (json.length > 0) pm.collectionVariables.set('serviceId', json[0].id);"], "type": "text/javascript" } }],
-          "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/services/public", "host": ["{{baseUrl}}"], "path": ["services", "public"] } }
-        },
-        {
-          "name": "GET / — Listar todos (Admin/Empleado)",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "if (json.length > 0) pm.collectionVariables.set('serviceId', json[0].id);"], "type": "text/javascript" } }],
-          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/services", "host": ["{{baseUrl}}"], "path": ["services"] } }
-        },
-        {
-          "name": "GET /:id — Detalle servicio",
-          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/services/{{serviceId}}", "host": ["{{baseUrl}}"], "path": ["services", "{{serviceId}}"] } }
-        },
-        {
-          "name": "POST / — Crear servicio (Admin)",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', function () { pm.response.to.have.status(201); });", "var json = pm.response.json();", "pm.collectionVariables.set('serviceId', json.id);"], "type": "text/javascript" } }],
-          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Facial Premium\",\n  \"description\": \"Limpieza profunda con ácido hialurónico.\",\n  \"price\": 180000,\n  \"duration\": 75,\n  \"category\": \"Facial\"\n}" }, "url": { "raw": "{{baseUrl}}/services", "host": ["{{baseUrl}}"], "path": ["services"] } }
-        },
-        {
-          "name": "PATCH /:id — Actualizar servicio (Admin)",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
-          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"price\": 200000,\n  \"category\": \"Facial Premium\"\n}" }, "url": { "raw": "{{baseUrl}}/services/{{serviceId}}", "host": ["{{baseUrl}}"], "path": ["services", "{{serviceId}}"] } }
-        },
-        {
-          "name": "DELETE /:id — Desactivar (Admin)",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 204', function () { pm.response.to.have.status(204); });"], "type": "text/javascript" } }],
-          "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/services/{{serviceId}}", "host": ["{{baseUrl}}"], "path": ["services", "{{serviceId}}"] } }
-        }
+        { "name": "GET /public — Listar activos (Público)", "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "if (json.length > 0) pm.collectionVariables.set('serviceId', json[0].id);"], "type": "text/javascript" } }], "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/services/public", "host": ["{{baseUrl}}"], "path": ["services", "public"] } } },
+        { "name": "GET / — Listar todos (Admin)", "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "if (json.length > 0) pm.collectionVariables.set('serviceId', json[0].id);"], "type": "text/javascript" } }], "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/services", "host": ["{{baseUrl}}"], "path": ["services"] } } },
+        { "name": "GET /:id — Detalle", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/services/{{serviceId}}", "host": ["{{baseUrl}}"], "path": ["services", "{{serviceId}}"] } } },
+        { "name": "POST / — Crear (Admin)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Nuevo Servicio\",\n  \"price\": 100000,\n  \"duration\": 60,\n  \"categoryId\": \"{{categoryId}}\"\n}" }, "url": { "raw": "{{baseUrl}}/services", "host": ["{{baseUrl}}"], "path": ["services"] } } },
+        { "name": "PATCH /:id — Actualizar (Admin)", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"price\": 120000,\n  \"isActive\": true\n}" }, "url": { "raw": "{{baseUrl}}/services/{{serviceId}}", "host": ["{{baseUrl}}"], "path": ["services", "{{serviceId}}"] } } },
+        { "name": "DELETE /:id — Soft delete (Admin)", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/services/{{serviceId}}", "host": ["{{baseUrl}}"], "path": ["services", "{{serviceId}}"] } } }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        { "name": "GET / — Listar activos (Público)", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/products", "host": ["{{baseUrl}}"], "path": ["products"] } } },
+        { "name": "GET /?featured=true — Destacados", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/products?featured=true&limit=4", "host": ["{{baseUrl}}"], "path": ["products"], "query": [{ "key": "featured", "value": "true" }, { "key": "limit", "value": "4" }] } } },
+        { "name": "GET /admin/all — Todos (Admin)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/products/admin/all", "host": ["{{baseUrl}}"], "path": ["products", "admin", "all"] } } },
+        { "name": "GET /:slug — Detalle por slug", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/products/crema-hidratante-facial", "host": ["{{baseUrl}}"], "path": ["products", "crema-hidratante-facial"] } } },
+        { "name": "POST / — Crear (Admin)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Nuevo Producto\",\n  \"slug\": \"nuevo-producto\",\n  \"price\": 50000,\n  \"stock\": 10,\n  \"categoryId\": \"{{categoryId}}\"\n}" }, "url": { "raw": "{{baseUrl}}/products", "host": ["{{baseUrl}}"], "path": ["products"] } } },
+        { "name": "PATCH /:id — Actualizar (Admin)", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"price\": 55000,\n  \"isActive\": true\n}" }, "url": { "raw": "{{baseUrl}}/products/{{productId}}", "host": ["{{baseUrl}}"], "path": ["products", "{{productId}}"] } } },
+        { "name": "DELETE /:id — Soft delete (Admin)", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/products/{{productId}}", "host": ["{{baseUrl}}"], "path": ["products", "{{productId}}"] } } }
+      ]
+    },
+    {
+      "name": "Cart",
+      "item": [
+        { "name": "GET / — Obtener carrito", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/cart", "host": ["{{baseUrl}}"], "path": ["cart"] } } },
+        { "name": "POST /items — Agregar item", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 2\n}" }, "url": { "raw": "{{baseUrl}}/cart/items", "host": ["{{baseUrl}}"], "path": ["cart", "items"] } } },
+        { "name": "PATCH /items/:id — Actualizar cantidad", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"quantity\": 3\n}" }, "url": { "raw": "{{baseUrl}}/cart/items/{{productId}}", "host": ["{{baseUrl}}"], "path": ["cart", "items", "{{productId}}"] } } },
+        { "name": "DELETE /items/:id — Eliminar item", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/cart/items/{{productId}}", "host": ["{{baseUrl}}"], "path": ["cart", "items", "{{productId}}"] } } },
+        { "name": "DELETE / — Vaciar carrito", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/cart", "host": ["{{baseUrl}}"], "path": ["cart"] } } },
+        { "name": "POST /merge — Merge carrito guest", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"items\": [{\"productId\": \"{{productId}}\", \"quantity\": 1}]\n}" }, "url": { "raw": "{{baseUrl}}/cart/merge", "host": ["{{baseUrl}}"], "path": ["cart", "merge"] } } }
+      ]
+    },
+    {
+      "name": "Coupons",
+      "item": [
+        { "name": "GET / — Listar cupones (Admin)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/coupons", "host": ["{{baseUrl}}"], "path": ["coupons"] } } },
+        { "name": "POST / — Crear (Admin)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"DESC20\",\n  \"discount\": 0.2,\n  \"expiresAt\": \"2027-12-31T23:59:59.000Z\"\n}" }, "url": { "raw": "{{baseUrl}}/coupons", "host": ["{{baseUrl}}"], "path": ["coupons"] } } },
+        { "name": "POST /validate — Validar cupón", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"DESC20\"\n}" }, "url": { "raw": "{{baseUrl}}/coupons/validate", "host": ["{{baseUrl}}"], "path": ["coupons", "validate"] } } }
       ]
     },
     {
       "name": "Bookings",
       "item": [
-        {
-          "name": "GET /slots — Disponibilidad (Público)",
-          "description": "Requiere haber creado un servicio y tener su {{serviceId}}. Usa la fecha actual o una futura.",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "pm.test('Retorna array de slots', function () { pm.expect(pm.response.json()).to.be.an('array'); });"], "type": "text/javascript" } }],
-          "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/bookings/slots?serviceId={{serviceId}}&date=2026-08-15", "host": ["{{baseUrl}}"], "path": ["bookings", "slots"], "query": [{ "key": "serviceId", "value": "{{serviceId}}" }, { "key": "date", "value": "2026-08-15" }] } }
-        },
-        {
-          "name": "POST / — Crear cita (Cliente)",
-          "description": "Crea una cita con status PENDIENTE_PAGO. Usa un slot obtenido de GET /slots.",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', function () { pm.response.to.have.status(201); });", "var json = pm.response.json();", "pm.collectionVariables.set('bookingId', json.id);"], "type": "text/javascript" } }],
-          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{clientAccessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"serviceId\": \"{{serviceId}}\",\n  \"startTime\": \"2026-08-15T10:00:00.000Z\"\n}" }, "url": { "raw": "{{baseUrl}}/bookings", "host": ["{{baseUrl}}"], "path": ["bookings"] } }
-        },
-        {
-          "name": "GET / — Listar citas (Auth)",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
-          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings", "host": ["{{baseUrl}}"], "path": ["bookings"] } }
-        },
-        {
-          "name": "GET /:id — Detalle cita",
-          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings/{{bookingId}}", "host": ["{{baseUrl}}"], "path": ["bookings", "{{bookingId}}"] } }
-        },
-        {
-          "name": "PATCH /:id/confirm — Confirmar (Admin/Empleado)",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "pm.test('Status cambia a CONFIRMADA', function () { pm.expect(pm.response.json().status).to.eql('CONFIRMADA'); });"], "type": "text/javascript" } }],
-          "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings/{{bookingId}}/confirm", "host": ["{{baseUrl}}"], "path": ["bookings", "{{bookingId}}", "confirm"] } }
-        },
-        {
-          "name": "PATCH /:id/complete — Completar (Admin/Empleado)",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
-          "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings/{{bookingId}}/complete", "host": ["{{baseUrl}}"], "path": ["bookings", "{{bookingId}}", "complete"] } }
-        },
-        {
-          "name": "PATCH /:id/cancel — Cancelar (Dueño/Admin)",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });"], "type": "text/javascript" } }],
-          "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings/{{bookingId}}/cancel", "host": ["{{baseUrl}}"], "path": ["bookings", "{{bookingId}}", "cancel"] } }
-        }
+        { "name": "GET / — Listar citas", "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 200', function () { pm.response.to.have.status(200); });", "var json = pm.response.json();", "if (json.length > 0) pm.collectionVariables.set('bookingId', json[0].id);"], "type": "text/javascript" } }], "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings", "host": ["{{baseUrl}}"], "path": ["bookings"] } } },
+        { "name": "GET /slots — Disponibilidad", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/bookings/slots?serviceId={{serviceId}}&date=2026-08-20", "host": ["{{baseUrl}}"], "path": ["bookings", "slots"], "query": [{ "key": "serviceId", "value": "{{serviceId}}" }, { "key": "date", "value": "2026-08-20" }] } } },
+        { "name": "GET /:id — Detalle cita", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings/{{bookingId}}", "host": ["{{baseUrl}}"], "path": ["bookings", "{{bookingId}}"] } } },
+        { "name": "GET /:id/balance — Balance de pagos", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings/{{bookingId}}/balance", "host": ["{{baseUrl}}"], "path": ["bookings", "{{bookingId}}", "balance"] } } },
+        { "name": "POST / — Crear cita", "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', function () { pm.response.to.have.status(201); });", "var json = pm.response.json();", "pm.collectionVariables.set('bookingId', json.id);"], "type": "text/javascript" } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{clientAccessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"serviceId\": \"{{serviceId}}\",\n  \"startTime\": \"2026-08-20T10:00:00.000Z\"\n}" }, "url": { "raw": "{{baseUrl}}/bookings", "host": ["{{baseUrl}}"], "path": ["bookings"] } } },
+        { "name": "PATCH /:id/confirm — Confirmar", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings/{{bookingId}}/confirm", "host": ["{{baseUrl}}"], "path": ["bookings", "{{bookingId}}", "confirm"] } } },
+        { "name": "PATCH /:id/complete — Completar", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings/{{bookingId}}/complete", "host": ["{{baseUrl}}"], "path": ["bookings", "{{bookingId}}", "complete"] } } },
+        { "name": "PATCH /:id/cancel — Cancelar", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/bookings/{{bookingId}}/cancel", "host": ["{{baseUrl}}"], "path": ["bookings", "{{bookingId}}", "cancel"] } } }
       ]
     },
     {
-      "name": "Health",
+      "name": "Payments",
       "item": [
-        {
-          "name": "Swagger Docs",
-          "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/docs", "host": ["{{baseUrl}}"], "path": ["docs"] } }
-        }
+        { "name": "POST /init — Iniciar pago ABONO", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{clientAccessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"bookingId\": \"{{bookingId}}\",\n  \"type\": \"ABONO\"\n}" }, "url": { "raw": "{{baseUrl}}/payments/init", "host": ["{{baseUrl}}"], "path": ["payments", "init"] } } },
+        { "name": "POST /init — Iniciar pago SALDO", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{clientAccessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"bookingId\": \"{{bookingId}}\",\n  \"type\": \"SALDO\"\n}" }, "url": { "raw": "{{baseUrl}}/payments/init", "host": ["{{baseUrl}}"], "path": ["payments", "init"] } } },
+        { "name": "POST /init-cart — Iniciar pago carrito", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{clientAccessToken}}" }], "body": { "mode": "raw", "raw": "{\n  \"items\": [\n    { \"productId\": \"{{productId}}\", \"name\": \"Crema\", \"price\": 85000, \"quantity\": 1 }\n  ],\n  \"couponCode\": \"DESC20\"\n}" }, "url": { "raw": "{{baseUrl}}/payments/init-cart", "host": ["{{baseUrl}}"], "path": ["payments", "init-cart"] } } },
+        { "name": "GET /:id/status — Estado de pago", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/payments/{{bookingId}}/status", "host": ["{{baseUrl}}"], "path": ["payments", "{{bookingId}}", "status"] } } }
+      ]
+    },
+    {
+      "name": "Health & Upload",
+      "item": [
+        { "name": "GET /health — Health check", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] } } },
+        { "name": "POST /upload — Subir imagen (Admin)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "" }, { "key": "folder", "value": "products", "type": "text" }] }, "url": { "raw": "{{baseUrl}}/upload", "host": ["{{baseUrl}}"], "path": ["upload"] } } }
+      ]
+    },
+    {
+      "name": "Swagger",
+      "item": [
+        { "name": "Swagger Docs", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/docs", "host": ["{{baseUrl}}"], "path": ["docs"] } } }
       ]
     }
   ],
@@ -162,6 +124,8 @@
     { "key": "clientRefreshToken", "value": "", "type": "string" },
     { "key": "userId", "value": "", "type": "string" },
     { "key": "serviceId", "value": "", "type": "string" },
-    { "key": "bookingId", "value": "", "type": "string" }
+    { "key": "bookingId", "value": "", "type": "string" },
+    { "key": "productId", "value": "", "type": "string" },
+    { "key": "categoryId", "value": "", "type": "string" }
   ]
 }
