@@ -253,7 +253,7 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (255 tests, 37 suites) — no requiere BD
+npm test              # Unit tests (264 tests, 39 suites) — no requiere BD
 npm run test:cov      # Cobertura
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 ```
@@ -284,7 +284,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (37 suites, 255 tests)
+### Inventario de suites (39 suites, 264 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
