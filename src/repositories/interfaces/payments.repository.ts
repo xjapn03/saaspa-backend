@@ -10,9 +10,18 @@ export interface IPaymentSafe {
   status: string;
   wompiPaymentId: string | null;
   wompiReference: string | null;
+  metadata?: any;
   paidAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface PaymentTransactionFilters {
+  search?: string;
+  type?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export abstract class IPaymentsRepository {
@@ -22,4 +31,5 @@ export abstract class IPaymentsRepository {
   abstract findByWompiId(wompiPaymentId: string): Promise<IPaymentSafe>;
   abstract findByWompiReference(wompiReference: string): Promise<IPaymentSafe | null>;
   abstract update(id: string, data: Prisma.PaymentUpdateInput): Promise<IPaymentSafe>;
+  abstract findAllTransactions(filters?: PaymentTransactionFilters): Promise<IPaymentSafe[]>;
 }

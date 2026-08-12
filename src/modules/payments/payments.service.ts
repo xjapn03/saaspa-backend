@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
-import { IPaymentsRepository } from '../../repositories/interfaces/payments.repository';
+import { IPaymentsRepository, PaymentTransactionFilters } from '../../repositories/interfaces/payments.repository';
 import { IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
 import { ICouponsRepository } from '../../repositories/interfaces/coupons.repository';
 import { IProductsRepository } from '../../repositories/interfaces/products.repository';
@@ -290,5 +290,9 @@ export class PaymentsService {
     } as any);
 
     return { publicKey, reference, amountInCents, currency, signature };
+  }
+
+  async findAllTransactions(filters?: PaymentTransactionFilters) {
+    return this.paymentsRepo.findAllTransactions(filters);
   }
 }
