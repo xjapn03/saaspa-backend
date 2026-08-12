@@ -33,6 +33,14 @@ enum PaymentStatus {
   REEMBOLSADO
 }
 
+enum OrderStatus {
+  PENDIENTE
+  CONFIRMADO
+  ENVIADO
+  ENTREGADO
+  CANCELADO
+}
+
 
 model User {
   id           String    @id @default(uuid())
@@ -53,6 +61,7 @@ model User {
   payments     Payment[]
   coupons      Coupon[]
   cartItems    CartItem[]
+  orders       Order[]
 
   @@map("users")
 }
@@ -115,6 +124,7 @@ model Product {
 
   category        Category? @relation(fields: [categoryId], references: [id])
   cartItems       CartItem[]
+  orderItems      OrderItem[]
 
   @@map("products")
 }
@@ -154,6 +164,7 @@ model Payment {
 
   booking         Booking?      @relation(fields: [bookingId], references: [id])
   user            User          @relation(fields: [userId], references: [id])
+  order           Order?
 
   @@map("payments")
 }
@@ -205,4 +216,42 @@ model CartItem {
 
   @@unique([userId, productId])
   @@map("cart_items")
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  userId          String
+  total           Decimal     @db.Decimal(10, 2)
+  status          OrderStatus @default(PENDIENTE)
+  shippingName    String
+  shippingEmail   String
+  shippingPhone   String
+  shippingAddress String
+  shippingCity    String
+  shippingNotes   String?
+  paymentId       String?    @unique
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user            User        @relation(fields: [userId], references: [id])
+  items           OrderItem[]
+  payment         Payment?    @relation(fields: [paymentId], references: [id])
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  productId String
+  name      String
+  price     Decimal  @db.Decimal(10, 2)
+  quantity  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order     Order    @relation(fields: [orderId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
 }

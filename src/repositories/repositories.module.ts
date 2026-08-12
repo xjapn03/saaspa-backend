@@ -15,6 +15,8 @@ import { ICouponsRepository } from './interfaces/coupons.repository';
 import { CouponsRepository } from './coupons.repository';
 import { ICartRepository } from './interfaces/cart.repository';
 import { CartRepository } from './cart.repository';
+import { IOrdersRepository } from './interfaces/orders.repository';
+import { OrdersRepository } from './orders.repository';
 
 @Global()
 @Module({
@@ -27,7 +29,8 @@ import { CartRepository } from './cart.repository';
     { provide: ICategoriesRepository, useClass: CategoriesRepository },
     { provide: IProductsRepository, useClass: ProductsRepository },
     { provide: ICartRepository, useClass: CartRepository },
+    { provide: IOrdersRepository, useClass: OrdersRepository },
   ],
-  exports: [IUsersRepository, IServicesRepository, IBookingsRepository, IPaymentsRepository, ICouponsRepository, ICategoriesRepository, IProductsRepository, ICartRepository],
+  exports: [IUsersRepository, IServicesRepository, IBookingsRepository, IPaymentsRepository, ICouponsRepository, ICategoriesRepository, IProductsRepository, ICartRepository, IOrdersRepository],
 })
 export class RepositoriesModule {}

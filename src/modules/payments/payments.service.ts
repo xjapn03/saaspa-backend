@@ -5,6 +5,7 @@ import { IPaymentsRepository } from '../../repositories/interfaces/payments.repo
 import { IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
 import { ICouponsRepository } from '../../repositories/interfaces/coupons.repository';
 import { IProductsRepository } from '../../repositories/interfaces/products.repository';
+import { IOrdersRepository } from '../../repositories/interfaces/orders.repository';
 import { MetaCapiService } from '../meta/meta-capi.service';
 import { EmailService } from '../../common/email/email.service';
 
@@ -17,6 +18,7 @@ export class PaymentsService {
     private bookingsRepo: IBookingsRepository,
     private couponsRepo: ICouponsRepository,
     private productsRepo: IProductsRepository,
+    private ordersRepo: IOrdersRepository,
     private config: ConfigService,
     private metaCapi: MetaCapiService,
     private emailService: EmailService,
@@ -185,6 +187,26 @@ export class PaymentsService {
           } catch {}
         }
         const user = (payment as any).user;
+        try {
+          await this.ordersRepo.create({
+            userId: payment.userId,
+            total: Number(payment.amount || 0),
+            status: 'CONFIRMADO' as any,
+            shippingName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Cliente' : 'Cliente',
+            shippingEmail: user?.email || '',
+            shippingPhone: '',
+            shippingAddress: metadata.shippingAddress || 'Pendiente',
+            shippingCity: metadata.shippingCity || 'Pendiente',
+            shippingNotes: metadata.shippingNotes || null,
+            paymentId: payment.id,
+            items: metadata.items.map((i: any) => ({
+              productId: i.productId,
+              name: i.name,
+              price: i.price,
+              quantity: i.quantity,
+            })),
+          } as any);
+        } catch { this.logger.warn('No se pudo crear la orden automáticamente'); }
         if (user?.email) {
           this.emailService.sendPaymentReceipt({
             clientName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Cliente',

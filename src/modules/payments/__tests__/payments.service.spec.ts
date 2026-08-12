@@ -6,6 +6,7 @@ import { IPaymentsRepository } from '../../../repositories/interfaces/payments.r
 import { IBookingsRepository } from '../../../repositories/interfaces/bookings.repository';
 import { ICouponsRepository } from '../../../repositories/interfaces/coupons.repository';
 import { IProductsRepository } from '../../../repositories/interfaces/products.repository';
+import { IOrdersRepository } from '../../../repositories/interfaces/orders.repository';
 import { MetaCapiService } from '../../meta/meta-capi.service';
 import { EmailService } from '../../../common/email/email.service';
 
@@ -15,6 +16,7 @@ describe('PaymentsService', () => {
   let bookingsRepo: DeepMockProxy<IBookingsRepository>;
   let couponsRepo: DeepMockProxy<ICouponsRepository>;
   let productsRepo: DeepMockProxy<IProductsRepository>;
+  let ordersRepo: DeepMockProxy<IOrdersRepository>;
   let metaCapi: DeepMockProxy<MetaCapiService>;
   let emailService: DeepMockProxy<EmailService>;
 
@@ -56,6 +58,7 @@ describe('PaymentsService', () => {
     bookingsRepo = mockDeep<IBookingsRepository>();
     couponsRepo = mockDeep<ICouponsRepository>();
     productsRepo = mockDeep<IProductsRepository>();
+    ordersRepo = mockDeep<IOrdersRepository>();
     metaCapi = mockDeep<MetaCapiService>();
     emailService = mockDeep<EmailService>();
 
@@ -66,6 +69,7 @@ describe('PaymentsService', () => {
         { provide: IBookingsRepository, useValue: bookingsRepo },
         { provide: ICouponsRepository, useValue: couponsRepo },
         { provide: IProductsRepository, useValue: productsRepo },
+        { provide: IOrdersRepository, useValue: ordersRepo },
         { provide: MetaCapiService, useValue: metaCapi },
         { provide: EmailService, useValue: emailService },
         {

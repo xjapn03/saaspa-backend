@@ -22,6 +22,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { CartModule } from './modules/cart/cart.module';
 import { HealthModule } from './modules/health/health.module';
 import { UploadModule } from './modules/upload/upload.module';
+import { OrdersModule } from './modules/orders/orders.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -49,6 +50,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
     CartModule,
     HealthModule,
     UploadModule,
+    OrdersModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
