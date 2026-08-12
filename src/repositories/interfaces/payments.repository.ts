@@ -20,5 +20,6 @@ export abstract class IPaymentsRepository {
   abstract findByBookingId(bookingId: string): Promise<IPaymentSafe[]>;
   abstract findApprovedByBookingId(bookingId: string): Promise<IPaymentSafe[]>;
   abstract findByWompiId(wompiPaymentId: string): Promise<IPaymentSafe>;
+  abstract findByWompiReference(wompiReference: string): Promise<IPaymentSafe | null>;
   abstract update(id: string, data: Prisma.PaymentUpdateInput): Promise<IPaymentSafe>;
 }

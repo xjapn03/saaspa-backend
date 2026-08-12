@@ -65,6 +65,14 @@ export class PaymentsRepository extends IPaymentsRepository {
     return toSafe(payment);
   }
 
+  async findByWompiReference(wompiReference: string): Promise<IPaymentSafe | null> {
+    const payment = await this.prisma.payment.findFirst({
+      where: { wompiReference },
+      select: paymentSelectWithUser,
+    });
+    return payment ? toSafe(payment) : null;
+  }
+
   async update(id: string, data: Prisma.PaymentUpdateInput): Promise<IPaymentSafe> {
     await this.prisma.payment.update({
       where: { id },

@@ -115,11 +115,15 @@ export class PaymentsService {
 
     let payment: any;
     try {
-      payment = await this.paymentsRepo.findByWompiId(data.id);
-    } catch {
-      this.logger.warn(`Pago no encontrado para wompiPaymentId: ${data.id}`);
-      return { received: true };
-    }
+      payment = await this.paymentsRepo.findByWompiReference(data.reference);
+      if (!payment) {
+        try { payment = await this.paymentsRepo.findByWompiId(data.id); } catch {}
+      }
+      if (!payment) {
+        this.logger.warn(`Pago no encontrado para ref: ${data.reference} / id: ${data.id}`);
+        return { received: true };
+      }
+    } catch { return { received: true }; }
 
     if (status === 'APPROVED') {
       await this.paymentsRepo.update(payment.id, {
