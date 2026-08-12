@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { IOrdersRepository, IOrderSafe } from './interfaces/orders.repository';
+import { IOrdersRepository, IOrderSafe, OrderFilters } from './interfaces/orders.repository';
 
 const orderSelect = {
   id: true, userId: true, total: true, status: true,
@@ -18,9 +18,32 @@ const orderSelect = {
 export class OrdersRepository extends IOrdersRepository {
   constructor(private prisma: PrismaService) { super(); }
 
-  async findAll(): Promise<IOrderSafe[]> {
+  async findAll(filters?: OrderFilters): Promise<IOrderSafe[]> {
+    const where: any = {};
+
+    if (filters?.search) {
+      const q = filters.search;
+      where.OR = [
+        { shippingName: { contains: q, mode: 'insensitive' } },
+        { shippingEmail: { contains: q, mode: 'insensitive' } },
+        { user: { firstName: { contains: q, mode: 'insensitive' } } },
+        { user: { lastName: { contains: q, mode: 'insensitive' } } },
+        { user: { email: { contains: q, mode: 'insensitive' } } },
+      ];
+    }
+
+    if (filters?.status) {
+      where.status = filters.status;
+    }
+
+    if (filters?.dateFrom || filters?.dateTo) {
+      where.createdAt = {};
+      if (filters.dateFrom) where.createdAt.gte = new Date(filters.dateFrom);
+      if (filters.dateTo) where.createdAt.lte = new Date(filters.dateTo + 'T23:59:59.999Z');
+    }
+
     const orders = await this.prisma.order.findMany({
-      select: orderSelect, orderBy: { createdAt: 'desc' },
+      where, select: orderSelect, orderBy: { createdAt: 'desc' },
     });
     return orders.map(o => ({ ...o, total: Number(o.total), items: o.items.map(i => ({ ...i, price: Number(i.price) })) })) as any;
   }

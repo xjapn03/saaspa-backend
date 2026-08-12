@@ -1,5 +1,5 @@
-import { Controller, Get, Patch, Param, Body } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Patch, Param, Body, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { OrdersService } from './orders.service';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -14,7 +14,18 @@ export class OrdersController {
   @Get()
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Listar todos los pedidos (Admin)' })
-  findAll() { return this.ordersService.findAll(); }
+  @ApiQuery({ name: 'search', required: false, description: 'Buscar por nombre o email del cliente' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filtrar por estado (PENDIENTE, CONFIRMADO, ENVIADO, ENTREGADO, CANCELADO)' })
+  @ApiQuery({ name: 'dateFrom', required: false, description: 'Fecha desde (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'dateTo', required: false, description: 'Fecha hasta (YYYY-MM-DD)' })
+  findAll(
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.ordersService.findAll({ search, status, dateFrom, dateTo });
+  }
 
   @Get('my')
   @ApiOperation({ summary: 'Mis pedidos (Cliente autenticado)' })
