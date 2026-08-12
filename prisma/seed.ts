@@ -34,6 +34,9 @@ async function main() {
   const catMap: Record<string, string> = {};
   categories.forEach((c) => { catMap[c.slug] = c.id; });
 
+  const slugify = (s: string) =>
+    s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
   const services = [
     { name: 'Masaje Relajante', description: 'Masaje corporal completo de 60 minutos con aceites esenciales.', price: 120000, duration: 60, categoryId: catMap.masajes },
     { name: 'Masaje Deportivo', description: 'Masaje profundo para aliviar tensión muscular y mejorar la recuperación.', price: 140000, duration: 75, categoryId: catMap.masajes },
@@ -48,8 +51,8 @@ async function main() {
   for (const s of services) {
     await prisma.service.upsert({
       where: { id: 'seed-' + s.name.toLowerCase().replace(/\s+/g, '-') },
-      update: { price: s.price, categoryId: s.categoryId },
-      create: { id: 'seed-' + s.name.toLowerCase().replace(/\s+/g, '-'), ...s },
+      update: { price: s.price, categoryId: s.categoryId, slug: slugify(s.name) },
+      create: { id: 'seed-' + s.name.toLowerCase().replace(/\s+/g, '-'), ...s, slug: slugify(s.name) },
     });
   }
 

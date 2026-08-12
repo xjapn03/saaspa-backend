@@ -10,6 +10,7 @@ describe('ServicesService', () => {
   const mockService = {
     id: 'svc-1',
     name: 'Facial Premium',
+    slug: 'facial-premium',
     description: 'Test desc',
     price: 180000,
     duration: 75,
@@ -64,7 +65,23 @@ describe('ServicesService', () => {
       repo.create.mockResolvedValue({ ...mockService, ...data } as any);
       const result = await service.create(data);
       expect(result.name).toBe('New');
-      expect(repo.create).toHaveBeenCalledWith(data);
+      expect(repo.create).toHaveBeenCalledWith({ name: 'New', price: 50000, duration: 30, slug: 'new' });
+    });
+
+    it('should generate a slug from name when not provided', async () => {
+      repo.create.mockResolvedValue(mockService as any);
+      await service.create({ name: 'Depilación Axilas + Brazos', price: 45000, duration: 25 });
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ slug: 'depilacion-axilas-brazos' }),
+      );
+    });
+
+    it('should keep the provided slug', async () => {
+      repo.create.mockResolvedValue(mockService as any);
+      await service.create({ name: 'New', slug: 'custom-slug', price: 50000, duration: 30 });
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ slug: 'custom-slug' }),
+      );
     });
   });
 
@@ -74,14 +91,14 @@ describe('ServicesService', () => {
       repo.update.mockResolvedValue({ ...mockService, ...data });
       const result = await service.update('svc-1', data);
       expect(result.name).toBe('Updated');
-      expect(repo.update).toHaveBeenCalledWith('svc-1', data);
+      expect(repo.update).toHaveBeenCalledWith('svc-1', { name: 'Updated', slug: 'updated' });
     });
 
     it('should normalize empty categoryId to null', async () => {
-      const data = { name: 'Updated', categoryId: '' };
+      const data = { name: 'Updated', categoryId: '', slug: 'updated' };
       repo.update.mockResolvedValue({ ...mockService, ...data } as any);
       await service.update('svc-1', data as any);
-      expect(repo.update).toHaveBeenCalledWith('svc-1', { name: 'Updated', categoryId: null });
+      expect(repo.update).toHaveBeenCalledWith('svc-1', { name: 'Updated', categoryId: null, slug: 'updated' });
     });
   });
 

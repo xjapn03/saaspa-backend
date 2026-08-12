@@ -1,5 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { IServicesRepository, ServiceFilters } from '../../repositories/interfaces/services.repository';
+import { CreateServiceDto } from './dto/create-service.dto';
+import { UpdateServiceDto } from './dto/update-service.dto';
+
+function slugify(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
 @Injectable()
 export class ServicesService {
@@ -17,15 +29,21 @@ export class ServicesService {
     return this.servicesRepo.findById(id);
   }
 
-  async create(data: Parameters<IServicesRepository['create']>[0]) {
+  async findBySlug(slug: string) {
+    return this.servicesRepo.findBySlug(slug);
+  }
+
+  async create(data: CreateServiceDto) {
     const normalized: any = { ...data };
     if (normalized.categoryId === '') normalized.categoryId = null;
+    if (!normalized.slug) normalized.slug = slugify(normalized.name);
     return this.servicesRepo.create(normalized);
   }
 
-  async update(id: string, data: Parameters<IServicesRepository['update']>[1]) {
+  async update(id: string, data: UpdateServiceDto) {
     const normalized: any = { ...data };
     if (normalized.categoryId === '') normalized.categoryId = null;
+    if (normalized.name && !normalized.slug) normalized.slug = slugify(normalized.name);
     return this.servicesRepo.update(id, normalized);
   }
 

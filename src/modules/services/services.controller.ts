@@ -34,6 +34,13 @@ export class ServicesController {
     return this.servicesService.findActive({ page: page ? parseInt(page) : undefined, limit: limit ? parseInt(limit) : undefined });
   }
 
+  @Get('public/:slug')
+  @Public()
+  @ApiOperation({ summary: 'Obtener servicio activo por slug (público)' })
+  findBySlug(@Param('slug') slug: string) {
+    return this.servicesService.findBySlug(slug);
+  }
+
   @Get(':id')
   @Roles(Role.ADMIN, Role.EMPLEADO)
   @ApiBearerAuth()

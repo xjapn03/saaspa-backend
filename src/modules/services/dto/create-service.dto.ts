@@ -6,7 +6,12 @@ export class CreateServiceDto {
   @IsString()
   name: string;
 
-  @ApiPropertyOptional({ example: 'Limpieza profunda con ácido hialurónico.' })
+  @ApiPropertyOptional({ example: 'facial-hidratante-premium', description: 'Slug único (auto-generado del nombre si no se envía)' })
+  @IsOptional()
+  @IsString()
+  slug?: string;
+
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   description?: string;

@@ -5,7 +5,7 @@ import { IServicesRepository, ServiceFilters } from './interfaces/services.repos
 import { paginated } from '../common/interfaces/paginated-result';
 
 const serviceSelect = {
-  id: true, name: true, description: true, price: true, duration: true,
+  id: true, name: true, slug: true, description: true, price: true, duration: true,
   isActive: true, categoryId: true, imageUrl: true, createdAt: true, updatedAt: true,
   categoryRel: { select: { id: true, name: true, slug: true } },
 } satisfies Prisma.ServiceSelect;
@@ -44,6 +44,12 @@ export class ServicesRepository extends IServicesRepository {
 
   async findById(id: string) {
     const service = await this.prisma.service.findUnique({ where: { id }, select: serviceSelect });
+    if (!service) throw new NotFoundException('Servicio no encontrado');
+    return toSafe(service);
+  }
+
+  async findBySlug(slug: string) {
+    const service = await this.prisma.service.findUnique({ where: { slug }, select: serviceSelect });
     if (!service) throw new NotFoundException('Servicio no encontrado');
     return toSafe(service);
   }
