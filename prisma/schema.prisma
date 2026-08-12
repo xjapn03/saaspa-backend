@@ -79,7 +79,6 @@ model Service {
   price       Decimal  @db.Decimal(10, 2)
   duration    Int
   isActive    Boolean  @default(true)
-  category    String?
   categoryId  String?
   imageUrl    String?
   createdAt   DateTime @default(now())

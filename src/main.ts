@@ -13,18 +13,6 @@ import { ConfigService } from '@nestjs/config';
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
-  if (process.env.NODE_ENV !== 'test') {
-    try {
-      logger.log('Aplicando migraciones pendientes...');
-      execSync('npx prisma migrate deploy', { stdio: 'pipe' });
-      logger.log('Migraciones aplicadas.');
-    } catch {
-      logger.warn(
-        'No se pudieron aplicar migraciones. ¿PostgreSQL está corriendo? La API inicia de todos modos.',
-      );
-    }
-  }
-
   await runSeedIfEnabled(logger);
 
   const app = await NestFactory.create(AppModule);

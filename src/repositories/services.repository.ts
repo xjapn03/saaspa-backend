@@ -6,7 +6,7 @@ import { paginated } from '../common/interfaces/paginated-result';
 
 const serviceSelect = {
   id: true, name: true, description: true, price: true, duration: true,
-  isActive: true, category: true, categoryId: true, imageUrl: true, createdAt: true, updatedAt: true,
+  isActive: true, categoryId: true, imageUrl: true, createdAt: true, updatedAt: true,
   categoryRel: { select: { id: true, name: true, slug: true } },
 } satisfies Prisma.ServiceSelect;
 
@@ -36,7 +36,7 @@ export class ServicesRepository extends IServicesRepository {
 
     const where: Prisma.ServiceWhereInput = { isActive: true };
     const [data, total] = await Promise.all([
-      this.prisma.service.findMany({ where, select: serviceSelect, orderBy: { category: 'asc' }, skip, take: limit }),
+      this.prisma.service.findMany({ where, select: serviceSelect, orderBy: { name: 'asc' }, skip, take: limit }),
       this.prisma.service.count({ where }),
     ]);
     return paginated(data.map(toSafe), total, page, limit);
