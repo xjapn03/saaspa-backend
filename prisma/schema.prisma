@@ -41,6 +41,12 @@ enum OrderStatus {
   CANCELADO
 }
 
+enum PaymentMethod {
+  WOMAPI
+  EFECTIVO
+  TRANSFERENCIA
+}
+
 
 model User {
   id           String    @id @default(uuid())
@@ -157,6 +163,7 @@ model Payment {
   status          PaymentStatus @default(PENDIENTE)
   wompiPaymentId  String?
   wompiReference  String?
+  paymentMethod   PaymentMethod? @default(WOMAPI)
   metadata        Json?
   paidAt          DateTime?
   createdAt       DateTime      @default(now())

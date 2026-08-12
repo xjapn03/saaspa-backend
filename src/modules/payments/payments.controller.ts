@@ -7,6 +7,7 @@ import { Role } from '@prisma/client';
 import { PaymentsService } from './payments.service';
 import { InitPaymentDto } from './dto/init-payment.dto';
 import { InitCartPaymentDto } from './dto/init-cart-payment.dto';
+import { ManualPaymentDto } from './dto/manual-payment.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -48,6 +49,24 @@ export class PaymentsController {
     @Query('dateTo') dateTo?: string,
   ) {
     return this.paymentsService.findAllTransactions({ search, type, status, dateFrom, dateTo });
+  }
+
+  @Get('revenue')
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Ingresos netos del mes (Admin)' })
+  @ApiQuery({ name: 'month', required: true, example: '2026-08', description: 'YYYY-MM' })
+  getRevenue(@Query('month') month: string) {
+    return this.paymentsService.getRevenue(month);
+  }
+
+  @Post('manual')
+  @Roles(Role.ADMIN, Role.EMPLEADO)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Registrar pago manual (efectivo/transferencia) para una cita' })
+  @ApiResponse({ status: 201, description: 'Pago registrado' })
+  manualPayment(@Body() dto: ManualPaymentDto) {
+    return this.paymentsService.manualPayment(dto.bookingId, dto.paymentMethod);
   }
 
   @Get(':bookingId/status')

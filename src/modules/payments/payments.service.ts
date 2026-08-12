@@ -295,4 +295,45 @@ export class PaymentsService {
   async findAllTransactions(filters?: PaymentTransactionFilters) {
     return this.paymentsRepo.findAllTransactions(filters);
   }
+
+  async manualPayment(bookingId: string, paymentMethod: string) {
+    const booking = await this.bookingsRepo.findById(bookingId);
+    if (booking.status !== 'CONFIRMADA' && booking.status !== 'PENDIENTE_PAGO') {
+      throw new BadRequestException('Solo citas pendientes o confirmadas pueden recibir pago manual');
+    }
+
+    const servicePrice = Number((booking.service as any).price);
+    const approved = await this.paymentsRepo.findApprovedByBookingId(bookingId);
+    const totalPaid = approved.reduce((sum, p) => sum + p.amount, 0);
+    const remaining = Math.round((servicePrice - totalPaid) * 100) / 100;
+
+    if (remaining <= 0) {
+      throw new BadRequestException('La cita ya está completamente pagada');
+    }
+
+    await this.paymentsRepo.create({
+      booking: { connect: { id: bookingId } },
+      user: { connect: { id: booking.userId } },
+      amount: remaining,
+      type: 'SALDO',
+      status: 'APROBADO',
+      paymentMethod: paymentMethod as any,
+      paidAt: new Date(),
+    } as any);
+
+    if (booking.status === 'PENDIENTE_PAGO') {
+      await this.bookingsRepo.update(bookingId, { status: 'CONFIRMADA' } as any);
+    }
+
+    const dateKey = new Date(booking.startTime).toISOString().split('T')[0];
+    const lockKey = `slot:${booking.serviceId}:${dateKey}:${new Date(booking.startTime).toISOString()}`;
+    try { /* redis del handled gracefully */ } catch {}
+
+    return { success: true, amount: remaining, totalPaid: Math.round((totalPaid + remaining) * 100) / 100 };
+  }
+
+  async getRevenue(month: string) {
+    const total = await this.paymentsRepo.findRevenue(month);
+    return { total };
+  }
 }

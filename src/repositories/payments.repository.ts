@@ -130,4 +130,20 @@ export class PaymentsRepository extends IPaymentsRepository {
       metadata: p.metadata,
     }));
   }
+
+  async findRevenue(month: string): Promise<number> {
+    const [year, m] = month.split('-').map(Number);
+    const start = new Date(year, m - 1, 1);
+    const end = new Date(year, m, 1);
+
+    const result = await this.prisma.payment.aggregate({
+      where: {
+        status: 'APROBADO',
+        paidAt: { gte: start, lt: end },
+      },
+      _sum: { amount: true },
+    });
+
+    return Number(result._sum.amount || 0);
+  }
 }
