@@ -140,7 +140,7 @@ model Booking {
 
 model Payment {
   id              String        @id @default(uuid())
-  bookingId       String
+  bookingId       String?
   userId          String
   amount          Decimal       @db.Decimal(10, 2)
   type            PaymentType   @default(ABONO)
@@ -152,7 +152,7 @@ model Payment {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  booking         Booking       @relation(fields: [bookingId], references: [id])
+  booking         Booking?      @relation(fields: [bookingId], references: [id])
   user            User          @relation(fields: [userId], references: [id])
 
   @@map("payments")

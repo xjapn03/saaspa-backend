@@ -29,6 +29,11 @@ export class CreateServiceDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  categoryId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   imageUrl?: string;
 
   @ApiPropertyOptional({ example: true })
