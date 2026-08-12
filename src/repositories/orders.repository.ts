@@ -38,6 +38,15 @@ export class OrdersRepository extends IOrdersRepository {
     return { ...order, total: Number(order.total), items: order.items.map(i => ({ ...i, price: Number(i.price) })) } as any;
   }
 
+  async findByPaymentId(paymentId: string): Promise<IOrderSafe | null> {
+    const order = await this.prisma.order.findUnique({
+      where: { paymentId },
+      select: orderSelect,
+    });
+    if (!order) return null;
+    return { ...order, total: Number(order.total), items: order.items.map(i => ({ ...i, price: Number(i.price) })) } as any;
+  }
+
   async create(data: any) {
     const { items, ...orderData } = data;
     return this.prisma.order.create({
