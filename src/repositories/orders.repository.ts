@@ -71,13 +71,12 @@ export class OrdersRepository extends IOrdersRepository {
   }
 
   async create(data: any) {
-    const { items, ...orderData } = data;
+    const { items, userId, paymentId, ...orderData } = data;
     return this.prisma.order.create({
       data: {
         ...orderData,
-        total: data.total,
-        user: { connect: { id: data.userId } },
-        ...(data.paymentId ? { payment: { connect: { id: data.paymentId } } } : {}),
+        user: { connect: { id: userId } },
+        ...(paymentId ? { payment: { connect: { id: paymentId } } } : {}),
         items: { create: items.map((i: any) => ({ productId: i.productId, name: i.name, price: i.price, quantity: i.quantity })) },
       },
     });
