@@ -31,18 +31,18 @@ describe('ServicesController', () => {
 
   describe('findAll', () => {
     it('should return all services', async () => {
-      service.findAll.mockResolvedValue([mockService]);
+      service.findAll.mockResolvedValue({ data: [mockService], total: 1, page: 1, limit: 20, totalPages: 1 });
       const result = await controller.findAll();
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
       expect(service.findAll).toHaveBeenCalled();
     });
   });
 
   describe('findActive', () => {
     it('should return active services for public', async () => {
-      service.findActive.mockResolvedValue([mockService]);
+      service.findActive.mockResolvedValue({ data: [mockService], total: 1, page: 1, limit: 20, totalPages: 1 });
       const result = await controller.findActive();
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
       expect(service.findActive).toHaveBeenCalled();
     });
   });

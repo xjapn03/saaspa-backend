@@ -14,23 +14,29 @@ export class OrdersController {
   @Get()
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Listar todos los pedidos (Admin)' })
-  @ApiQuery({ name: 'search', required: false, description: 'Buscar por nombre o email del cliente' })
-  @ApiQuery({ name: 'status', required: false, description: 'Filtrar por estado (PENDIENTE, CONFIRMADO, ENVIADO, ENTREGADO, CANCELADO)' })
-  @ApiQuery({ name: 'dateFrom', required: false, description: 'Fecha desde (YYYY-MM-DD)' })
-  @ApiQuery({ name: 'dateTo', required: false, description: 'Fecha hasta (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'dateFrom', required: false })
+  @ApiQuery({ name: 'dateTo', required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
   findAll(
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.ordersService.findAll({ search, status, dateFrom, dateTo });
+    return this.ordersService.findAll({ search, status, dateFrom, dateTo, page: page ? parseInt(page) : undefined, limit: limit ? parseInt(limit) : undefined });
   }
 
   @Get('my')
   @ApiOperation({ summary: 'Mis pedidos (Cliente autenticado)' })
-  findMyOrders(@CurrentUser('id') userId: string) {
-    return this.ordersService.findByUser(userId);
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  findMyOrders(@CurrentUser('id') userId: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.ordersService.findByUser(userId, { page: page ? parseInt(page) : undefined, limit: limit ? parseInt(limit) : undefined });
   }
 
   @Get(':id')

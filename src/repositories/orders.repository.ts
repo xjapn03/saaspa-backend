@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { IOrdersRepository, IOrderSafe, OrderFilters } from './interfaces/orders.repository';
+import { paginated, PaginatedResult } from '../common/interfaces/paginated-result';
 
 const orderSelect = {
   id: true, userId: true, total: true, status: true,
@@ -18,7 +19,7 @@ const orderSelect = {
 export class OrdersRepository extends IOrdersRepository {
   constructor(private prisma: PrismaService) { super(); }
 
-  async findAll(filters?: OrderFilters): Promise<IOrderSafe[]> {
+  async findAll(filters?: OrderFilters): Promise<PaginatedResult<IOrderSafe>> {
     const where: any = {};
 
     if (filters?.search) {
@@ -32,9 +33,7 @@ export class OrdersRepository extends IOrdersRepository {
       ];
     }
 
-    if (filters?.status) {
-      where.status = filters.status;
-    }
+    if (filters?.status) where.status = filters.status;
 
     if (filters?.dateFrom || filters?.dateTo) {
       where.createdAt = {};
@@ -42,17 +41,32 @@ export class OrdersRepository extends IOrdersRepository {
       if (filters.dateTo) where.createdAt.lte = new Date(filters.dateTo + 'T23:59:59.999Z');
     }
 
-    const orders = await this.prisma.order.findMany({
-      where, select: orderSelect, orderBy: { createdAt: 'desc' },
-    });
-    return orders.map(o => ({ ...o, total: Number(o.total), items: o.items.map(i => ({ ...i, price: Number(i.price) })) })) as any;
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const mapOrder = (o: any) => ({ ...o, total: Number(o.total), items: o.items.map((i: any) => ({ ...i, price: Number(i.price) })) });
+
+    const [data, total] = await Promise.all([
+      this.prisma.order.findMany({ where, select: orderSelect, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+      this.prisma.order.count({ where }),
+    ]);
+    return paginated(data.map(mapOrder), total, page, limit);
   }
 
-  async findByUser(userId: string): Promise<IOrderSafe[]> {
-    const orders = await this.prisma.order.findMany({
-      where: { userId }, select: orderSelect, orderBy: { createdAt: 'desc' },
-    });
-    return orders.map(o => ({ ...o, total: Number(o.total), items: o.items.map(i => ({ ...i, price: Number(i.price) })) })) as any;
+  async findByUser(userId: string, filters?: { page?: number; limit?: number }): Promise<PaginatedResult<IOrderSafe>> {
+    const where = { userId };
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const mapOrder = (o: any) => ({ ...o, total: Number(o.total), items: o.items.map((i: any) => ({ ...i, price: Number(i.price) })) });
+
+    const [data, total] = await Promise.all([
+      this.prisma.order.findMany({ where, select: orderSelect, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+      this.prisma.order.count({ where }),
+    ]);
+    return paginated(data.map(mapOrder), total, page, limit);
   }
 
   async findById(id: string): Promise<IOrderSafe> {

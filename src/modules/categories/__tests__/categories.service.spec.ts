@@ -35,9 +35,9 @@ describe('CategoriesService', () => {
 
   describe('findAll', () => {
     it('should delegate to repository', async () => {
-      repo.findAll.mockResolvedValue([mockCategory]);
+      repo.findAll.mockResolvedValue({ data: [mockCategory], total: 1, page: 1, limit: 20, totalPages: 1 });
       const result = await service.findAll();
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
       expect(repo.findAll).toHaveBeenCalled();
     });
   });

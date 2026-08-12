@@ -32,9 +32,9 @@ describe('CouponsController', () => {
 
   describe('findAll', () => {
     it('should return list of coupons', async () => {
-      service.findAll.mockResolvedValue([mockCoupon as any]);
+      service.findAll.mockResolvedValue({ data: [mockCoupon as any], total: 1, page: 1, limit: 20, totalPages: 1 });
       const result = await controller.findAll();
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
     });
   });
 

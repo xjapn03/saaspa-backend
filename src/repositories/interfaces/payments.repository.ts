@@ -1,5 +1,6 @@
 import { Payment } from '@prisma/client';
 import { Prisma } from '@prisma/client';
+import { PaginatedResult } from '../../common/interfaces/paginated-result';
 
 export interface IPaymentSafe {
   id: string;
@@ -17,11 +18,8 @@ export interface IPaymentSafe {
 }
 
 export interface PaymentTransactionFilters {
-  search?: string;
-  type?: string;
-  status?: string;
-  dateFrom?: string;
-  dateTo?: string;
+  search?: string; type?: string; status?: string;
+  dateFrom?: string; dateTo?: string; page?: number; limit?: number;
 }
 
 export abstract class IPaymentsRepository {
@@ -31,6 +29,6 @@ export abstract class IPaymentsRepository {
   abstract findByWompiId(wompiPaymentId: string): Promise<IPaymentSafe>;
   abstract findByWompiReference(wompiReference: string): Promise<IPaymentSafe | null>;
   abstract update(id: string, data: Prisma.PaymentUpdateInput): Promise<IPaymentSafe>;
-  abstract findAllTransactions(filters?: PaymentTransactionFilters): Promise<IPaymentSafe[]>;
+  abstract findAllTransactions(filters?: PaymentTransactionFilters): Promise<PaginatedResult<IPaymentSafe>>;
   abstract findRevenue(month: string): Promise<number>;
 }

@@ -18,7 +18,7 @@ describe('ProductsController', () => {
 
   describe('findAll', () => {
     it('should delegate to service with parsed filters', async () => {
-      productsService.findAll.mockResolvedValue([]);
+      productsService.findAll.mockResolvedValue({ data: [], total: 0, page: 1, limit: 20, totalPages: 0 });
       await controller.findAll('cremas', undefined, 'true', 'search', '1', '10');
       expect(productsService.findAll).toHaveBeenCalledWith({
         categorySlug: 'cremas', categoryId: undefined, featured: true,
@@ -27,7 +27,7 @@ describe('ProductsController', () => {
     });
 
     it('should pass undefined page/limit when not provided', async () => {
-      productsService.findAll.mockResolvedValue([]);
+      productsService.findAll.mockResolvedValue({ data: [], total: 0, page: 1, limit: 20, totalPages: 0 });
       await controller.findAll();
       expect(productsService.findAll).toHaveBeenCalledWith(
         expect.objectContaining({ page: undefined, limit: undefined }),

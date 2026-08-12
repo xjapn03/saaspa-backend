@@ -1,8 +1,8 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Param, Body, HttpCode, HttpStatus,
+  Param, Body, HttpCode, HttpStatus, Query,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { ServicesService } from './services.service';
 import { CreateServiceDto } from './dto/create-service.dto';
@@ -19,15 +19,19 @@ export class ServicesController {
   @Roles(Role.ADMIN, Role.EMPLEADO)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Listar todos los servicios (Admin/Empleado)' })
-  findAll() {
-    return this.servicesService.findAll();
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.servicesService.findAll({ page: page ? parseInt(page) : undefined, limit: limit ? parseInt(limit) : undefined });
   }
 
   @Get('public')
   @Public()
   @ApiOperation({ summary: 'Listar servicios activos (público)' })
-  findActive() {
-    return this.servicesService.findActive();
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  findActive(@Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.servicesService.findActive({ page: page ? parseInt(page) : undefined, limit: limit ? parseInt(limit) : undefined });
   }
 
   @Get(':id')

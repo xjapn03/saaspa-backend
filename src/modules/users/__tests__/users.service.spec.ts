@@ -33,13 +33,13 @@ describe('UsersService', () => {
   describe('findAll', () => {
     it('should delegate to repository and return users', async () => {
       // Arrange
-      repo.findAll.mockResolvedValue([mockSafeUser]);
+      repo.findAll.mockResolvedValue({ data: [mockSafeUser], total: 1, page: 1, limit: 20, totalPages: 1 });
 
       // Act
       const result = await service.findAll();
 
       // Assert
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
       expect(repo.findAll).toHaveBeenCalled();
     });
   });

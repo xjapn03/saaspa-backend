@@ -41,14 +41,18 @@ export class PaymentsController {
   @ApiQuery({ name: 'status', required: false, description: 'PENDIENTE, APROBADO, RECHAZADO, REEMBOLSADO' })
   @ApiQuery({ name: 'dateFrom', required: false, description: 'YYYY-MM-DD' })
   @ApiQuery({ name: 'dateTo', required: false, description: 'YYYY-MM-DD' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
   findAllTransactions(
     @Query('search') search?: string,
     @Query('type') type?: string,
     @Query('status') status?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.paymentsService.findAllTransactions({ search, type, status, dateFrom, dateTo });
+    return this.paymentsService.findAllTransactions({ search, type, status, dateFrom, dateTo, page: page ? parseInt(page) : undefined, limit: limit ? parseInt(limit) : undefined });
   }
 
   @Get('revenue')

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { IProductsRepository, IProductSafe, ProductFilters } from './interfaces/products.repository';
+import { paginated, PaginatedResult } from '../common/interfaces/paginated-result';
 
 const productSelect = {
   id: true,
@@ -35,7 +36,7 @@ export class ProductsRepository extends IProductsRepository {
     super();
   }
 
-  async findAll(filters: ProductFilters = {}): Promise<IProductSafe[]> {
+  async findAll(filters: ProductFilters = {}): Promise<PaginatedResult<IProductSafe>> {
     const where: Prisma.ProductWhereInput = {};
     if (!filters.includeInactive) where.isActive = true;
     if (filters.featured) where.isFeatured = true;
@@ -49,17 +50,15 @@ export class ProductsRepository extends IProductsRepository {
     if (filters.categoryId) where.categoryId = filters.categoryId;
     if (filters.categorySlug) where.category = { slug: filters.categorySlug };
 
-    const take = filters.limit || 20;
-    const skip = filters.page ? (filters.page - 1) * take : 0;
+    const page = filters.page || 1;
+    const limit = filters.limit || 20;
+    const skip = (page - 1) * limit;
 
-    const products = await this.prisma.product.findMany({
-      where,
-      select: productSelect,
-      orderBy: { createdAt: 'desc' },
-      take,
-      skip,
-    });
-    return products.map(toSafe);
+    const [data, total] = await Promise.all([
+      this.prisma.product.findMany({ where, select: productSelect, orderBy: { createdAt: 'desc' }, take: limit, skip }),
+      this.prisma.product.count({ where }),
+    ]);
+    return paginated(data.map(toSafe), total, page, limit);
   }
 
   async findBySlug(slug: string): Promise<IProductSafe> {

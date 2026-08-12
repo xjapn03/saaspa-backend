@@ -27,9 +27,9 @@ describe('ProductsService', () => {
 
   describe('findAll', () => {
     it('should delegate to repository with filters', async () => {
-      repo.findAll.mockResolvedValue([mockProduct as any]);
+      repo.findAll.mockResolvedValue({ data: [mockProduct as any], total: 1, page: 1, limit: 20, totalPages: 1 });
       const result = await service.findAll({ categorySlug: 'cremas', featured: true, search: 'crema', page: 1, limit: 10 });
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
       expect(repo.findAll).toHaveBeenCalledWith({ categorySlug: 'cremas', featured: true, search: 'crema', page: 1, limit: 10 });
     });
   });
