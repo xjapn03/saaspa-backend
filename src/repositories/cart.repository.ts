@@ -33,13 +33,25 @@ export class CartRepository extends ICartRepository {
   }
 
   async upsert(userId: string, productId: string, quantity: number): Promise<ICartItemSafe> {
-    const item = await this.prisma.cartItem.upsert({
-      where: { userId_productId: { userId, productId } },
-      create: { userId, productId, quantity },
-      update: { quantity },
-      select: cartSelect,
-    });
-    return toSafe(item);
+    try {
+      const item = await this.prisma.cartItem.upsert({
+        where: { userId_productId: { userId, productId } },
+        create: { userId, productId, quantity },
+        update: { quantity },
+        select: cartSelect,
+      });
+      return toSafe(item);
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        const existing = await this.prisma.cartItem.update({
+          where: { userId_productId: { userId, productId } },
+          data: { quantity },
+          select: cartSelect,
+        });
+        return toSafe(existing);
+      }
+      throw err;
+    }
   }
 
   async remove(userId: string, productId: string): Promise<void> {

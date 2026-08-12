@@ -10,9 +10,6 @@ jobs:
   backend:
     name: Backend (NestJS)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: saaspa-backend
 
     services:
       postgres:
@@ -54,38 +51,61 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: saaspa-backend/package-lock.json
+          node-version: 22
 
-      - run: npm ci
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: saaspa-backend/node_modules
+          key: ${{ runner.os }}-be-${{ hashFiles('saaspa-backend/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-be-
 
-      - run: npx prisma generate
+      - name: Install dependencies
+        run: npm ci
+        working-directory: saaspa-backend
 
-      - run: npx prisma migrate deploy
+      - name: Generate Prisma client
+        run: npx prisma generate
+        working-directory: saaspa-backend
 
-      - run: npx tsc --noEmit
+      - name: Run migrations
+        run: npx prisma migrate deploy
+        working-directory: saaspa-backend
 
-      - run: npm test
+      - name: Type check
+        run: npx tsc --noEmit
+        working-directory: saaspa-backend
+
+      - name: Run tests
+        run: npm test
+        working-directory: saaspa-backend
 
   frontend:
     name: Frontend (Next.js)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: saaspa-frontend
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: saaspa-frontend/package-lock.json
+          node-version: 22
 
-      - run: npm ci
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: saaspa-frontend/node_modules
+          key: ${{ runner.os }}-fe-${{ hashFiles('saaspa-frontend/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-fe-
 
-      - run: npm test
+      - name: Install dependencies
+        run: npm ci
+        working-directory: saaspa-frontend
 
-      - run: npm run build
+      - name: Run tests
+        run: npm test
+        working-directory: saaspa-frontend
+
+      - name: Build
+        run: npm run build
+        working-directory: saaspa-frontend
