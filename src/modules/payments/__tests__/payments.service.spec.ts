@@ -247,6 +247,33 @@ describe('PaymentsService', () => {
       expect(bookingsRepo.update).not.toHaveBeenCalled();
     });
 
+    it('should ignore duplicate APPROVED webhooks', async () => {
+      const crypto = require('crypto');
+      const secret = 'events_test_test123';
+      const timestamp = 1754912000;
+      const data = `txn-1APPROVED50000${timestamp}${secret}`;
+      const checksum = crypto.createHash('sha256').update(data).digest('hex');
+
+      paymentsRepo.findByWompiId.mockResolvedValue({
+        ...mockApprovedPayment,
+        type: 'ABONO',
+        status: 'APROBADO',
+      });
+
+      const result = await service.handleWebhook(
+        {
+          event: 'transaction.updated',
+          data: { transaction: { id: 'txn-1', status: 'APPROVED', amount_in_cents: 50000 } },
+          timestamp,
+        },
+        checksum,
+      );
+
+      expect(result).toEqual({ received: true });
+      expect(paymentsRepo.update).not.toHaveBeenCalled();
+      expect(bookingsRepo.update).not.toHaveBeenCalled();
+    });
+
     it('should reject declined payments', async () => {
       const crypto = require('crypto');
       const secret = 'events_test_test123';

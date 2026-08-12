@@ -128,6 +128,11 @@ export class PaymentsService {
     } catch { return { received: true }; }
 
     if (status === 'APPROVED') {
+      if (payment.status === 'APROBADO') {
+        this.logger.log(`Webhook duplicado para pago ${payment.id}, ignorando`);
+        return { received: true };
+      }
+
       await this.paymentsRepo.update(payment.id, {
         status: 'APROBADO',
         wompiPaymentId: data.id,
