@@ -40,7 +40,7 @@ npx prisma generate                      # Regenerar cliente
 | 2 | Users       | **Completo** | `GET /me`, `PATCH /me`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` |
 | 3 | Services    | **Completo** | `GET /`, `GET /public`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` |
 | 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reschedule`, `GET /:id/balance` |
-| 5 | Payments    | **Completo** | `POST /init` (ABONO/SALDO), `POST /init-cart`, `POST /webhook`, `GET /:bookingId/status`, `GET /transactions` (admin, trazabilidad completa con filtros) |
+| 5 | Payments    | **Completo** | `POST /init` (ABONO/SALDO), `POST /init-cart`, `POST /webhook`, `POST /manual` (efectivo/transferencia), `GET /transactions` (admin, trazabilidad con filtros), `GET /revenue?month=` (admin), `GET /:bookingId/status` |
 | 6 | Categories  | **Completo** | `GET /`, `GET /tree`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
 | 7 | Products    | **Completo** | `GET /` (público + filtros), `GET /admin/all`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
 | 8 | Cart        | **Completo** | `GET /`, `POST /items`, `PATCH /items/:productId`, `DELETE /items/:productId`, `DELETE /`, `POST /merge` |
@@ -51,7 +51,7 @@ npx prisma generate                      # Regenerar cliente
 | 13| Health      | **Completo** | `GET /api/health` — DB + Redis check |
 | 14| Upload      | **Completo** | `POST /api/upload` — imágenes con multer |
 | 15| Throttler   | **Completo** | Rate limiting global (100 req/min) |
-| 16| Orders      | **Completo** | `GET /` (admin, con filtros search/status/date), `GET /my` (cliente), `PATCH /:id/status` (admin) — auto-creados desde webhook de pago de carrito |
+| 16| Orders      | **Completo** | `GET /` (admin, con filtros: search/status/dateFrom/dateTo), `GET /my` (cliente), `PATCH /:id/status` (admin) — auto-creados desde webhook de pago de carrito |
 | 17| Whatsapp    | Pendiente   | Meta API, IA Bot |
 
 ## Modelo de Datos
@@ -92,6 +92,7 @@ Payment (payments)
 ├── bookingId → Booking, userId → User
 ├── amount (Decimal), type: ABONO | SALDO
 ├── status: PENDIENTE → APROBADO | RECHAZADO | REEMBOLSADO
+├── paymentMethod?: WOMAPI | EFECTIVO | TRANSFERENCIA
 ├── wompiPaymentId?, wompiReference?, metadata? (JSON)
 ├── paidAt?
 
