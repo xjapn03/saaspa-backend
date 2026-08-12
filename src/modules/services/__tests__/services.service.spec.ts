@@ -76,6 +76,13 @@ describe('ServicesService', () => {
       expect(result.name).toBe('Updated');
       expect(repo.update).toHaveBeenCalledWith('svc-1', data);
     });
+
+    it('should normalize empty categoryId to null', async () => {
+      const data = { name: 'Updated', categoryId: '' };
+      repo.update.mockResolvedValue({ ...mockService, ...data } as any);
+      await service.update('svc-1', data as any);
+      expect(repo.update).toHaveBeenCalledWith('svc-1', { name: 'Updated', categoryId: null });
+    });
   });
 
   describe('remove', () => {

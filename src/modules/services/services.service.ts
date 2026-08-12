@@ -18,11 +18,15 @@ export class ServicesService {
   }
 
   async create(data: Parameters<IServicesRepository['create']>[0]) {
-    return this.servicesRepo.create(data);
+    const normalized: any = { ...data };
+    if (normalized.categoryId === '') normalized.categoryId = null;
+    return this.servicesRepo.create(normalized);
   }
 
   async update(id: string, data: Parameters<IServicesRepository['update']>[1]) {
-    return this.servicesRepo.update(id, data);
+    const normalized: any = { ...data };
+    if (normalized.categoryId === '') normalized.categoryId = null;
+    return this.servicesRepo.update(id, normalized);
   }
 
   async remove(id: string) {
