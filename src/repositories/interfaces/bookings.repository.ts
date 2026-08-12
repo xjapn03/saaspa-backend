@@ -39,6 +39,7 @@ export abstract class IBookingsRepository {
   abstract findAll(filters?: BookingFilters): Promise<PaginatedResult<IBookingSafe>>;
   abstract findById(id: string): Promise<IBookingSafe>;
   abstract findBySlot(serviceId: string, startTime: Date, endTime: Date): Promise<Booking | null>;
+  abstract findOverlapping(serviceId: string, startTime: Date, endTime: Date): Promise<Booking | null>;
   abstract findOccupied(serviceId: string, date: string): Promise<{ startTime: Date; endTime: Date }[]>;
   abstract create(data: Prisma.BookingCreateInput): Promise<Booking>;
   abstract update(id: string, data: Prisma.BookingUpdateInput): Promise<IBookingSafe>;

@@ -117,6 +117,14 @@ export class BookingsController {
     return this.bookingsService.complete(id);
   }
 
+  @Patch(':id/reopen')
+  @Roles(Role.ADMIN, Role.EMPLEADO)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Revertir cita completada/no asistida a CONFIRMADA (Admin/Empleado)' })
+  reopen(@Param('id') id: string) {
+    return this.bookingsService.reopen(id);
+  }
+
   @Patch(':id/reschedule')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Reagendar cita — dueño o admin' })

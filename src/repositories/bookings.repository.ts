@@ -92,6 +92,18 @@ export class BookingsRepository extends IBookingsRepository {
     });
   }
 
+  async findOverlapping(serviceId: string, startTime: Date, endTime: Date) {
+    return this.prisma.booking.findFirst({
+      where: {
+        serviceId,
+        status: { notIn: ['CANCELADA', 'NO_ASISTIO'] },
+        startTime: { lt: endTime },
+        endTime: { gt: startTime },
+      },
+      orderBy: { startTime: 'asc' },
+    });
+  }
+
   async findOccupied(serviceId: string, date: string) {
     const [yyyy, mm, dd] = date.split('-').map(Number);
     const dayStart = new Date(yyyy, mm - 1, dd, 0, 0, 0);
