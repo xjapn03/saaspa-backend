@@ -12,7 +12,10 @@ describe('CouponsService', () => {
     id: 'coupon-1',
     code: 'BIENVENIDA15',
     discount: 0.15,
-    isUsed: false,
+    isActive: true,
+    maxUses: null,
+    usedCount: 0,
+    perUserLimit: 1,
     expiresAt: new Date('2026-12-31'),
     userId: null,
     createdAt: new Date(),
@@ -86,10 +89,16 @@ describe('CouponsService', () => {
       await expect(service.validate({ code: 'INVALID' })).rejects.toThrow('Cupón no válido');
     });
 
-    it('should throw when coupon is already used', async () => {
-      repo.findByCode.mockResolvedValue({ ...mockCoupon, isUsed: true } as any);
+    it('should throw when coupon is not active', async () => {
+      repo.findByCode.mockResolvedValue({ ...mockCoupon, isActive: false } as any);
 
-      await expect(service.validate({ code: 'BIENVENIDA15' })).rejects.toThrow('ya fue usado');
+      await expect(service.validate({ code: 'BIENVENIDA15' })).rejects.toThrow('no está activo');
+    });
+
+    it('should throw when coupon reached max uses', async () => {
+      repo.findByCode.mockResolvedValue({ ...mockCoupon, maxUses: 5, usedCount: 5 } as any);
+
+      await expect(service.validate({ code: 'BIENVENIDA15' })).rejects.toThrow('límite de usos');
     });
 
     it('should throw when coupon is expired', async () => {
@@ -102,20 +111,34 @@ describe('CouponsService', () => {
     });
   });
 
-  describe('markAsUsed', () => {
-    it('should mark coupon as used', async () => {
-      repo.findById.mockResolvedValue(mockCoupon as any);
-      repo.update.mockResolvedValue({ ...mockCoupon, isUsed: true } as any);
+  describe('findUsages', () => {
+    it('should return usages for a coupon', async () => {
+      repo.findUsages.mockResolvedValue([
+        { id: 'u1', couponId: 'coupon-1', userId: 'user-1', orderId: null, usedAt: new Date(), user: { firstName: 'María', lastName: 'Gómez', email: 'maria@test.com' } },
+      ] as any);
 
-      const result = await service.markAsUsed('coupon-1');
+      const result = await service.findUsages('coupon-1');
 
-      expect(result.isUsed).toBe(true);
+      expect(result).toHaveLength(1);
+      expect(repo.findUsages).toHaveBeenCalledWith('coupon-1');
+    });
+  });
+
+  describe('canUserUse', () => {
+    it('should return true when user has not used the coupon', async () => {
+      repo.findUsage.mockResolvedValue(null);
+
+      const result = await service.canUserUse('coupon-1', 'user-1');
+
+      expect(result).toBe(true);
     });
 
-    it('should throw when coupon is already used', async () => {
-      repo.findById.mockResolvedValue({ ...mockCoupon, isUsed: true } as any);
+    it('should return false when user already used the coupon', async () => {
+      repo.findUsage.mockResolvedValue({ id: 'u1', couponId: 'coupon-1', userId: 'user-1', orderId: null, usedAt: new Date() } as any);
 
-      await expect(service.markAsUsed('coupon-1')).rejects.toThrow('ya fue usado');
+      const result = await service.canUserUse('coupon-1', 'user-1');
+
+      expect(result).toBe(false);
     });
   });
 

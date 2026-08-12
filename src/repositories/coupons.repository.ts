@@ -8,7 +8,10 @@ const couponSelect = {
   id: true,
   code: true,
   discount: true,
-  isUsed: true,
+  isActive: true,
+  maxUses: true,
+  usedCount: true,
+  perUserLimit: true,
   expiresAt: true,
   userId: true,
   createdAt: true,
@@ -44,6 +47,40 @@ export class CouponsRepository extends ICouponsRepository {
 
   async findByCode(code: string) {
     return this.prisma.coupon.findUnique({ where: { code } });
+  }
+
+  async findUsage(couponId: string, userId: string) {
+    return this.prisma.couponUsage.findUnique({
+      where: { couponId_userId: { couponId, userId } },
+    });
+  }
+
+  async findUsages(couponId: string) {
+    return this.prisma.couponUsage.findMany({
+      where: { couponId },
+      include: { user: { select: { firstName: true, lastName: true, email: true } } },
+      orderBy: { usedAt: 'desc' },
+    });
+  }
+
+  async consumeCoupon(couponId: string, userId: string, orderId?: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.couponUsage.findUnique({
+        where: { couponId_userId: { couponId, userId } },
+      });
+      if (existing) return existing;
+
+      const usage = await tx.couponUsage.create({
+        data: { couponId, userId, orderId: orderId || null },
+      });
+
+      await tx.coupon.update({
+        where: { id: couponId },
+        data: { usedCount: { increment: 1 } },
+      });
+
+      return usage;
+    });
   }
 
   async create(data: Prisma.CouponCreateInput) {

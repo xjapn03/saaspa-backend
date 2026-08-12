@@ -66,6 +66,7 @@ model User {
   bookings     Booking[]
   payments     Payment[]
   coupons      Coupon[]
+  couponUsages CouponUsage[]
   cartItems    CartItem[]
   orders       Order[]
 
@@ -181,17 +182,35 @@ model Payment {
 }
 
 model Coupon {
-  id        String   @id @default(uuid())
-  code      String   @unique
-  discount  Decimal  @db.Decimal(5, 4)
-  isUsed    Boolean  @default(false)
-  expiresAt DateTime
-  userId    String?
-  createdAt DateTime @default(now())
+  id           String   @id @default(uuid())
+  code         String   @unique
+  discount     Decimal  @db.Decimal(5, 4)
+  isActive     Boolean  @default(true)
+  maxUses      Int?
+  usedCount    Int      @default(0)
+  perUserLimit Int      @default(1)
+  expiresAt    DateTime
+  userId       String?
+  createdAt    DateTime @default(now())
 
-  user      User?    @relation(fields: [userId], references: [id])
+  user         User?          @relation(fields: [userId], references: [id])
+  usages       CouponUsage[]
 
   @@map("coupons")
+}
+
+model CouponUsage {
+  id       String   @id @default(uuid())
+  couponId String
+  userId   String
+  orderId  String?
+  usedAt   DateTime @default(now())
+
+  coupon   Coupon   @relation(fields: [couponId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([couponId, userId])
+  @@map("coupon_usages")
 }
 
 model ConversationState {
