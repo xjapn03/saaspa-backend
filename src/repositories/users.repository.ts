@@ -25,7 +25,7 @@ export class UsersRepository extends IUsersRepository {
   }
 
   async findAll(filters: UserFilters = {}) {
-    const where: Prisma.UserWhereInput = { isActive: true };
+    const where: Prisma.UserWhereInput = filters.includeInactive ? {} : { isActive: true };
     if (filters.role) where.role = filters.role as any;
     const orderBy: Prisma.UserOrderByWithRelationInput = {};
     const sortBy = filters.sortBy || 'firstName';
