@@ -5,7 +5,7 @@ import { google } from 'googleapis';
 @Injectable()
 export class GoogleCalendarService {
   private readonly logger = new Logger(GoogleCalendarService.name);
-  private calendar: any;
+  private calendar: any = null;
   private calendarId: string;
 
   constructor(private config: ConfigService) {
@@ -13,6 +13,10 @@ export class GoogleCalendarService {
   }
 
   private getClient() {
+    if (this.calendar) {
+      return this.calendar;
+    }
+
     const clientEmail = this.config.get<string>('GOOGLE_CLIENT_EMAIL');
     const privateKey = this.config.get<string>('GOOGLE_PRIVATE_KEY');
 
@@ -27,7 +31,8 @@ export class GoogleCalendarService {
       scopes: ['https://www.googleapis.com/auth/calendar'],
     });
 
-    return google.calendar({ version: 'v3', auth });
+    this.calendar = google.calendar({ version: 'v3', auth });
+    return this.calendar;
   }
 
   async createEvent(booking: {
