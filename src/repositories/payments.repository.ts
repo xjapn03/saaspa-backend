@@ -25,7 +25,7 @@ const paymentSelectWithUser = {
 
 const paymentTransactionSelect = {
   id: true, bookingId: true, userId: true, amount: true, type: true,
-  status: true, wompiPaymentId: true, wompiReference: true, metadata: true,
+  status: true, wompiPaymentId: true, wompiReference: true, paymentMethod: true, metadata: true,
   paidAt: true, createdAt: true, updatedAt: true,
   user: { select: { firstName: true, lastName: true, email: true } },
   booking: { select: { id: true, startTime: true, service: { select: { name: true } } } },

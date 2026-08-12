@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
-import { IBookingsRepository, BookingFilters, IBookingSafe } from './interfaces/bookings.repository';
+import { IBookingsRepository, BookingFilters, IBookingSafe, PaginatedResult } from './interfaces/bookings.repository';
 
 const bookingSelect = {
   id: true,
@@ -24,7 +24,7 @@ export class BookingsRepository extends IBookingsRepository {
     super();
   }
 
-  async findAll(filters: BookingFilters = {}) {
+  async findAll(filters: BookingFilters = {}): Promise<PaginatedResult<IBookingSafe>> {
     const where: Prisma.BookingWhereInput = {};
     if (filters.userId) where.userId = filters.userId;
     if (filters.status) where.status = filters.status as any;
@@ -48,11 +48,28 @@ export class BookingsRepository extends IBookingsRepository {
     else if (sortBy === 'createdAt') orderBy.createdAt = order;
     else orderBy.startTime = 'desc';
 
-    return this.prisma.booking.findMany({
-      where,
-      select: bookingSelect,
-      orderBy,
-    }) as unknown as IBookingSafe[];
+    const page = filters.page || 1;
+    const limit = filters.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.booking.findMany({
+        where,
+        select: bookingSelect,
+        orderBy,
+        skip,
+        take: limit,
+      }),
+      this.prisma.booking.count({ where }),
+    ]);
+
+    return {
+      data: data as unknown as IBookingSafe[],
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findById(id: string) {

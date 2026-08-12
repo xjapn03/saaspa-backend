@@ -34,8 +34,10 @@ describe('BookingsRepository', () => {
   describe('findAll', () => {
     it('should return all bookings when no filters', async () => {
       prisma.booking.findMany.mockResolvedValue([mockRow] as any);
+      prisma.booking.count.mockResolvedValue(1);
       const result = await repo.findAll();
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
+      expect(result.total).toBe(1);
     });
 
     it('should filter by userId', async () => {

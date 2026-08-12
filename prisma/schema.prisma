@@ -152,6 +152,9 @@ model Booking {
   payments      Payment[]
 
   @@map("bookings")
+  @@index([userId, status])
+  @@index([startTime])
+  @@index([serviceId, startTime])
 }
 
 model Payment {
@@ -174,6 +177,8 @@ model Payment {
   order           Order?
 
   @@map("payments")
+  @@index([bookingId])
+  @@index([status, createdAt])
 }
 
 model Coupon {

@@ -16,15 +16,6 @@ export interface IBookingSafe {
   service?: { name: string; duration: number; price: number };
 }
 
-export abstract class IBookingsRepository {
-  abstract findAll(filters?: BookingFilters): Promise<IBookingSafe[]>;
-  abstract findById(id: string): Promise<IBookingSafe>;
-  abstract findBySlot(serviceId: string, startTime: Date, endTime: Date): Promise<Booking | null>;
-  abstract findOccupied(serviceId: string, date: string): Promise<{ startTime: Date; endTime: Date }[]>;
-  abstract create(data: Prisma.BookingCreateInput): Promise<Booking>;
-  abstract update(id: string, data: Prisma.BookingUpdateInput): Promise<IBookingSafe>;
-}
-
 export interface BookingFilters {
   userId?: string;
   date?: string;
@@ -32,4 +23,23 @@ export interface BookingFilters {
   search?: string;
   sortBy?: string;
   order?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export abstract class IBookingsRepository {
+  abstract findAll(filters?: BookingFilters): Promise<PaginatedResult<IBookingSafe>>;
+  abstract findById(id: string): Promise<IBookingSafe>;
+  abstract findBySlot(serviceId: string, startTime: Date, endTime: Date): Promise<Booking | null>;
+  abstract findOccupied(serviceId: string, date: string): Promise<{ startTime: Date; endTime: Date }[]>;
+  abstract create(data: Prisma.BookingCreateInput): Promise<Booking>;
+  abstract update(id: string, data: Prisma.BookingUpdateInput): Promise<IBookingSafe>;
 }
