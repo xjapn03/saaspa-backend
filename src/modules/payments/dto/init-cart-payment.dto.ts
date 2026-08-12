@@ -1,5 +1,6 @@
 import { IsArray, IsString, IsOptional, IsNumber } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
 export class CartItemDto {
   @ApiProperty({ example: 'uuid-product-1' })
@@ -22,6 +23,7 @@ export class CartItemDto {
 export class InitCartPaymentDto {
   @ApiProperty({ type: [CartItemDto] })
   @IsArray()
+  @Type(() => CartItemDto)
   items: CartItemDto[];
 
   @ApiPropertyOptional({ example: 'DESCUENTO10' })

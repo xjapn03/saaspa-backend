@@ -286,7 +286,7 @@ export class PaymentsService {
       amount: total,
       type: 'SALDO',
       wompiReference: reference,
-      metadata: { items: dto.items, couponId: dto.couponId || null, couponCode: dto.couponCode || null, shippingName: dto.shippingName || null, shippingEmail: dto.shippingEmail || null, shippingPhone: dto.shippingPhone || null, shippingAddress: dto.shippingAddress || null, shippingCity: dto.shippingCity || null, shippingNotes: dto.shippingNotes || null },
+      metadata: { items: JSON.parse(JSON.stringify(dto.items)), couponId: dto.couponId || null, couponCode: dto.couponCode || null, shippingName: dto.shippingName || null, shippingEmail: dto.shippingEmail || null, shippingPhone: dto.shippingPhone || null, shippingAddress: dto.shippingAddress || null, shippingCity: dto.shippingCity || null, shippingNotes: dto.shippingNotes || null },
     } as any);
 
     return { publicKey, reference, amountInCents, currency, signature };
