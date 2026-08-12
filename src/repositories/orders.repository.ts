@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../database/prisma.service';
+import { PrismaService } from '../database/prisma.service';
 import { IOrdersRepository, IOrderSafe } from './interfaces/orders.repository';
 
 const orderSelect = {

@@ -51,7 +51,8 @@ npx prisma generate                      # Regenerar cliente
 | 13| Health      | **Completo** | `GET /api/health` — DB + Redis check |
 | 14| Upload      | **Completo** | `POST /api/upload` — imágenes con multer |
 | 15| Throttler   | **Completo** | Rate limiting global (100 req/min) |
-| 16| Whatsapp    | Pendiente   | Meta API, IA Bot |
+| 16| Orders      | **Completo** | `GET /` (admin), `GET /my` (cliente), `PATCH /:id/status` (admin) — auto-creados desde webhook de pago de carrito |
+| 17| Whatsapp    | Pendiente   | Meta API, IA Bot |
 
 ## Modelo de Datos
 
@@ -98,6 +99,16 @@ CartItem (cart_items)
 ├── userId → User, productId → Product
 ├── quantity
 ├── @@unique([userId, productId])
+
+Order (orders)
+├── userId → User, paymentId? → Payment
+├── total (Decimal), status: PENDIENTE → CONFIRMADO → ENVIADO → ENTREGADO | CANCELADO
+├── shippingName, shippingEmail, shippingPhone, shippingAddress, shippingCity, shippingNotes?
+├── → items (OrderItem[])
+
+OrderItem (order_items)
+├── orderId → Order, productId → Product
+├── name, price (Decimal), quantity (snapshot al momento de compra)
 
 Coupon (coupons)
 ├── code (unique), discount (Decimal 5,4)

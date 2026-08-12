@@ -36,6 +36,8 @@ src/
 │   ├── calendar/    # Google Calendar API
 │   ├── categories/  # Categorías con subcategorías (tree)
 │   ├── products/    # Productos e-commerce (Shop)
+│   ├── cart/        # Carrito server-side (CartItem)
+│   ├── orders/      # Pedidos (Order + OrderItem)
 │   ├── meta/        # Meta Conversions API (CAPI)
 │   └── whatsapp/    # Webhooks Meta Cloud API → IA Bot
 ├── repositories/    # Repository Pattern (interfaces + implementaciones Prisma)
