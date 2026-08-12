@@ -32,4 +32,5 @@ export abstract class IPaymentsRepository {
   abstract findByWompiReference(wompiReference: string): Promise<IPaymentSafe | null>;
   abstract update(id: string, data: Prisma.PaymentUpdateInput): Promise<IPaymentSafe>;
   abstract findAllTransactions(filters?: PaymentTransactionFilters): Promise<IPaymentSafe[]>;
+  abstract findRevenue(month: string): Promise<number>;
 }
