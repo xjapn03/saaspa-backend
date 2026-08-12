@@ -38,7 +38,7 @@ npx prisma generate                      # Regenerar cliente
 |---|-------------|-------------|--------------------------------------------|
 | 1 | Auth        | **Completo** | `POST /api/auth/register`, `/login`, `/refresh`, `/forgot-password`, `/reset-password`, `/logout` |
 | 2 | Users       | **Completo** | `GET /me`, `PATCH /me`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` |
-| 3 | Services    | **Completo** | `GET /`, `GET /public`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` |
+| 3 | Services    | **Completo** | `GET /`, `GET /public`, `GET /public/:slug`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` — slug único (auto-generado del nombre) |
 | 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reopen`, `PATCH /:id/reschedule`, `GET /:id/balance` — bloqueo de solapamiento + completa solo con saldo pagado |
 | 5 | Payments    | **Completo** | `POST /init` (ABONO/SALDO), `POST /init-cart`, `POST /webhook` (idempotente), `POST /manual` (efectivo/transferencia), `GET /transactions` (admin, trazabilidad con filtros), `GET /revenue?month=` (admin), `GET /:bookingId/status` |
 | 6 | Categories  | **Completo** | `GET /` (includeInactive), `GET /tree`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
@@ -68,8 +68,8 @@ User (users)
 ├── → bookings, payments, coupons, cartItems
 
 Service (services)
-├── name, description?, price (Decimal), duration (min)
-├── category?, categoryId?, imageUrl?, isActive
+├── name, slug (unique), description?, price (Decimal), duration (min)
+├── categoryId?, imageUrl?, isActive
 ├── → bookings
 
 Category (categories)
