@@ -39,12 +39,12 @@ npx prisma generate                      # Regenerar cliente
 | 1 | Auth        | **Completo** | `POST /api/auth/register`, `/login`, `/refresh`, `/forgot-password`, `/reset-password`, `/logout` |
 | 2 | Users       | **Completo** | `GET /me`, `PATCH /me`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` |
 | 3 | Services    | **Completo** | `GET /`, `GET /public`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` |
-| 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reschedule`, `GET /:id/balance` |
-| 5 | Payments    | **Completo** | `POST /init` (ABONO/SALDO), `POST /init-cart`, `POST /webhook`, `POST /manual` (efectivo/transferencia), `GET /transactions` (admin, trazabilidad con filtros), `GET /revenue?month=` (admin), `GET /:bookingId/status` |
-| 6 | Categories  | **Completo** | `GET /`, `GET /tree`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
+| 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reopen`, `PATCH /:id/reschedule`, `GET /:id/balance` — bloqueo de solapamiento + completa solo con saldo pagado |
+| 5 | Payments    | **Completo** | `POST /init` (ABONO/SALDO), `POST /init-cart`, `POST /webhook` (idempotente), `POST /manual` (efectivo/transferencia), `GET /transactions` (admin, trazabilidad con filtros), `GET /revenue?month=` (admin), `GET /:bookingId/status` |
+| 6 | Categories  | **Completo** | `GET /` (includeInactive), `GET /tree`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
 | 7 | Products    | **Completo** | `GET /` (público + filtros), `GET /admin/all`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
 | 8 | Cart        | **Completo** | `GET /`, `POST /items`, `PATCH /items/:productId`, `DELETE /items/:productId`, `DELETE /`, `POST /merge` |
-| 9 | Coupons     | **Completo** | CRUD cupones + validación |
+| 9 | Coupons     | **Completo** | CRUD + `POST /validate` + `GET /:id/usages` — límites de uso y trazabilidad por usuario |
 | 10| Calendar    | **Completo** | Google Calendar sync (common/google-calendar) |
 | 11| Meta        | **Completo** | Meta CAPI (Schedule + Purchase) |
 | 12| Email       | **Completo** | SendGrid transaccional (booking receipt + payment receipt) |
@@ -53,6 +53,7 @@ npx prisma generate                      # Regenerar cliente
 | 15| Throttler   | **Completo** | Rate limiting global (100 req/min) |
 | 16| Orders      | **Completo** | `GET /` (admin, con filtros: search/status/dateFrom/dateTo), `GET /my` (cliente), `PATCH /:id/status` (admin) — auto-creados desde webhook de pago de carrito |
 | 17| Whatsapp    | Pendiente   | Meta API, IA Bot |
+| 18| Audit       | **Completo** | `GET /audit-logs` (admin) — registro de mutaciones vía interceptor global |
 
 > **Paginación:** Todos los endpoints `GET /` list retornan `PaginatedResult<T>` con `{ data, total, page, limit, totalPages }`. Default limit: 20. Los repositorios usan `Promise.all([findMany({ skip, take }), count()])` en paralelo.
 
@@ -115,7 +116,15 @@ OrderItem (order_items)
 
 Coupon (coupons)
 ├── code (unique), discount (Decimal 5,4)
-├── isUsed, expiresAt, userId? → User
+├── isActive, maxUses?, usedCount, perUserLimit, expiresAt, userId? → User
+├── usages (CouponUsage[])
+
+CouponUsage (coupon_usages)
+├── couponId → Coupon, userId → User, orderId?, usedAt
+├── @@unique([couponId, userId]) — una vez por usuario
+
+AuditLog (audit_logs)
+├── actorId?, actorEmail?, action, entity, entityId?, ip?, createdAt
 
 ConversationState (conversation_states)
 ├── waId (unique), state (JSONB)
@@ -130,6 +139,7 @@ ResetToken (reset_tokens)
 |--------|---------|-----------|
 | Booking | `@@index([userId, status])`, `@@index([startTime])`, `@@index([serviceId, startTime])` | Cliente filtrando por estado, ordenamiento por fecha, búsqueda de slots |
 | Payment | `@@index([bookingId])`, `@@index([status, createdAt])` | Pagos por cita, revenue/facturación por mes |
+| AuditLog | `@@index([entity, entityId])`, `@@index([createdAt])` | Consultas de auditoría por entidad y fecha |
 
 ## Módulo de Recuperación de Contraseña
 
@@ -137,12 +147,13 @@ El módulo Auth incluye recuperación self-service:
 1. `POST /api/auth/forgot-password` — recibe `{ email }`, genera token temporal (1h), envía email vía SendGrid si `SENDGRID_API_KEY` está configurado, o loguea la URL en consola
 2. `POST /api/auth/reset-password` — recibe `{ token, newPassword }`, valida token, actualiza contraseña
 
-El `main.ts` ejecuta `npx prisma migrate deploy` automáticamente antes de levantar la API.
-Esto aplica las migraciones pendientes sin generar nuevas. Para crear nuevas migraciones:
+Las migraciones se aplican en el arranque del contenedor de producción (`Dockerfile`: `npx prisma migrate deploy && node dist/main`).
+En desarrollo local, aplicar migraciones manualmente:
 
 ```bash
 npx prisma migrate dev --name <descripcion>   # crea la migración a partir de schema.prisma
-npm run start:dev                              # auto-aplica la migración al arrancar
+npx prisma migrate deploy                      # aplica migraciones pendientes
+npm run start:dev                              # levanta la API (seed si RUN_SEED=true)
 ```
 
 ## Auto-Seed (RUN_SEED)
@@ -242,7 +253,7 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (241 tests, 36 suites) — no requiere BD
+npm test              # Unit tests (255 tests, 37 suites) — no requiere BD
 npm run test:cov      # Cobertura
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 ```
@@ -273,7 +284,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (36 suites, 241 tests)
+### Inventario de suites (37 suites, 255 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
