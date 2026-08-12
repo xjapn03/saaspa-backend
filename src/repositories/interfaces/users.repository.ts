@@ -20,6 +20,7 @@ export interface UserFilters {
   role?: string;
   sortBy?: string;
   order?: 'asc' | 'desc';
+  includeInactive?: boolean;
   page?: number;
   limit?: number;
 }

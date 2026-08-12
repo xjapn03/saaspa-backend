@@ -15,10 +15,11 @@ export class CategoriesController {
   @Get()
   @Public()
   @ApiOperation({ summary: 'Listar categorías activas' })
+  @ApiQuery({ name: 'includeInactive', required: false })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
-  findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
-    return this.categoriesService.findAll({ page: page ? parseInt(page) : undefined, limit: limit ? parseInt(limit) : undefined });
+  findAll(@Query('includeInactive') includeInactive?: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.categoriesService.findAll({ includeInactive: includeInactive === 'true', page: page ? parseInt(page) : undefined, limit: limit ? parseInt(limit) : undefined });
   }
 
   @Get('tree')
