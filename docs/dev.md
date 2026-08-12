@@ -54,6 +54,8 @@ npx prisma generate                      # Regenerar cliente
 | 16| Orders      | **Completo** | `GET /` (admin, con filtros: search/status/dateFrom/dateTo), `GET /my` (cliente), `PATCH /:id/status` (admin) — auto-creados desde webhook de pago de carrito |
 | 17| Whatsapp    | Pendiente   | Meta API, IA Bot |
 
+> **Paginación:** Todos los endpoints `GET /` list retornan `PaginatedResult<T>` con `{ data, total, page, limit, totalPages }`. Default limit: 20. Los repositorios usan `Promise.all([findMany({ skip, take }), count()])` en paralelo.
+
 ## Modelo de Datos
 
 ```
@@ -121,6 +123,13 @@ ConversationState (conversation_states)
 ResetToken (reset_tokens)
 ├── email, token (unique), expiresAt
 ```
+
+### Índices de Base de Datos
+
+| Modelo | Índices | Propósito |
+|--------|---------|-----------|
+| Booking | `@@index([userId, status])`, `@@index([startTime])`, `@@index([serviceId, startTime])` | Cliente filtrando por estado, ordenamiento por fecha, búsqueda de slots |
+| Payment | `@@index([bookingId])`, `@@index([status, createdAt])` | Pagos por cita, revenue/facturación por mes |
 
 ## Módulo de Recuperación de Contraseña
 
