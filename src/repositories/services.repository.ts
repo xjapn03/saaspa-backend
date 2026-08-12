@@ -6,7 +6,8 @@ import { paginated } from '../common/interfaces/paginated-result';
 
 const serviceSelect = {
   id: true, name: true, description: true, price: true, duration: true,
-  isActive: true, category: true, imageUrl: true, createdAt: true, updatedAt: true,
+  isActive: true, category: true, categoryId: true, imageUrl: true, createdAt: true, updatedAt: true,
+  categoryRel: { select: { id: true, name: true, slug: true } },
 } satisfies Prisma.ServiceSelect;
 
 const toSafe = (s: any) => ({ ...s, price: Number(s.price) });

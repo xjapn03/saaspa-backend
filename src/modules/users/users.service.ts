@@ -19,7 +19,7 @@ export class UsersService {
     return this.usersRepo.findByEmail(email);
   }
 
-  async create(data: { email: string; password: string; firstName: string; lastName: string; phone?: string; role?: string }) {
+  async create(data: { email: string; password: string; firstName: string; lastName: string; phone?: string; description?: string; role?: string }) {
     const existing = await this.usersRepo.findByEmail(data.email);
     if (existing) throw new UnauthorizedException('El email ya está registrado');
     const passwordHash = await bcrypt.hash(data.password, 10);
@@ -29,6 +29,7 @@ export class UsersService {
       firstName: data.firstName,
       lastName: data.lastName,
       phone: data.phone,
+      description: data.description,
       role: data.role as any,
     } as any);
   }

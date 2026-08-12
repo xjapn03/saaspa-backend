@@ -25,6 +25,11 @@ export class CreateUserDto {
   @IsString()
   phone?: string;
 
+  @ApiPropertyOptional({ example: 'Cliente frecuente, prefiere masajes relajantes.' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
   @ApiPropertyOptional({ enum: Role, default: 'CLIENTE' })
   @IsOptional()
   @IsEnum(Role)
