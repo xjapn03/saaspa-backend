@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { IUsersRepository } from '../../repositories/interfaces/users.repository';
 import { PrismaService } from '../../database/prisma.service';
 import { TokenBlacklistService } from '../../common/redis/token-blacklist.service';
+import { EmailService } from '../../common/email/email.service';
 import { TokenService } from './token.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -19,6 +20,7 @@ export class AuthService {
     private tokenBlacklist: TokenBlacklistService,
     private prisma: PrismaService,
     private config: ConfigService,
+    private emailService: EmailService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -124,25 +126,8 @@ export class AuthService {
 
     const resetUrl = `${this.config.get('CORS_ORIGIN')?.split(',')[0] || 'http://localhost:3000'}/recuperar/${token}`;
 
-    this.logger.log(`Password reset token generated for ${email}. URL: ${resetUrl}`);
-
-    const sendgridKey = this.config.get('SENDGRID_API_KEY');
-    if (sendgridKey) {
-      try {
-        await fetch('https://api.sendgrid.com/v3/mail/send', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${sendgridKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            personalizations: [{ to: [{ email }] }],
-            from: { email: 'info@kamerinosspa.com', name: 'Kamerinos SPA' },
-            subject: 'Restablece tu contraseña — Kamerinos SPA',
-            content: [{ type: 'text/html', value: `<p>Hola,</p><p>Recibimos una solicitud para restablecer tu contraseña. Haz clic en el enlace para continuar:</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>Este enlace expira en 1 hora. Si no solicitaste este cambio, ignora este mensaje.</p>` }],
-          }),
-        });
-      } catch (err: any) {
-        this.logger.warn(`SendGrid falló: ${err.message}. El token se generó pero no se envió por email.`);
-      }
-    }
+    const userName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : '';
+    this.emailService.sendPasswordReset(email, userName, resetUrl);
 
     return { message: 'Si el correo existe en nuestro sistema, recibirás instrucciones para restablecer tu contraseña.' };
   }
