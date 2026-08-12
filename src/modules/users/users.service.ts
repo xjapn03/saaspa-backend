@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { IUsersRepository } from '../../repositories/interfaces/users.repository';
 import type { UserFilters } from '../../repositories/interfaces/users.repository';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class UsersService {
@@ -16,6 +17,20 @@ export class UsersService {
 
   async findByEmail(email: string) {
     return this.usersRepo.findByEmail(email);
+  }
+
+  async create(data: { email: string; password: string; firstName: string; lastName: string; phone?: string; role?: string }) {
+    const existing = await this.usersRepo.findByEmail(data.email);
+    if (existing) throw new UnauthorizedException('El email ya está registrado');
+    const passwordHash = await bcrypt.hash(data.password, 10);
+    return this.usersRepo.create({
+      email: data.email,
+      passwordHash,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      phone: data.phone,
+      role: data.role as any,
+    } as any);
   }
 
   async update(id: string, data: Parameters<IUsersRepository['update']>[1]) {

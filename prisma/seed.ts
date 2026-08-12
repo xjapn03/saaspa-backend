@@ -20,42 +20,61 @@ async function main() {
     },
   });
 
+  const categories = await Promise.all([
+    prisma.category.upsert({ where: { slug: 'masajes' }, update: {}, create: { name: 'Masajes', slug: 'masajes', description: 'Masajes relajantes y terapéuticos', isActive: true } }),
+    prisma.category.upsert({ where: { slug: 'faciales' }, update: {}, create: { name: 'Faciales', slug: 'faciales', description: 'Tratamientos faciales profesionales', isActive: true } }),
+    prisma.category.upsert({ where: { slug: 'unas' }, update: {}, create: { name: 'Uñas', slug: 'unas', description: 'Manicure y pedicure', isActive: true } }),
+    prisma.category.upsert({ where: { slug: 'depilacion' }, update: {}, create: { name: 'Depilación', slug: 'depilacion', description: 'Depilación profesional con cera', isActive: true } }),
+    prisma.category.upsert({ where: { slug: 'corporal' }, update: {}, create: { name: 'Corporal', slug: 'corporal', description: 'Tratamientos corporales y reductores', isActive: true } }),
+    prisma.category.upsert({ where: { slug: 'cremas' }, update: {}, create: { name: 'Cremas', slug: 'cremas', description: 'Cremas hidratantes y nutritivas', isActive: true } }),
+    prisma.category.upsert({ where: { slug: 'serums' }, update: {}, create: { name: 'Sérums', slug: 'serums', description: 'Sérums concentrados para el cuidado de la piel', isActive: true } }),
+    prisma.category.upsert({ where: { slug: 'mascarillas' }, update: {}, create: { name: 'Mascarillas', slug: 'mascarillas', description: 'Mascarillas faciales y corporales', isActive: true } }),
+  ]);
+
+  const catMap: Record<string, string> = {};
+  categories.forEach((c) => { catMap[c.slug] = c.id; });
+
   const services = [
-    {
-      name: 'Masaje Relajante',
-      description: 'Masaje corporal completo de 60 minutos con aceites esenciales.',
-      price: 120000,
-      duration: 60,
-      category: 'Masajes',
-    },
-    {
-      name: 'Limpieza Facial Profunda',
-      description: 'Limpieza facial con extracción y mascarilla hidratante.',
-      price: 85000,
-      duration: 45,
-      category: 'Faciales',
-    },
-    {
-      name: 'Manicure Semi-permanente',
-      description: 'Aplicación de esmalte semi-permanente con preparación completa.',
-      price: 55000,
-      duration: 60,
-      category: 'Uñas',
-    },
-    {
-      name: 'Depilación con Cera',
-      description: 'Depilación completa de piernas con cera tibia.',
-      price: 70000,
-      duration: 30,
-      category: 'Depilación',
-    },
+    { name: 'Masaje Relajante', description: 'Masaje corporal completo de 60 minutos con aceites esenciales.', price: 120000, duration: 60, categoryId: catMap.masajes },
+    { name: 'Masaje Deportivo', description: 'Masaje profundo para aliviar tensión muscular y mejorar la recuperación.', price: 140000, duration: 75, categoryId: catMap.masajes },
+    { name: 'Limpieza Facial Profunda', description: 'Limpieza facial con extracción y mascarilla hidratante.', price: 85000, duration: 45, categoryId: catMap.faciales },
+    { name: 'Hidratación Facial Premium', description: 'Tratamiento intensivo con ácido hialurónico y vitamina C.', price: 110000, duration: 60, categoryId: catMap.faciales },
+    { name: 'Manicure Semi-permanente', description: 'Aplicación de esmalte semi-permanente con preparación completa.', price: 55000, duration: 60, categoryId: catMap.unas },
+    { name: 'Pedicure Spa', description: 'Pedicure completo con exfoliación, hidratación y esmaltado.', price: 65000, duration: 50, categoryId: catMap.unas },
+    { name: 'Depilación con Cera Piernas', description: 'Depilación completa de piernas con cera tibia.', price: 70000, duration: 30, categoryId: catMap.depilacion },
+    { name: 'Depilación Axilas + Brazos', description: 'Depilación completa de axilas y brazos.', price: 45000, duration: 25, categoryId: catMap.depilacion },
   ];
 
   for (const s of services) {
-    await prisma.service.create({ data: s });
+    await prisma.service.upsert({
+      where: { id: 'seed-' + s.name.toLowerCase().replace(/\s+/g, '-') },
+      update: { price: s.price, categoryId: s.categoryId },
+      create: { id: 'seed-' + s.name.toLowerCase().replace(/\s+/g, '-'), ...s },
+    });
   }
 
-  console.log(`Seed ejecutado: admin=${admin.email}, servicios=${services.length}`);
+  const products = [
+    { name: 'Crema Hidratante Facial', slug: 'crema-hidratante-facial', description: 'Crema ligera con ácido hialurónico para hidratación diaria.', price: 85000, compareAtPrice: 110000, stock: 25, sku: 'SKU-CHF-001', sponsor: 'Loreal', mainImage: null, isActive: true, isFeatured: true, categoryId: catMap.cremas },
+    { name: 'Crema Corporal Nutritiva', slug: 'crema-corporal-nutritiva', description: 'Crema corporal con manteca de karité y vitamina E.', price: 95000, compareAtPrice: null, stock: 15, sku: 'SKU-CCN-002', sponsor: 'Natura', mainImage: null, isActive: true, isFeatured: true, categoryId: catMap.cremas },
+    { name: 'Sérum Revitalizante', slug: 'serum-revitalizante', description: 'Sérum concentrado con vitamina C y antioxidantes.', price: 120000, compareAtPrice: 150000, stock: 10, sku: 'SKU-SR-003', sponsor: 'Vichy', mainImage: null, isActive: true, isFeatured: true, categoryId: catMap.serums },
+    { name: 'Sérum Anti-edad', slug: 'serum-anti-edad', description: 'Sérum con retinol y colágeno para reducir líneas de expresión.', price: 135000, compareAtPrice: null, stock: 8, sku: 'SKU-SA-004', sponsor: 'La Roche-Posay', mainImage: null, isActive: true, isFeatured: false, categoryId: catMap.serums },
+    { name: 'Mascarilla Purificante', slug: 'mascarilla-purificante', description: 'Mascarilla de arcilla verde para purificar y desintoxicar la piel.', price: 45000, compareAtPrice: 55000, stock: 30, sku: 'SKU-MP-005', sponsor: 'Garnier', mainImage: null, isActive: true, isFeatured: false, categoryId: catMap.mascarillas },
+    { name: 'Mascarilla Hidratante Nocturna', slug: 'mascarilla-hidratante-nocturna', description: 'Mascarilla intensiva para usar durante la noche.', price: 55000, compareAtPrice: null, stock: 20, sku: 'SKU-MHN-006', sponsor: 'Ponds', mainImage: null, isActive: true, isFeatured: false, categoryId: catMap.mascarillas },
+    { name: 'Aceite Corporal Relajante', slug: 'aceite-corporal-relajante', description: 'Aceite con lavanda y almendras para masajes relajantes.', price: 65000, compareAtPrice: null, stock: 12, sku: 'SKU-ACR-007', sponsor: 'Kamerinos', mainImage: null, isActive: true, isFeatured: true, categoryId: catMap.corporal },
+    { name: 'Exfoliante Corporal', slug: 'exfoliante-corporal', description: 'Exfoliante con granos de café y coco para una piel suave.', price: 75000, compareAtPrice: 90000, stock: 18, sku: 'SKU-EC-008', sponsor: 'Kamerinos', mainImage: null, isActive: true, isFeatured: false, categoryId: catMap.corporal },
+  ];
+
+  let productsCreated = 0;
+  for (const p of products) {
+    await prisma.product.upsert({
+      where: { slug: p.slug },
+      update: { price: p.price, stock: p.stock, isActive: p.isActive },
+      create: p,
+    });
+    productsCreated++;
+  }
+
+  console.log(`Seed ejecutado: admin=${admin.email}, categorías=${categories.length}, servicios=${services.length}, productos=${productsCreated}`);
 }
 
 main()
