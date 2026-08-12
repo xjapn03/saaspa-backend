@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 import { IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
 import { IServicesRepository } from '../../repositories/interfaces/services.repository';
+import { IPaymentsRepository } from '../../repositories/interfaces/payments.repository';
 import { RedisService } from '../../common/redis/redis.service';
 import { GoogleCalendarService } from '../../common/google-calendar/google-calendar.service';
 import { MetaCapiService } from '../meta/meta-capi.service';
@@ -17,6 +18,7 @@ export class BookingsService {
   constructor(
     private bookingsRepo: IBookingsRepository,
     private servicesRepo: IServicesRepository,
+    private paymentsRepo: IPaymentsRepository,
     private redis: RedisService,
     private calendar: GoogleCalendarService,
     private metaCapi: MetaCapiService,
@@ -84,8 +86,8 @@ export class BookingsService {
     const startTime = new Date(dto.startTime);
     const endTime = new Date(startTime.getTime() + service.duration * 60000);
 
-    const existing = await this.bookingsRepo.findBySlot(dto.serviceId, startTime, endTime);
-    if (existing) throw new ConflictException('El horario ya está reservado');
+    const overlap = await this.bookingsRepo.findOverlapping(dto.serviceId, startTime, endTime);
+    if (overlap) throw new ConflictException('El horario se cruza con otra cita reservada');
 
     const dateKey = startTime.toISOString().split('T')[0];
     const lockKey = `slot:${dto.serviceId}:${dateKey}:${startTime.toISOString()}`;
@@ -164,7 +166,27 @@ export class BookingsService {
     if (booking.status !== 'CONFIRMADA') {
       throw new BadRequestException('Solo citas confirmadas pueden completarse');
     }
+
+    const servicePrice = Number((booking.service as any)?.price || 0);
+    const approved = await this.paymentsRepo.findApprovedByBookingId(id);
+    const totalPaid = approved.reduce((sum, p) => sum + p.amount, 0);
+    const remaining = Math.round((servicePrice - totalPaid) * 100) / 100;
+
+    if (remaining > 0) {
+      throw new BadRequestException(
+        `La cita tiene un saldo pendiente de $${remaining.toLocaleString('es-CO')}. Registra el pago antes de completarla.`,
+      );
+    }
+
     return this.bookingsRepo.update(id, { status: 'COMPLETADA' });
+  }
+
+  async reopen(id: string) {
+    const booking = await this.bookingsRepo.findById(id);
+    if (booking.status !== 'COMPLETADA' && booking.status !== 'NO_ASISTIO') {
+      throw new BadRequestException('Solo citas completadas o no asistidas pueden revertirse');
+    }
+    return this.bookingsRepo.update(id, { status: 'CONFIRMADA' } as any);
   }
 
   async reschedule(id: string, newStartTime: string, userId: string, isAdmin: boolean) {
@@ -180,9 +202,9 @@ export class BookingsService {
     const startTime = new Date(newStartTime);
     const endTime = new Date(startTime.getTime() + service.duration * 60000);
 
-    const existing = await this.bookingsRepo.findBySlot(oldBooking.serviceId, startTime, endTime);
-    if (existing && existing.id !== id) {
-      throw new ConflictException('El nuevo horario ya está reservado');
+    const overlap = await this.bookingsRepo.findOverlapping(oldBooking.serviceId, startTime, endTime);
+    if (overlap && overlap.id !== id) {
+      throw new ConflictException('El nuevo horario se cruza con otra cita reservada');
     }
 
     const googleEventId = oldBooking.googleEventId;

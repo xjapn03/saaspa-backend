@@ -116,4 +116,15 @@ describe('BookingsController', () => {
       expect(paymentsService.getPaymentStatus).toHaveBeenCalledWith('booking-1');
     });
   });
+
+  describe('reopen', () => {
+    it('should delegate to bookingsService.reopen', async () => {
+      bookingsService.reopen.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' } as any);
+
+      const result = await controller.reopen('booking-1');
+
+      expect(result.status).toBe('CONFIRMADA');
+      expect(bookingsService.reopen).toHaveBeenCalledWith('booking-1');
+    });
+  });
 });

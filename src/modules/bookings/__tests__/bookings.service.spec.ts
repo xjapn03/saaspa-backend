@@ -4,6 +4,7 @@ import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { BookingsService } from '../bookings.service';
 import { IBookingsRepository } from '../../../repositories/interfaces/bookings.repository';
 import { IServicesRepository } from '../../../repositories/interfaces/services.repository';
+import { IPaymentsRepository } from '../../../repositories/interfaces/payments.repository';
 import { RedisService } from '../../../common/redis/redis.service';
 import { GoogleCalendarService } from '../../../common/google-calendar/google-calendar.service';
 import { MetaCapiService } from '../../meta/meta-capi.service';
@@ -12,6 +13,7 @@ describe('BookingsService', () => {
   let service: BookingsService;
   let bookingsRepo: DeepMockProxy<IBookingsRepository>;
   let servicesRepo: DeepMockProxy<IServicesRepository>;
+  let paymentsRepo: DeepMockProxy<IPaymentsRepository>;
   let redis: DeepMockProxy<RedisService>;
   let calendar: DeepMockProxy<GoogleCalendarService>;
   let metaCapi: DeepMockProxy<MetaCapiService>;
@@ -44,6 +46,7 @@ describe('BookingsService', () => {
   beforeEach(async () => {
     bookingsRepo = mockDeep<IBookingsRepository>();
     servicesRepo = mockDeep<IServicesRepository>();
+    paymentsRepo = mockDeep<IPaymentsRepository>();
     redis = mockDeep<RedisService>();
     calendar = mockDeep<GoogleCalendarService>();
     metaCapi = mockDeep<MetaCapiService>();
@@ -53,6 +56,7 @@ describe('BookingsService', () => {
         BookingsService,
         { provide: IBookingsRepository, useValue: bookingsRepo },
         { provide: IServicesRepository, useValue: servicesRepo },
+        { provide: IPaymentsRepository, useValue: paymentsRepo },
         { provide: RedisService, useValue: redis },
         { provide: GoogleCalendarService, useValue: calendar },
         { provide: MetaCapiService, useValue: metaCapi },
@@ -82,7 +86,7 @@ describe('BookingsService', () => {
   describe('create', () => {
     it('should create booking with Redis lock when slot is free', async () => {
       servicesRepo.findById.mockResolvedValue(mockService as any);
-      bookingsRepo.findBySlot.mockResolvedValue(null);
+      bookingsRepo.findOverlapping.mockResolvedValue(null);
       bookingsRepo.create.mockResolvedValue({ ...mockBooking, id: 'new-booking' } as any);
 
       const result = await service.create('user-1', {
@@ -99,9 +103,9 @@ describe('BookingsService', () => {
       expect(bookingsRepo.create).toHaveBeenCalled();
     });
 
-    it('should throw ConflictException when slot is already booked', async () => {
+    it('should throw ConflictException when slot overlaps another booking', async () => {
       servicesRepo.findById.mockResolvedValue(mockService as any);
-      bookingsRepo.findBySlot.mockResolvedValue(mockBooking as any);
+      bookingsRepo.findOverlapping.mockResolvedValue(mockBooking as any);
 
       await expect(
         service.create('user-1', { serviceId: 'svc-1', startTime: startTimeISO }),
@@ -189,13 +193,25 @@ describe('BookingsService', () => {
   });
 
   describe('complete', () => {
-    it('should mark CONFIRMADA booking as COMPLETADA', async () => {
+    it('should mark CONFIRMADA booking as COMPLETADA when fully paid', async () => {
       bookingsRepo.findById.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' });
+      paymentsRepo.findApprovedByBookingId.mockResolvedValue([
+        { id: 'p1', bookingId: 'booking-1', userId: 'user-1', amount: 100000, type: 'SALDO', status: 'APROBADO', wompiPaymentId: null, wompiReference: null, paidAt: null, createdAt: new Date(), updatedAt: new Date() },
+      ] as any);
       bookingsRepo.update.mockResolvedValue({ ...mockBooking, status: 'COMPLETADA' });
 
       const result = await service.complete('booking-1');
 
       expect(result.status).toBe('COMPLETADA');
+    });
+
+    it('should throw if booking has remaining balance', async () => {
+      bookingsRepo.findById.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' });
+      paymentsRepo.findApprovedByBookingId.mockResolvedValue([
+        { id: 'p1', bookingId: 'booking-1', userId: 'user-1', amount: 30000, type: 'ABONO', status: 'APROBADO', wompiPaymentId: null, wompiReference: null, paidAt: null, createdAt: new Date(), updatedAt: new Date() },
+      ] as any);
+
+      await expect(service.complete('booking-1')).rejects.toThrow(BadRequestException);
     });
 
     it('should throw if booking is not CONFIRMADA', async () => {
@@ -205,13 +221,31 @@ describe('BookingsService', () => {
     });
   });
 
+  describe('reopen', () => {
+    it('should revert COMPLETADA booking to CONFIRMADA', async () => {
+      bookingsRepo.findById.mockResolvedValue({ ...mockBooking, status: 'COMPLETADA' });
+      bookingsRepo.update.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' });
+
+      const result = await service.reopen('booking-1');
+
+      expect(result.status).toBe('CONFIRMADA');
+      expect(bookingsRepo.update).toHaveBeenCalledWith('booking-1', { status: 'CONFIRMADA' } as any);
+    });
+
+    it('should throw if booking is not COMPLETADA or NO_ASISTIO', async () => {
+      bookingsRepo.findById.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' });
+
+      await expect(service.reopen('booking-1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
   describe('reschedule', () => {
     const newStartTime = '2026-08-15T14:00:00.000Z';
 
     it('should reschedule booking as owner', async () => {
       bookingsRepo.findById.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' });
       servicesRepo.findById.mockResolvedValue(mockService as any);
-      bookingsRepo.findBySlot.mockResolvedValue(null);
+      bookingsRepo.findOverlapping.mockResolvedValue(null);
       bookingsRepo.update.mockResolvedValue({ ...mockBooking, status: 'CANCELADA' } as any);
       bookingsRepo.create.mockResolvedValue({ ...mockBooking, id: 'booking-2', startTime: new Date(newStartTime) } as any);
 
@@ -229,7 +263,7 @@ describe('BookingsService', () => {
         googleEventId: 'google-event-123',
       });
       servicesRepo.findById.mockResolvedValue(mockService as any);
-      bookingsRepo.findBySlot.mockResolvedValue(null);
+      bookingsRepo.findOverlapping.mockResolvedValue(null);
       bookingsRepo.update.mockResolvedValue({ ...mockBooking, status: 'CANCELADA' } as any);
       bookingsRepo.create.mockResolvedValue({ ...mockBooking, id: 'booking-2' } as any);
 
@@ -238,10 +272,10 @@ describe('BookingsService', () => {
       expect(calendar.updateEvent).toHaveBeenCalledWith('google-event-123', expect.any(Object));
     });
 
-    it('should throw ConflictException if new slot is taken', async () => {
+    it('should throw ConflictException if new slot overlaps another booking', async () => {
       bookingsRepo.findById.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' });
       servicesRepo.findById.mockResolvedValue(mockService as any);
-      bookingsRepo.findBySlot.mockResolvedValue({ ...mockBooking, id: 'booking-3' } as any);
+      bookingsRepo.findOverlapping.mockResolvedValue({ ...mockBooking, id: 'booking-3' } as any);
 
       await expect(
         service.reschedule('booking-1', newStartTime, 'user-1', false),

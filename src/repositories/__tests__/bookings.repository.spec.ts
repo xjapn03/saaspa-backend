@@ -105,6 +105,24 @@ describe('BookingsRepository', () => {
     });
   });
 
+  describe('findOverlapping', () => {
+    it('should find any booking overlapping the time range', async () => {
+      prisma.booking.findFirst.mockResolvedValue(mockRow as any);
+      const result = await repo.findOverlapping('svc-1', mockRow.startTime, mockRow.endTime);
+      expect(result).toBeDefined();
+      expect(prisma.booking.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            serviceId: 'svc-1',
+            status: { notIn: ['CANCELADA', 'NO_ASISTIO'] },
+            startTime: { lt: mockRow.endTime },
+            endTime: { gt: mockRow.startTime },
+          }),
+        }),
+      );
+    });
+  });
+
   describe('findOccupied', () => {
     it('should return occupied time ranges for a date', async () => {
       prisma.booking.findMany.mockResolvedValue([
