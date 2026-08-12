@@ -14,7 +14,7 @@ describe('ServicesController', () => {
     price: 180000,
     duration: 75,
     isActive: true,
-    category: 'Facial',
+    categoryId: null,
     imageUrl: null,
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),

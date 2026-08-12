@@ -21,11 +21,6 @@ export class CreateServiceDto {
   @Min(1)
   duration: number;
 
-  @ApiPropertyOptional({ example: 'Facial' })
-  @IsOptional()
-  @IsString()
-  category?: string;
-
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

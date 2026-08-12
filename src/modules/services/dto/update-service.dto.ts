@@ -27,11 +27,6 @@ export class UpdateServiceDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  category?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
   categoryId?: string;
 
   @ApiPropertyOptional()

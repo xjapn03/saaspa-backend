@@ -9,7 +9,8 @@ export interface IServiceSafe {
   price: number;
   duration: number;
   isActive: boolean;
-  category: string | null;
+  categoryId: string | null;
+  categoryRel?: { id: string; name: string; slug: string } | null;
   imageUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
