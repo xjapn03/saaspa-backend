@@ -33,9 +33,16 @@ export class AuditService {
     }
   }
 
-  async findAll(filters: { entity?: string; page?: number; limit?: number }) {
+  async findAll(filters: { entity?: string; action?: string; dateFrom?: string; dateTo?: string; page?: number; limit?: number }) {
     const where: any = {};
     if (filters.entity) where.entity = filters.entity;
+    if (filters.action) where.action = filters.action;
+
+    if (filters.dateFrom || filters.dateTo) {
+      where.createdAt = {};
+      if (filters.dateFrom) where.createdAt.gte = new Date(filters.dateFrom);
+      if (filters.dateTo) where.createdAt.lte = new Date(filters.dateTo + 'T23:59:59.999Z');
+    }
 
     const page = filters.page || 1;
     const limit = filters.limit || 20;

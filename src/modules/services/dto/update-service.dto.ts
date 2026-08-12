@@ -7,6 +7,11 @@ export class UpdateServiceDto {
   @IsString()
   name?: string;
 
+  @ApiPropertyOptional({ example: 'facial-hidratante-premium' })
+  @IsOptional()
+  @IsString()
+  slug?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

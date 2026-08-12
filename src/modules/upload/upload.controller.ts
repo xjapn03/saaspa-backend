@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nes
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
+import { mkdirSync } from 'fs';
 import { Role } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
 
@@ -19,7 +20,13 @@ export class UploadController {
     storage: diskStorage({
       destination: (_req, file, cb) => {
         const folder = (_req as any).body?.folder || 'products';
-        cb(null, join(process.cwd(), 'uploads', folder));
+        const dir = join(process.cwd(), 'uploads', folder);
+        try {
+          mkdirSync(dir, { recursive: true });
+        } catch {
+          // ignore, multer reportará el error si no puede escribir
+        }
+        cb(null, dir);
       },
       filename: (_req, file, cb) => {
         const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;

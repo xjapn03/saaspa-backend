@@ -10,6 +10,7 @@ describe('ServicesController', () => {
   const mockService = {
     id: 'svc-1',
     name: 'Facial Premium',
+    slug: 'facial-premium',
     description: 'Test desc',
     price: 180000,
     duration: 75,
