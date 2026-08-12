@@ -18,8 +18,8 @@ export class ProductsService {
     return this.productsRepo.findAll(filters);
   }
 
-  async findAdminAll() {
-    return this.productsRepo.findAll({ includeInactive: true });
+  async findAdminAll(page?: number, limit?: number) {
+    return this.productsRepo.findAll({ includeInactive: true, ...(page && { page }), ...(limit && { limit }) });
   }
 
   async findBySlug(slug: string) {

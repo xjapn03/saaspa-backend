@@ -1,7 +1,7 @@
 import {
-  Controller, Get, Post, Delete, Param, Body, HttpCode, HttpStatus,
+  Controller, Get, Post, Delete, Param, Body, HttpCode, HttpStatus, Query,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { CouponsService } from './coupons.service';
 import { CreateCouponDto } from './dto/create-coupon.dto';
@@ -18,8 +18,10 @@ export class CouponsController {
   @Roles(Role.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Listar todos los cupones (Admin)' })
-  findAll() {
-    return this.couponsService.findAll();
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.couponsService.findAll({ page: page ? parseInt(page) : undefined, limit: limit ? parseInt(limit) : undefined });
   }
 
   @Get(':id')

@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
-import { ICouponsRepository, ICouponSafe } from './interfaces/coupons.repository';
+import { ICouponsRepository, ICouponSafe, CouponFilters } from './interfaces/coupons.repository';
+import { paginated, PaginatedResult } from '../common/interfaces/paginated-result';
 
 const couponSelect = {
   id: true,
@@ -20,11 +21,16 @@ export class CouponsRepository extends ICouponsRepository {
     super();
   }
 
-  async findAll() {
-    return this.prisma.coupon.findMany({
-      select: couponSelect,
-      orderBy: { createdAt: 'desc' },
-    }) as unknown as ICouponSafe[];
+  async findAll(filters: CouponFilters = {}): Promise<PaginatedResult<ICouponSafe>> {
+    const page = filters.page || 1;
+    const limit = filters.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.coupon.findMany({ select: couponSelect, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+      this.prisma.coupon.count(),
+    ]);
+    return paginated(data as unknown as ICouponSafe[], total, page, limit);
   }
 
   async findById(id: string) {

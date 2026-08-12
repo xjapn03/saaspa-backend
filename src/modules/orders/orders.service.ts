@@ -6,7 +6,7 @@ export class OrdersService {
   constructor(private ordersRepo: IOrdersRepository) {}
 
   async findAll(filters?: OrderFilters) { return this.ordersRepo.findAll(filters); }
-  async findByUser(userId: string) { return this.ordersRepo.findByUser(userId); }
+  async findByUser(userId: string, filters?: { page?: number; limit?: number }) { return this.ordersRepo.findByUser(userId, filters); }
   async findById(id: string) { return this.ordersRepo.findById(id); }
 
   async create(data: {

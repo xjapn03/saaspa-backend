@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { IPaymentsRepository, IPaymentSafe, PaymentTransactionFilters } from './interfaces/payments.repository';
+import { paginated, PaginatedResult } from '../common/interfaces/paginated-result';
 
 const paymentSelect = {
   id: true,
@@ -95,7 +96,7 @@ export class PaymentsRepository extends IPaymentsRepository {
     return toSafe(updated!);
   }
 
-  async findAllTransactions(filters?: PaymentTransactionFilters): Promise<IPaymentSafe[]> {
+  async findAllTransactions(filters?: PaymentTransactionFilters): Promise<PaginatedResult<IPaymentSafe>> {
     const where: any = {};
 
     if (filters?.search) {
@@ -117,18 +118,22 @@ export class PaymentsRepository extends IPaymentsRepository {
       if (filters.dateTo) where.createdAt.lte = new Date(filters.dateTo + 'T23:59:59.999Z');
     }
 
-    const payments = await this.prisma.payment.findMany({
-      where,
-      select: paymentTransactionSelect,
-      orderBy: { createdAt: 'desc' },
-    });
-    return payments.map((p: any) => ({
-      ...p,
-      amount: Number(p.amount),
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const mapPayment = (p: any) => ({
+      ...p, amount: Number(p.amount),
       booking: p.booking ? { ...p.booking, service: p.booking.service } : null,
       order: p.order ? { ...p.order, total: Number(p.order.total) } : null,
       metadata: p.metadata,
-    }));
+    });
+
+    const [data, total] = await Promise.all([
+      this.prisma.payment.findMany({ where, select: paymentTransactionSelect, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+      this.prisma.payment.count({ where }),
+    ]);
+    return paginated(data.map(mapPayment), total, page, limit);
   }
 
   async findRevenue(month: string): Promise<number> {

@@ -1,5 +1,5 @@
 import { Injectable, ConflictException } from '@nestjs/common';
-import { ICategoriesRepository } from '../../repositories/interfaces/categories.repository';
+import { ICategoriesRepository, CategoryFilters } from '../../repositories/interfaces/categories.repository';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
@@ -7,8 +7,8 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 export class CategoriesService {
   constructor(private categoriesRepo: ICategoriesRepository) {}
 
-  async findAll() {
-    return this.categoriesRepo.findAll();
+  async findAll(filters?: CategoryFilters) {
+    return this.categoriesRepo.findAll(filters);
   }
 
   async findTree() {

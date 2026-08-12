@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException, ConflictException } from '@nestjs/common';
-import { ICouponsRepository } from '../../repositories/interfaces/coupons.repository';
+import { ICouponsRepository, CouponFilters } from '../../repositories/interfaces/coupons.repository';
 import { CreateCouponDto } from './dto/create-coupon.dto';
 import { ValidateCouponDto } from './dto/validate-coupon.dto';
 
@@ -7,8 +7,8 @@ import { ValidateCouponDto } from './dto/validate-coupon.dto';
 export class CouponsService {
   constructor(private couponsRepo: ICouponsRepository) {}
 
-  async findAll() {
-    return this.couponsRepo.findAll();
+  async findAll(filters?: CouponFilters) {
+    return this.couponsRepo.findAll(filters);
   }
 
   async findById(id: string) {

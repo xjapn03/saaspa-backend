@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
-import { ICategoriesRepository, ICategorySafe } from './interfaces/categories.repository';
+import { ICategoriesRepository, ICategorySafe, CategoryFilters } from './interfaces/categories.repository';
+import { paginated, PaginatedResult } from '../common/interfaces/paginated-result';
 
 const categorySelect = {
   id: true,
@@ -48,14 +49,17 @@ export class CategoriesRepository extends ICategoriesRepository {
     super();
   }
 
-  async findAll(includeInactive = false): Promise<ICategorySafe[]> {
-    const where = includeInactive ? {} : { isActive: true };
-    const categories = await this.prisma.category.findMany({
-      where,
-      select: flatSelect,
-      orderBy: { name: 'asc' },
-    });
-    return categories as ICategorySafe[];
+  async findAll(filters: CategoryFilters = {}): Promise<PaginatedResult<ICategorySafe>> {
+    const where = filters.includeInactive ? {} : { isActive: true };
+    const page = filters.page || 1;
+    const limit = filters.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.category.findMany({ where, select: flatSelect, orderBy: { name: 'asc' }, skip, take: limit }),
+      this.prisma.category.count({ where }),
+    ]);
+    return paginated(data as ICategorySafe[], total, page, limit);
   }
 
   async findTree(): Promise<ICategorySafe[]> {

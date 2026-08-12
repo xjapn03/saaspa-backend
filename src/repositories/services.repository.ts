@@ -1,74 +1,63 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
-import { IServicesRepository } from './interfaces/services.repository';
+import { IServicesRepository, ServiceFilters } from './interfaces/services.repository';
+import { paginated } from '../common/interfaces/paginated-result';
 
 const serviceSelect = {
-  id: true,
-  name: true,
-  description: true,
-  price: true,
-  duration: true,
-  isActive: true,
-  category: true,
-  imageUrl: true,
-  createdAt: true,
-  updatedAt: true,
+  id: true, name: true, description: true, price: true, duration: true,
+  isActive: true, category: true, imageUrl: true, createdAt: true, updatedAt: true,
 } satisfies Prisma.ServiceSelect;
+
+const toSafe = (s: any) => ({ ...s, price: Number(s.price) });
 
 @Injectable()
 export class ServicesRepository extends IServicesRepository {
-  constructor(private prisma: PrismaService) {
-    super();
+  constructor(private prisma: PrismaService) { super(); }
+
+  async findAll(filters: ServiceFilters = {}) {
+    const page = filters.page || 1;
+    const limit = filters.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.ServiceWhereInput = {};
+    const [data, total] = await Promise.all([
+      this.prisma.service.findMany({ where, select: serviceSelect, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+      this.prisma.service.count({ where }),
+    ]);
+    return paginated(data.map(toSafe), total, page, limit);
   }
 
-  async findAll() {
-    const services = await this.prisma.service.findMany({
-      select: serviceSelect,
-      orderBy: { createdAt: 'desc' },
-    });
-    return services.map((s) => ({ ...s, price: Number(s.price) }));
-  }
+  async findActive(filters: ServiceFilters = {}) {
+    const page = filters.page || 1;
+    const limit = filters.limit || 20;
+    const skip = (page - 1) * limit;
 
-  async findActive() {
-    const services = await this.prisma.service.findMany({
-      where: { isActive: true },
-      select: serviceSelect,
-      orderBy: { category: 'asc' },
-    });
-    return services.map((s) => ({ ...s, price: Number(s.price) }));
+    const where: Prisma.ServiceWhereInput = { isActive: true };
+    const [data, total] = await Promise.all([
+      this.prisma.service.findMany({ where, select: serviceSelect, orderBy: { category: 'asc' }, skip, take: limit }),
+      this.prisma.service.count({ where }),
+    ]);
+    return paginated(data.map(toSafe), total, page, limit);
   }
 
   async findById(id: string) {
-    const service = await this.prisma.service.findUnique({
-      where: { id },
-      select: serviceSelect,
-    });
+    const service = await this.prisma.service.findUnique({ where: { id }, select: serviceSelect });
     if (!service) throw new NotFoundException('Servicio no encontrado');
-    return { ...service, price: Number(service.price) };
+    return toSafe(service);
   }
 
-  async create(data: Prisma.ServiceCreateInput) {
-    return this.prisma.service.create({ data });
-  }
+  async create(data: Prisma.ServiceCreateInput) { return this.prisma.service.create({ data }); }
 
   async update(id: string, data: Prisma.ServiceUpdateInput) {
     await this.findById(id);
-    const updated = await this.prisma.service.update({
-      where: { id },
-      data,
-      select: serviceSelect,
-    });
-    return { ...updated, price: Number(updated.price) };
+    const updated = await this.prisma.service.update({ where: { id }, data, select: serviceSelect });
+    return toSafe(updated);
   }
 
   async remove(id: string) {
     await this.findById(id);
-    const removed = await this.prisma.service.update({
-      where: { id },
-      data: { isActive: false },
-      select: serviceSelect,
-    });
-    return { ...removed, price: Number(removed.price) };
+    const removed = await this.prisma.service.update({ where: { id }, data: { isActive: false }, select: serviceSelect });
+    return toSafe(removed);
   }
 }

@@ -43,8 +43,10 @@ export class ProductsController {
   @Roles(Role.ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Listar todos los productos (incluye inactivos, Admin)' })
-  findAllAdmin() {
-    return this.productsService.findAdminAll();
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  findAllAdmin(@Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.productsService.findAdminAll(page ? parseInt(page) : undefined, limit ? parseInt(limit) : undefined);
   }
 
   @Get(':slug')

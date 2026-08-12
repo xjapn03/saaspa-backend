@@ -121,11 +121,11 @@ describe('CouponsService', () => {
 
   describe('findAll', () => {
     it('should return all coupons', async () => {
-      repo.findAll.mockResolvedValue([mockCoupon as any]);
+      repo.findAll.mockResolvedValue({ data: [mockCoupon as any], total: 1, page: 1, limit: 20, totalPages: 1 });
 
       const result = await service.findAll();
 
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
       expect(repo.findAll).toHaveBeenCalledTimes(1);
     });
   });

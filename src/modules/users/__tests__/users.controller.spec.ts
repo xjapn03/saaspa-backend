@@ -35,13 +35,13 @@ describe('UsersController', () => {
   describe('findAll', () => {
     it('should return list of active users', async () => {
       // Arrange
-      usersService.findAll.mockResolvedValue([mockSafeUser]);
+      usersService.findAll.mockResolvedValue({ data: [mockSafeUser], total: 1, page: 1, limit: 20, totalPages: 1 });
 
       // Act
       const result = await controller.findAll();
 
       // Assert
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
       expect(usersService.findAll).toHaveBeenCalled();
     });
   });

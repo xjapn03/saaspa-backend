@@ -1,5 +1,6 @@
 import { Service } from '@prisma/client';
 import { Prisma } from '@prisma/client';
+import { PaginatedResult } from '../../common/interfaces/paginated-result';
 
 export interface IServiceSafe {
   id: string;
@@ -14,9 +15,14 @@ export interface IServiceSafe {
   updatedAt: Date;
 }
 
+export interface ServiceFilters {
+  page?: number;
+  limit?: number;
+}
+
 export abstract class IServicesRepository {
-  abstract findAll(): Promise<IServiceSafe[]>;
-  abstract findActive(): Promise<IServiceSafe[]>;
+  abstract findAll(filters?: ServiceFilters): Promise<PaginatedResult<IServiceSafe>>;
+  abstract findActive(filters?: ServiceFilters): Promise<PaginatedResult<IServiceSafe>>;
   abstract findById(id: string): Promise<IServiceSafe>;
   abstract create(data: Prisma.ServiceCreateInput): Promise<Service>;
   abstract update(id: string, data: Prisma.ServiceUpdateInput): Promise<IServiceSafe>;

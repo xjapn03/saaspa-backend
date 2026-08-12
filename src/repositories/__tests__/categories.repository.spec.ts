@@ -27,12 +27,13 @@ describe('CategoriesRepository', () => {
     it('should return only active by default', async () => {
       prisma.category.findMany.mockResolvedValue([mockCategory] as any);
       const result = await repo.findAll();
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
     });
 
     it('should include inactive when param is true', async () => {
       prisma.category.findMany.mockResolvedValue([]);
-      await repo.findAll(true);
+      prisma.category.count.mockResolvedValue(0);
+      await repo.findAll({ includeInactive: true });
       expect(prisma.category.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: {} }),
       );

@@ -25,8 +25,9 @@ describe('CouponsRepository', () => {
   describe('findAll', () => {
     it('should return all coupons ordered by createdAt desc', async () => {
       prisma.coupon.findMany.mockResolvedValue([mockCoupon] as any);
+      prisma.coupon.count.mockResolvedValue(1);
       const result = await repo.findAll();
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
     });
   });
 

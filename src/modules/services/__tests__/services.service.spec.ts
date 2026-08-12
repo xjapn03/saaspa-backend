@@ -33,18 +33,18 @@ describe('ServicesService', () => {
 
   describe('findAll', () => {
     it('should delegate to repository and return all services', async () => {
-      repo.findAll.mockResolvedValue([mockService]);
+      repo.findAll.mockResolvedValue({ data: [mockService], total: 1, page: 1, limit: 20, totalPages: 1 });
       const result = await service.findAll();
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
       expect(repo.findAll).toHaveBeenCalled();
     });
   });
 
   describe('findActive', () => {
     it('should return only active services', async () => {
-      repo.findActive.mockResolvedValue([mockService]);
+      repo.findActive.mockResolvedValue({ data: [mockService], total: 1, page: 1, limit: 20, totalPages: 1 });
       const result = await service.findActive();
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
       expect(repo.findActive).toHaveBeenCalled();
     });
   });

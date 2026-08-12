@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { IUsersRepository, UserFilters } from './interfaces/users.repository';
+import { paginated } from '../common/interfaces/paginated-result';
 
 const userSelect = {
   id: true,
@@ -33,11 +34,16 @@ export class UsersRepository extends IUsersRepository {
     else if (sortBy === 'createdAt') orderBy.createdAt = order;
     else orderBy.firstName = 'asc';
 
-    return this.prisma.user.findMany({
-      where,
-      select: userSelect,
-      orderBy,
-    });
+    const page = filters.page || 1;
+    const limit = filters.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.user.findMany({ where, select: userSelect, orderBy, skip, take: limit }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return paginated(data, total, page, limit);
   }
 
   async findById(id: string) {

@@ -25,15 +25,17 @@ describe('ServicesRepository', () => {
   describe('findAll', () => {
     it('should return all services with converted prices', async () => {
       prisma.service.findMany.mockResolvedValue([mockService] as any);
+      prisma.service.count.mockResolvedValue(1);
       const result = await repo.findAll();
-      expect(result).toHaveLength(1);
-      expect(result[0].price).toBe(180000);
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].price).toBe(180000);
     });
   });
 
   describe('findActive', () => {
     it('should filter by isActive true', async () => {
       prisma.service.findMany.mockResolvedValue([mockService] as any);
+      prisma.service.count.mockResolvedValue(1);
       await repo.findActive();
       expect(prisma.service.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { isActive: true } }),

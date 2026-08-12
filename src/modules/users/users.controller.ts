@@ -20,8 +20,10 @@ export class UsersController {
   @ApiQuery({ name: 'role', required: false, enum: Role })
   @ApiQuery({ name: 'sortBy', required: false })
   @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
-  findAll(@Query('role') role?: string, @Query('sortBy') sortBy?: string, @Query('order') order?: string) {
-    return this.usersService.findAll({ role, sortBy, order: order as 'asc' | 'desc' });
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  findAll(@Query('role') role?: string, @Query('sortBy') sortBy?: string, @Query('order') order?: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.usersService.findAll({ role, sortBy, order: order as 'asc' | 'desc', page: page ? parseInt(page) : undefined, limit: limit ? parseInt(limit) : undefined });
   }
 
   @Post()

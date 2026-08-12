@@ -18,9 +18,9 @@ describe('CategoriesController', () => {
 
   describe('findAll', () => {
     it('should return all categories', async () => {
-      service.findAll.mockResolvedValue([{ id: '1', name: 'Masajes', slug: 'masajes' } as any]);
+      service.findAll.mockResolvedValue({ data: [{ id: '1', name: 'Masajes', slug: 'masajes' } as any], total: 1, page: 1, limit: 20, totalPages: 1 });
       const result = await controller.findAll();
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
     });
   });
 
