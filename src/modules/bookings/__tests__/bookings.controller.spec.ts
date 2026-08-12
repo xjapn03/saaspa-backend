@@ -36,18 +36,18 @@ describe('BookingsController', () => {
 
   describe('findAll', () => {
     it('should delegate to service with filters', async () => {
-      bookingsService.findAll.mockResolvedValue([mockBooking as any]);
+      bookingsService.findAll.mockResolvedValue({ data: [mockBooking as any], total: 1, page: 1, limit: 20, totalPages: 1 });
 
       const result = await controller.findAll('user-1', 'ADMIN', '2026-08-15', 'PENDIENTE_PAGO');
 
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
       expect(bookingsService.findAll).toHaveBeenCalledWith(
         expect.objectContaining({ date: '2026-08-15', status: 'PENDIENTE_PAGO' }),
       );
     });
 
     it('should add userId filter for CLIENTE role', async () => {
-      bookingsService.findAll.mockResolvedValue([]);
+      bookingsService.findAll.mockResolvedValue({ data: [], total: 0, page: 1, limit: 20, totalPages: 0 });
 
       await controller.findAll('user-1', 'CLIENTE');
 

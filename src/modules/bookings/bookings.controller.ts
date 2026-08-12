@@ -26,6 +26,8 @@ export class BookingsController {
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'sortBy', required: false })
   @ApiQuery({ name: 'order', required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
   findAll(
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
@@ -34,9 +36,13 @@ export class BookingsController {
     @Query('search') search?: string,
     @Query('sortBy') sortBy?: string,
     @Query('order') order?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     const filters: any = { date, status, search, sortBy, order };
     if (role === 'CLIENTE') filters.userId = userId;
+    if (page) filters.page = parseInt(page, 10);
+    if (limit) filters.limit = parseInt(limit, 10);
     return this.bookingsService.findAll(filters);
   }
 

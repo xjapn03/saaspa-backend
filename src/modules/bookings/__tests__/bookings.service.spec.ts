@@ -63,9 +63,9 @@ describe('BookingsService', () => {
 
   describe('findAll', () => {
     it('should delegate to repository with filters', async () => {
-      bookingsRepo.findAll.mockResolvedValue([mockBooking]);
+      bookingsRepo.findAll.mockResolvedValue({ data: [mockBooking], total: 1, page: 1, limit: 20, totalPages: 1 });
       const result = await service.findAll({ date: '2026-08-15' });
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
       expect(bookingsRepo.findAll).toHaveBeenCalledWith({ date: '2026-08-15' });
     });
   });
