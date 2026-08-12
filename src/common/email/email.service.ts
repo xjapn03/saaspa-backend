@@ -114,4 +114,20 @@ export class EmailService {
       this.logger.error(`[EMAIL] Failed to send ${template} to=${to}: ${(error as Error).message}`);
     }
   }
+
+  async sendPasswordReset(email: string, name: string, resetUrl: string): Promise<void> {
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:2rem">
+        <h2 style="color:#9C6B4B">Kamerinos SPA</h2>
+        <p>Hola${name ? ` ${name}` : ''},</p>
+        <p>Recibimos una solicitud para restablecer tu contraseña. Haz clic en el botón para continuar:</p>
+        <p style="margin:2rem 0">
+          <a href="${resetUrl}" style="background-color:#9C6B4B;color:white;padding:12px 24px;border-radius:12px;text-decoration:none;font-weight:bold">Restablecer contraseña</a>
+        </p>
+        <p style="color:#888;font-size:0.85rem">Este enlace expira en 1 hora. Si no solicitaste este cambio, ignora este mensaje.</p>
+      </div>
+    `;
+
+    await this.send(email, 'Restablece tu contraseña — Kamerinos SPA', html, 'password-reset', `reset-${Date.now()}`);
+  }
 }

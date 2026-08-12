@@ -7,6 +7,7 @@ import { AuthService } from '../auth.service';
 import { IUsersRepository } from '../../../repositories/interfaces/users.repository';
 import { PrismaService } from '../../../database/prisma.service';
 import { TokenBlacklistService } from '../../../common/redis/token-blacklist.service';
+import { EmailService } from '../../../common/email/email.service';
 import { TokenService } from '../token.service';
 import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
@@ -18,6 +19,7 @@ describe('AuthService', () => {
   let tokenService: DeepMockProxy<TokenService>;
   let tokenBlacklist: DeepMockProxy<TokenBlacklistService>;
   let prisma: DeepMockProxy<PrismaService>;
+  let emailService: DeepMockProxy<EmailService>;
 
   const mockUser = {
     id: 'user-1',
@@ -40,6 +42,7 @@ describe('AuthService', () => {
     tokenService = mockDeep<TokenService>();
     tokenBlacklist = mockDeep<TokenBlacklistService>();
     prisma = mockDeep<PrismaService>();
+    emailService = mockDeep<EmailService>();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -48,6 +51,7 @@ describe('AuthService', () => {
         { provide: TokenService, useValue: tokenService },
         { provide: TokenBlacklistService, useValue: tokenBlacklist },
         { provide: PrismaService, useValue: prisma },
+        { provide: EmailService, useValue: emailService },
         { provide: ConfigService, useValue: new ConfigService({ CORS_ORIGIN: 'http://localhost:3000' }) },
       ],
     }).compile();

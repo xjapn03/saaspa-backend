@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
-import { IPaymentsRepository, IPaymentSafe } from './interfaces/payments.repository';
+import { IPaymentsRepository, IPaymentSafe, PaymentTransactionFilters } from './interfaces/payments.repository';
 
 const paymentSelect = {
   id: true,
@@ -21,6 +21,15 @@ const paymentSelect = {
 const paymentSelectWithUser = {
   ...paymentSelect,
   user: { select: { firstName: true, lastName: true, email: true } },
+};
+
+const paymentTransactionSelect = {
+  id: true, bookingId: true, userId: true, amount: true, type: true,
+  status: true, wompiPaymentId: true, wompiReference: true, metadata: true,
+  paidAt: true, createdAt: true, updatedAt: true,
+  user: { select: { firstName: true, lastName: true, email: true } },
+  booking: { select: { id: true, startTime: true, service: { select: { name: true } } } },
+  order: { select: { id: true, total: true } },
 };
 
 const toSafe = (p: any): IPaymentSafe => ({
@@ -84,5 +93,41 @@ export class PaymentsRepository extends IPaymentsRepository {
       select: paymentSelect,
     });
     return toSafe(updated!);
+  }
+
+  async findAllTransactions(filters?: PaymentTransactionFilters): Promise<IPaymentSafe[]> {
+    const where: any = {};
+
+    if (filters?.search) {
+      const q = filters.search;
+      where.OR = [
+        { wompiReference: { contains: q, mode: 'insensitive' } },
+        { user: { firstName: { contains: q, mode: 'insensitive' } } },
+        { user: { lastName: { contains: q, mode: 'insensitive' } } },
+        { user: { email: { contains: q, mode: 'insensitive' } } },
+      ];
+    }
+
+    if (filters?.type) where.type = filters.type;
+    if (filters?.status) where.status = filters.status;
+
+    if (filters?.dateFrom || filters?.dateTo) {
+      where.createdAt = {};
+      if (filters.dateFrom) where.createdAt.gte = new Date(filters.dateFrom);
+      if (filters.dateTo) where.createdAt.lte = new Date(filters.dateTo + 'T23:59:59.999Z');
+    }
+
+    const payments = await this.prisma.payment.findMany({
+      where,
+      select: paymentTransactionSelect,
+      orderBy: { createdAt: 'desc' },
+    });
+    return payments.map((p: any) => ({
+      ...p,
+      amount: Number(p.amount),
+      booking: p.booking ? { ...p.booking, service: p.booking.service } : null,
+      order: p.order ? { ...p.order, total: Number(p.order.total) } : null,
+      metadata: p.metadata,
+    }));
   }
 }

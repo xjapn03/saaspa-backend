@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
-import { IPaymentsRepository } from '../../repositories/interfaces/payments.repository';
+import { IPaymentsRepository, PaymentTransactionFilters } from '../../repositories/interfaces/payments.repository';
 import { IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
 import { ICouponsRepository } from '../../repositories/interfaces/coupons.repository';
 import { IProductsRepository } from '../../repositories/interfaces/products.repository';
@@ -175,6 +175,12 @@ export class PaymentsService {
 
       const metadata = (payment as any).metadata;
       if (!booking && metadata?.items) {
+        const existingOrder = await this.ordersRepo.findByPaymentId(payment.id);
+        if (existingOrder) {
+          this.logger.log(`Orden ya existente para pago ${payment.id}, ignorando webhook duplicado`);
+          return { received: true };
+        }
+
         if (metadata.couponId) {
           try { await this.couponsRepo.update(metadata.couponId, { isUsed: true } as any); } catch {}
         }
@@ -192,9 +198,9 @@ export class PaymentsService {
             userId: payment.userId,
             total: Number(payment.amount || 0),
             status: 'CONFIRMADO' as any,
-            shippingName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Cliente' : 'Cliente',
-            shippingEmail: user?.email || '',
-            shippingPhone: '',
+            shippingName: metadata.shippingName || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Cliente' : 'Cliente'),
+            shippingEmail: metadata.shippingEmail || user?.email || '',
+            shippingPhone: metadata.shippingPhone || '',
             shippingAddress: metadata.shippingAddress || 'Pendiente',
             shippingCity: metadata.shippingCity || 'Pendiente',
             shippingNotes: metadata.shippingNotes || null,
@@ -206,11 +212,18 @@ export class PaymentsService {
               quantity: i.quantity,
             })),
           } as any);
-        } catch { this.logger.warn('No se pudo crear la orden automáticamente'); }
-        if (user?.email) {
+        } catch (err: any) {
+          this.logger.error('No se pudo crear la orden automáticamente', {
+            error: err?.message,
+            code: err?.code,
+            meta: err?.meta,
+            paymentId: payment.id,
+          });
+        }
+        if (user?.email || metadata.shippingEmail) {
           this.emailService.sendPaymentReceipt({
-            clientName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Cliente',
-            clientEmail: user.email,
+            clientName: metadata.shippingName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Cliente',
+            clientEmail: metadata.shippingEmail || user?.email || '',
             serviceName: `Compra — ${metadata.items.length} producto(s)`,
             amount: Number(payment.amount || 0),
             paymentReference: payment.wompiReference || '',
@@ -246,7 +259,7 @@ export class PaymentsService {
     };
   }
 
-  async initCartPayment(userId: string, dto: { items: { productId: string; name: string; price: number; quantity: number }[]; couponCode?: string; couponId?: string }) {
+  async initCartPayment(userId: string, dto: { items: { productId: string; name: string; price: number; quantity: number }[]; couponCode?: string; couponId?: string; shippingName?: string; shippingEmail?: string; shippingPhone?: string; shippingAddress?: string; shippingCity?: string; shippingNotes?: string }) {
     let subtotal = dto.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
     let discount = 0;
 
@@ -273,9 +286,13 @@ export class PaymentsService {
       amount: total,
       type: 'SALDO',
       wompiReference: reference,
-      metadata: { items: dto.items, couponId: dto.couponId || null, couponCode: dto.couponCode || null },
+      metadata: { items: dto.items, couponId: dto.couponId || null, couponCode: dto.couponCode || null, shippingName: dto.shippingName || null, shippingEmail: dto.shippingEmail || null, shippingPhone: dto.shippingPhone || null, shippingAddress: dto.shippingAddress || null, shippingCity: dto.shippingCity || null, shippingNotes: dto.shippingNotes || null },
     } as any);
 
     return { publicKey, reference, amountInCents, currency, signature };
+  }
+
+  async findAllTransactions(filters?: PaymentTransactionFilters) {
+    return this.paymentsRepo.findAllTransactions(filters);
   }
 }

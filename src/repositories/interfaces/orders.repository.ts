@@ -28,10 +28,18 @@ export interface IOrderItemSafe {
   quantity: number;
 }
 
+export interface OrderFilters {
+  search?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
 export abstract class IOrdersRepository {
-  abstract findAll(): Promise<IOrderSafe[]>;
+  abstract findAll(filters?: OrderFilters): Promise<IOrderSafe[]>;
   abstract findByUser(userId: string): Promise<IOrderSafe[]>;
   abstract findById(id: string): Promise<IOrderSafe>;
+  abstract findByPaymentId(paymentId: string): Promise<IOrderSafe | null>;
   abstract create(data: { userId: string; total: number; shippingName: string; shippingEmail: string; shippingPhone: string; shippingAddress: string; shippingCity: string; shippingNotes?: string; paymentId?: string; items: { productId: string; name: string; price: number; quantity: number }[] }): Promise<Order>;
   abstract updateStatus(id: string, status: string): Promise<IOrderSafe>;
 }

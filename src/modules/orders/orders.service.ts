@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { IOrdersRepository } from '../../repositories/interfaces/orders.repository';
+import { IOrdersRepository, OrderFilters } from '../../repositories/interfaces/orders.repository';
 
 @Injectable()
 export class OrdersService {
   constructor(private ordersRepo: IOrdersRepository) {}
 
-  async findAll() { return this.ordersRepo.findAll(); }
+  async findAll(filters?: OrderFilters) { return this.ordersRepo.findAll(filters); }
   async findByUser(userId: string) { return this.ordersRepo.findByUser(userId); }
   async findById(id: string) { return this.ordersRepo.findById(id); }
 
