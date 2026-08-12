@@ -242,18 +242,20 @@ describe('BookingsService', () => {
   describe('reschedule', () => {
     const newStartTime = '2026-08-15T14:00:00.000Z';
 
-    it('should reschedule booking as owner', async () => {
+    it('should reschedule booking in place preserving payments and id', async () => {
       bookingsRepo.findById.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' });
       servicesRepo.findById.mockResolvedValue(mockService as any);
       bookingsRepo.findOverlapping.mockResolvedValue(null);
-      bookingsRepo.update.mockResolvedValue({ ...mockBooking, status: 'CANCELADA' } as any);
-      bookingsRepo.create.mockResolvedValue({ ...mockBooking, id: 'booking-2', startTime: new Date(newStartTime) } as any);
+      bookingsRepo.update.mockResolvedValue({ ...mockBooking, startTime: new Date(newStartTime) } as any);
 
       const result = await service.reschedule('booking-1', newStartTime, 'user-1', false);
 
-      expect(result.id).toBe('booking-2');
-      expect(bookingsRepo.update).toHaveBeenCalledWith('booking-1', { status: 'CANCELADA' } as any);
-      expect(bookingsRepo.create).toHaveBeenCalled();
+      expect(result.id).toBe('booking-1');
+      expect(bookingsRepo.update).toHaveBeenCalledWith(
+        'booking-1',
+        expect.objectContaining({ startTime: expect.any(Date), endTime: expect.any(Date) }),
+      );
+      expect(bookingsRepo.create).not.toHaveBeenCalled();
     });
 
     it('should update Google Calendar event if googleEventId exists', async () => {
@@ -264,8 +266,7 @@ describe('BookingsService', () => {
       });
       servicesRepo.findById.mockResolvedValue(mockService as any);
       bookingsRepo.findOverlapping.mockResolvedValue(null);
-      bookingsRepo.update.mockResolvedValue({ ...mockBooking, status: 'CANCELADA' } as any);
-      bookingsRepo.create.mockResolvedValue({ ...mockBooking, id: 'booking-2' } as any);
+      bookingsRepo.update.mockResolvedValue({ ...mockBooking } as any);
 
       await service.reschedule('booking-1', newStartTime, 'user-1', false);
 

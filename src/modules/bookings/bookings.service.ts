@@ -222,19 +222,11 @@ export class BookingsService {
     const oldLockKey = `slot:${oldBooking.serviceId}:${oldDateKey}:${new Date(oldBooking.startTime).toISOString()}`;
     try { await this.redis.del(oldLockKey); } catch {}
 
-    await this.bookingsRepo.update(id, { status: 'CANCELADA' } as any);
-
     const dateKey = startTime.toISOString().split('T')[0];
     const lockKey = `slot:${oldBooking.serviceId}:${dateKey}:${startTime.toISOString()}`;
     const lockValue = JSON.stringify({ start: startTime.toISOString(), end: endTime.toISOString() });
-    await this.redis.setex(lockKey, LOCK_TTL, lockValue);
+    try { await this.redis.setex(lockKey, LOCK_TTL, lockValue); } catch {}
 
-    return this.bookingsRepo.create({
-      user: { connect: { id: oldBooking.userId } },
-      service: { connect: { id: oldBooking.serviceId } },
-      startTime,
-      endTime,
-      ...(googleEventId ? { googleEventId } : {}),
-    });
+    return this.bookingsRepo.update(id, { startTime, endTime } as any);
   }
 }
