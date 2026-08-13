@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { UploadController } from '../upload.controller';
 import { PrismaService } from '../../../database/prisma.service';
 import { RedisService } from '../../../common/redis/redis.service';
@@ -23,10 +22,10 @@ describe('UploadController', () => {
       filename: 'test-123.jpg',
       size: 1024,
       mimetype: 'image/jpeg',
-      destination: '/app/uploads/products',
     };
+    const mockReq = { body: { folder: 'products' } };
 
-    const result = controller.uploadFile(mockFile);
+    const result = controller.uploadFile(mockFile, mockReq);
 
     expect(result.url).toBe('/uploads/products/test-123.jpg');
     expect(result.filename).toBe('test-123.jpg');
@@ -34,29 +33,42 @@ describe('UploadController', () => {
     expect(result.mimetype).toBe('image/jpeg');
   });
 
-  it('should handle file from nested folder', () => {
+  it('should handle nested folder per product', () => {
     const mockFile = {
-      filename: 'avatar.png',
+      filename: 'main.jpg',
       size: 2048,
-      mimetype: 'image/png',
-      destination: '/app/uploads/avatars',
+      mimetype: 'image/jpeg',
     };
+    const mockReq = { body: { folder: 'products/crema-hidratante' } };
 
-    const result = controller.uploadFile(mockFile);
+    const result = controller.uploadFile(mockFile, mockReq);
 
-    expect(result.url).toBe('/uploads/avatars/avatar.png');
+    expect(result.url).toBe('/uploads/products/crema-hidratante/main.jpg');
   });
 
-  it('should extract folder from Windows-style destination paths', () => {
+  it('should sanitize unsafe folder segments', () => {
     const mockFile = {
-      filename: 'main.PNG',
+      filename: 'main.png',
       size: 512,
       mimetype: 'image/png',
-      destination: 'S:\\Proyects\\KAMERINOS\\saaspa-backend\\uploads\\products',
     };
+    const mockReq = { body: { folder: 'products/../../secreto' } };
 
-    const result = controller.uploadFile(mockFile);
+    const result = controller.uploadFile(mockFile, mockReq);
 
-    expect(result.url).toBe('/uploads/products/main.PNG');
+    expect(result.url).toBe('/uploads/products/secreto/main.png');
+  });
+
+  it('should fallback to products folder when empty', () => {
+    const mockFile = {
+      filename: 'main.png',
+      size: 512,
+      mimetype: 'image/png',
+    };
+    const mockReq = { body: { folder: '' } };
+
+    const result = controller.uploadFile(mockFile, mockReq);
+
+    expect(result.url).toBe('/uploads/products/main.png');
   });
 });
