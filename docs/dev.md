@@ -17,7 +17,7 @@
 docker compose up -d postgres redis
 
 # Backend
-npm run start:dev        # Levanta en :3001 (aplica migraciones + seed si RUN_SEED=true)
+npm run start:dev        # Levanta en :3001 (seed si RUN_SEED=true; migraciones manuales)
 npm run test             # Tests unitarios
 npm run test:e2e         # Tests end-to-end
 npm run prisma:studio    # Explorar DB con Prisma Studio

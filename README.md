@@ -23,23 +23,25 @@ atribución de conversiones (Meta CAPI).
 
 ```
 src/
-├── common/          # Guards, decorators, filters, email, google-calendar, redis
+├── common/          # Guards, decorators, filters, email, google-calendar, redis, audit
 ├── config/          # Variables de entorno (Joi + @nestjs/config)
 ├── database/        # PrismaService global
 ├── modules/
 │   ├── auth/        # JWT, registro, login, refresh, forgot/reset password
-│   ├── users/       # Gestión de usuarios con sort/filtros
-│   ├── services/    # Catálogo de servicios (con category FK)
-│   ├── bookings/    # Reservas con Redis slot locking
-│   ├── payments/    # Wompi (ABONO + SALDO, webhooks, cart checkout)
-│   ├── coupons/     # Cupones de descuento y fidelización
+│   ├── users/       # Gestión de usuarios con sort/filtros + includeInactive
+│   ├── services/    # Catálogo de servicios (con slug + category FK)
+│   ├── bookings/    # Reservas con Redis slot locking (bloqueo GLOBAL de horarios)
+│   ├── payments/    # Wompi (ABONO + SALDO, webhooks idempotentes, cart checkout, pago manual)
+│   ├── coupons/     # Cupones con límites de uso (maxUses/usedCount/perUserLimit)
 │   ├── calendar/    # Google Calendar API
 │   ├── categories/  # Categorías con subcategorías (tree)
 │   ├── products/    # Productos e-commerce (Shop)
 │   ├── cart/        # Carrito server-side (CartItem)
 │   ├── orders/      # Pedidos (Order + OrderItem)
 │   ├── meta/        # Meta Conversions API (CAPI)
-│   └── whatsapp/    # Webhooks Meta Cloud API → IA Bot
+│   ├── health/      # Health check (DB + Redis)
+│   ├── upload/      # Subida de imágenes (multer)
+│   └── whatsapp/    # Webhooks Meta Cloud API → IA Bot (placeholder)
 ├── repositories/    # Repository Pattern (interfaces + implementaciones Prisma)
 ├── app.module.ts
 └── main.ts
@@ -68,7 +70,7 @@ npm run start:dev
 ## Tests
 
 ```bash
-npm test                 # Unit tests (241 tests, 36 suites) — maxWorkers=2 optimizado
+npm test                 # Unit tests (267 tests, 39 suites) — maxWorkers=2 optimizado
 npm run test:cov         # Cobertura
 npm run test:e2e         # End-to-end (requiere PostgreSQL corriendo)
 ```
@@ -96,8 +98,8 @@ Ver `.env.example` para la lista completa. Claves principales:
 
 ## Repositorios Relacionados
 
-- **kamerinos-web** — Frontend Next.js (SSR, checkout, dashboard)
-- **kamerinos-ia** — Bot WhatsApp IA (Python FastAPI + LangChain RAG)
+- **saaspa-frontend** — Frontend Next.js (SSR, checkout, dashboard)
+- **saaspa-IA** — Bot WhatsApp IA (Python, pendiente de crear)
 
 ## Licencia
 
