@@ -37,7 +37,7 @@ import { AuditInterceptor } from './common/audit/audit.interceptor';
     RepositoriesModule,
     EmailModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
-    ServeStaticModule.forRoot({ rootPath: join(__dirname, '..', 'uploads'), serveRoot: '/uploads' }),
+    ServeStaticModule.forRoot({ rootPath: join(process.cwd(), 'uploads'), serveRoot: '/uploads' }),
     AuthModule,
     UsersModule,
     ServicesModule,
