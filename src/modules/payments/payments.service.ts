@@ -341,10 +341,6 @@ export class PaymentsService {
       await this.bookingsRepo.update(bookingId, { status: 'CONFIRMADA' } as any);
     }
 
-    const dateKey = new Date(booking.startTime).toISOString().split('T')[0];
-    const lockKey = `slot:${booking.serviceId}:${dateKey}:${new Date(booking.startTime).toISOString()}`;
-    try { /* redis del handled gracefully */ } catch {}
-
     return { success: true, amount: remaining, totalPaid: Math.round((totalPaid + remaining) * 100) / 100 };
   }
 

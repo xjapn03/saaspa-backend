@@ -2,7 +2,7 @@ import { Controller, Post, UseInterceptors, UploadedFile } from '@nestjs/common'
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { extname, join } from 'path';
+import { extname, join, basename } from 'path';
 import { mkdirSync } from 'fs';
 import { Role } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -43,7 +43,8 @@ export class UploadController {
     },
   }))
   uploadFile(@UploadedFile() file: any) {
-    const url = `/uploads/${(file as any).destination.split('uploads/')[1]}/${file.filename}`;
+    const folder = basename(file.destination);
+    const url = `/uploads/${folder}/${file.filename}`;
     return { url, filename: file.filename, size: file.size, mimetype: file.mimetype };
   }
 }
