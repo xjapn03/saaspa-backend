@@ -106,14 +106,13 @@ describe('BookingsRepository', () => {
   });
 
   describe('findOverlapping', () => {
-    it('should find any booking overlapping the time range', async () => {
+    it('should find any booking overlapping the time range regardless of service', async () => {
       prisma.booking.findFirst.mockResolvedValue(mockRow as any);
-      const result = await repo.findOverlapping('svc-1', mockRow.startTime, mockRow.endTime);
+      const result = await repo.findOverlapping(mockRow.startTime, mockRow.endTime);
       expect(result).toBeDefined();
       expect(prisma.booking.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            serviceId: 'svc-1',
             status: { notIn: ['CANCELADA', 'NO_ASISTIO'] },
             startTime: { lt: mockRow.endTime },
             endTime: { gt: mockRow.startTime },
@@ -124,13 +123,21 @@ describe('BookingsRepository', () => {
   });
 
   describe('findOccupied', () => {
-    it('should return occupied time ranges for a date', async () => {
+    it('should return occupied time ranges for a date across all services', async () => {
       prisma.booking.findMany.mockResolvedValue([
         { startTime: mockRow.startTime, endTime: mockRow.endTime },
       ] as any);
-      const result = await repo.findOccupied('svc-1', '2026-08-15');
+      const result = await repo.findOccupied('2026-08-15');
       expect(result).toHaveLength(1);
       expect(result[0].startTime).toBeDefined();
+      expect(prisma.booking.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            startTime: { gte: expect.any(Date), lte: expect.any(Date) },
+            status: { notIn: ['CANCELADA', 'NO_ASISTIO'] },
+          }),
+        }),
+      );
     });
   });
 

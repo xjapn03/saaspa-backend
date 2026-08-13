@@ -96,7 +96,7 @@ describe('BookingsService', () => {
 
       expect(result.id).toBe('new-booking');
       expect(redis.setex).toHaveBeenCalledWith(
-        expect.stringContaining('slot:svc-1:2026-08-15'),
+        expect.stringContaining('slot:2026-08-15'),
         600,
         expect.any(String),
       );
@@ -310,7 +310,7 @@ describe('BookingsService', () => {
     it('should exclude Redis-locked slots', async () => {
       servicesRepo.findById.mockResolvedValue(mockService as any);
       bookingsRepo.findOccupied.mockResolvedValue([]);
-      redis.keys.mockResolvedValue(['slot:svc-1:2026-08-15:2026-08-15T09:00:00.000Z']);
+      redis.keys.mockResolvedValue(['slot:2026-08-15:2026-08-15T09:00:00.000Z']);
       redis.get.mockResolvedValue(
         JSON.stringify({
           start: '2026-08-15T09:00:00.000Z',

@@ -36,9 +36,9 @@ export class BookingsService {
     const service = await this.servicesRepo.findById(serviceId);
     const duration = service.duration;
 
-    const occupied = await this.bookingsRepo.findOccupied(serviceId, date);
+    const occupied = await this.bookingsRepo.findOccupied(date);
 
-    const lockedKeys = await this.redis.keys(`slot:${serviceId}:${date}:*`);
+    const lockedKeys = await this.redis.keys(`slot:${date}:*`);
     const lockedSlots: { startTime: Date; endTime: Date }[] = [];
     for (const key of lockedKeys) {
       const raw = await this.redis.get(key);
@@ -86,11 +86,11 @@ export class BookingsService {
     const startTime = new Date(dto.startTime);
     const endTime = new Date(startTime.getTime() + service.duration * 60000);
 
-    const overlap = await this.bookingsRepo.findOverlapping(dto.serviceId, startTime, endTime);
+    const overlap = await this.bookingsRepo.findOverlapping(startTime, endTime);
     if (overlap) throw new ConflictException('El horario se cruza con otra cita reservada');
 
     const dateKey = startTime.toISOString().split('T')[0];
-    const lockKey = `slot:${dto.serviceId}:${dateKey}:${startTime.toISOString()}`;
+    const lockKey = `slot:${dateKey}:${startTime.toISOString()}`;
 
     const lockValue = JSON.stringify({ start: startTime.toISOString(), end: endTime.toISOString() });
     await this.redis.setex(lockKey, LOCK_TTL, lockValue);
@@ -111,7 +111,7 @@ export class BookingsService {
       throw new BadRequestException('Solo citas pendientes pueden confirmarse');
     }
     const dateKey = new Date(booking.startTime).toISOString().split('T')[0];
-    const lockKey = `slot:${booking.serviceId}:${dateKey}:${new Date(booking.startTime).toISOString()}`;
+    const lockKey = `slot:${dateKey}:${new Date(booking.startTime).toISOString()}`;
     try { await this.redis.del(lockKey); } catch {}
 
     const updated = await this.bookingsRepo.update(id, { status: 'CONFIRMADA' } as any);
@@ -155,7 +155,7 @@ export class BookingsService {
     }
 
     const dateKey = new Date(booking.startTime).toISOString().split('T')[0];
-    const lockKey = `slot:${booking.serviceId}:${dateKey}:${new Date(booking.startTime).toISOString()}`;
+    const lockKey = `slot:${dateKey}:${new Date(booking.startTime).toISOString()}`;
     try { await this.redis.del(lockKey); } catch {}
 
     return this.bookingsRepo.update(id, { status: 'CANCELADA' } as any);
@@ -202,7 +202,7 @@ export class BookingsService {
     const startTime = new Date(newStartTime);
     const endTime = new Date(startTime.getTime() + service.duration * 60000);
 
-    const overlap = await this.bookingsRepo.findOverlapping(oldBooking.serviceId, startTime, endTime);
+    const overlap = await this.bookingsRepo.findOverlapping(startTime, endTime);
     if (overlap && overlap.id !== id) {
       throw new ConflictException('El nuevo horario se cruza con otra cita reservada');
     }
@@ -219,11 +219,11 @@ export class BookingsService {
     }
 
     const oldDateKey = new Date(oldBooking.startTime).toISOString().split('T')[0];
-    const oldLockKey = `slot:${oldBooking.serviceId}:${oldDateKey}:${new Date(oldBooking.startTime).toISOString()}`;
+    const oldLockKey = `slot:${oldDateKey}:${new Date(oldBooking.startTime).toISOString()}`;
     try { await this.redis.del(oldLockKey); } catch {}
 
     const dateKey = startTime.toISOString().split('T')[0];
-    const lockKey = `slot:${oldBooking.serviceId}:${dateKey}:${startTime.toISOString()}`;
+    const lockKey = `slot:${dateKey}:${startTime.toISOString()}`;
     const lockValue = JSON.stringify({ start: startTime.toISOString(), end: endTime.toISOString() });
     try { await this.redis.setex(lockKey, LOCK_TTL, lockValue); } catch {}
 

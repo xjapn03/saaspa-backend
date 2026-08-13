@@ -46,4 +46,17 @@ describe('UploadController', () => {
 
     expect(result.url).toBe('/uploads/avatars/avatar.png');
   });
+
+  it('should extract folder from Windows-style destination paths', () => {
+    const mockFile = {
+      filename: 'main.PNG',
+      size: 512,
+      mimetype: 'image/png',
+      destination: 'S:\\Proyects\\KAMERINOS\\saaspa-backend\\uploads\\products',
+    };
+
+    const result = controller.uploadFile(mockFile);
+
+    expect(result.url).toBe('/uploads/products/main.PNG');
+  });
 });

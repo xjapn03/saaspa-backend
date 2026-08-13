@@ -92,10 +92,9 @@ export class BookingsRepository extends IBookingsRepository {
     });
   }
 
-  async findOverlapping(serviceId: string, startTime: Date, endTime: Date) {
+  async findOverlapping(startTime: Date, endTime: Date) {
     return this.prisma.booking.findFirst({
       where: {
-        serviceId,
         status: { notIn: ['CANCELADA', 'NO_ASISTIO'] },
         startTime: { lt: endTime },
         endTime: { gt: startTime },
@@ -104,14 +103,13 @@ export class BookingsRepository extends IBookingsRepository {
     });
   }
 
-  async findOccupied(serviceId: string, date: string) {
+  async findOccupied(date: string) {
     const [yyyy, mm, dd] = date.split('-').map(Number);
     const dayStart = new Date(yyyy, mm - 1, dd, 0, 0, 0);
     const dayEnd = new Date(yyyy, mm - 1, dd, 23, 59, 59, 999);
 
     const bookings = await this.prisma.booking.findMany({
       where: {
-        serviceId,
         startTime: { gte: dayStart, lte: dayEnd },
         status: { notIn: ['CANCELADA', 'NO_ASISTIO'] },
       },
