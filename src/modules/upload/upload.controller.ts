@@ -21,6 +21,16 @@ function normalizeFolder(raw: unknown): string {
   return segments.join('/') || 'products';
 }
 
+function extractFolder(req: any): string {
+  const raw = req?.query?.folder ?? req?.body?.folder;
+  return normalizeFolder(raw);
+}
+
+function extractImageType(req: any): string | undefined {
+  const value = req?.query?.imageType ?? req?.body?.imageType;
+  return value ? String(value) : undefined;
+}
+
 @ApiTags('Upload')
 @ApiBearerAuth()
 @Controller('upload')
@@ -42,7 +52,7 @@ export class UploadController {
   @UseInterceptors(FileInterceptor('file', {
     storage: diskStorage({
       destination: (_req, file, cb) => {
-        const folder = normalizeFolder((_req as any).body?.folder);
+        const folder = extractFolder(_req);
         const dir = join(process.cwd(), 'uploads', folder);
         try {
           mkdirSync(dir, { recursive: true });
@@ -52,7 +62,7 @@ export class UploadController {
         cb(null, dir);
       },
       filename: (_req, file, cb) => {
-        const imageType = (_req as any).body?.imageType;
+        const imageType = extractImageType(_req);
         const ext = extname(file.originalname).toLowerCase();
         if (imageType === 'main') {
           cb(null, `main${ext}`);
@@ -72,7 +82,7 @@ export class UploadController {
     },
   }))
   uploadFile(@UploadedFile() file: any, @Req() req: any) {
-    const folder = normalizeFolder(req.body?.folder);
+    const folder = extractFolder(req);
     const url = `/uploads/${folder}/${file.filename}`;
     return { url, filename: file.filename, size: file.size, mimetype: file.mimetype };
   }

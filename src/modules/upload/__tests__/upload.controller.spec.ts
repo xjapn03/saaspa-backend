@@ -23,7 +23,7 @@ describe('UploadController', () => {
       size: 1024,
       mimetype: 'image/jpeg',
     };
-    const mockReq = { body: { folder: 'products' } };
+    const mockReq = { query: { folder: 'products' } };
 
     const result = controller.uploadFile(mockFile, mockReq);
 
@@ -33,17 +33,30 @@ describe('UploadController', () => {
     expect(result.mimetype).toBe('image/jpeg');
   });
 
-  it('should handle nested folder per product', () => {
+  it('should handle nested folder per product from query params', () => {
     const mockFile = {
       filename: 'main.jpg',
       size: 2048,
       mimetype: 'image/jpeg',
     };
-    const mockReq = { body: { folder: 'products/crema-hidratante' } };
+    const mockReq = { query: { folder: 'products/crema-hidratante', imageType: 'main' } };
 
     const result = controller.uploadFile(mockFile, mockReq);
 
     expect(result.url).toBe('/uploads/products/crema-hidratante/main.jpg');
+  });
+
+  it('should fallback to body folder when query is not provided', () => {
+    const mockFile = {
+      filename: 'gallery-1.jpg',
+      size: 1024,
+      mimetype: 'image/jpeg',
+    };
+    const mockReq = { body: { folder: 'products/serum-vitamina-c' } };
+
+    const result = controller.uploadFile(mockFile, mockReq);
+
+    expect(result.url).toBe('/uploads/products/serum-vitamina-c/gallery-1.jpg');
   });
 
   it('should sanitize unsafe folder segments', () => {
@@ -52,7 +65,7 @@ describe('UploadController', () => {
       size: 512,
       mimetype: 'image/png',
     };
-    const mockReq = { body: { folder: 'products/../../secreto' } };
+    const mockReq = { query: { folder: 'products/../../secreto' } };
 
     const result = controller.uploadFile(mockFile, mockReq);
 
@@ -65,7 +78,7 @@ describe('UploadController', () => {
       size: 512,
       mimetype: 'image/png',
     };
-    const mockReq = { body: { folder: '' } };
+    const mockReq = { query: { folder: '' } };
 
     const result = controller.uploadFile(mockFile, mockReq);
 
