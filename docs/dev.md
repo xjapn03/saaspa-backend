@@ -39,7 +39,7 @@ npx prisma generate                      # Regenerar cliente
 | 1 | Auth        | **Completo** | `POST /api/auth/register`, `/login`, `/refresh`, `/forgot-password`, `/reset-password`, `/logout` |
 | 2 | Users       | **Completo** | `GET /me`, `PATCH /me`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` |
 | 3 | Services    | **Completo** | `GET /`, `GET /public`, `GET /public/:slug`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` — slug único (auto-generado del nombre) |
-| 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reopen`, `PATCH /:id/reschedule`, `GET /:id/balance` — bloqueo de solapamiento + completa solo con saldo pagado |
+| 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reopen`, `PATCH /:id/reschedule`, `GET /:id/balance` — bloqueo GLOBAL de horarios (agenda única) + completa solo con saldo pagado |
 | 5 | Payments    | **Completo** | `POST /init` (ABONO/SALDO), `POST /init-cart`, `POST /webhook` (idempotente), `POST /manual` (efectivo/transferencia), `GET /transactions` (admin, trazabilidad con filtros), `GET /revenue?month=` (admin), `GET /:bookingId/status` |
 | 6 | Categories  | **Completo** | `GET /` (includeInactive), `GET /tree`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
 | 7 | Products    | **Completo** | `GET /` (público + filtros), `GET /admin/all`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
@@ -253,7 +253,7 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (264 tests, 39 suites) — no requiere BD
+npm test              # Unit tests (267 tests, 39 suites) — no requiere BD
 npm run test:cov      # Cobertura
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 ```
@@ -284,7 +284,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (39 suites, 264 tests)
+### Inventario de suites (39 suites, 267 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
