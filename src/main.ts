@@ -4,6 +4,7 @@ import { execSync } from 'child_process';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import * as compression from 'compression';
 import { PrismaClient } from '@prisma/client';
@@ -15,10 +16,14 @@ async function bootstrap() {
 
   await runSeedIfEnabled(logger);
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
 
   app.setGlobalPrefix(config.get<string>('API_PREFIX', 'api'));
+
+  // Detrás de Nginx/Cloudflare: confiar en X-Forwarded-For para que el
+  // Throttler, los logs y el AuditLog registren la IP real del cliente.
+  app.set('trust proxy', true);
 
   app.use(helmet());
   app.use(compression());
