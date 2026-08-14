@@ -1,6 +1,10 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# El VPS tiene 4 GB de RAM: subir el límite de heap para que nest build
+# (tsc) no explote con OOM al compilar (sharp añade tipos pesados).
+ENV NODE_OPTIONS=--max-old-space-size=2560
+
 COPY package*.json ./
 RUN npm ci
 
