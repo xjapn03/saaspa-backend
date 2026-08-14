@@ -52,10 +52,12 @@ npx prisma generate                      # Regenerar cliente
 | 14| Upload      | **Completo** | `POST /api/upload` — imágenes con multer |
 | 15| Throttler   | **Completo** | Rate limiting global (100 req/min) |
 | 16| Orders      | **Completo** | `GET /` (admin, con filtros: search/status/dateFrom/dateTo), `GET /my` (cliente), `PATCH /:id/status` (admin) — auto-creados desde webhook de pago de carrito |
-| 17| Whatsapp    | Pendiente   | Meta API, IA Bot |
+| 17| Whatsapp    | **Completo** | `GET/POST /api/whatsapp/webhook` — verificación (GET: hub.mode + hub.verify_token → 200 + challenge / 403) + recepción (POST → 200) + recepcionista con menú interactivo (ConversationState). IA conversacional pendiente en `saaspa-IA` |
 | 18| Audit       | **Completo** | `GET /audit-logs` (admin) — registro de mutaciones vía interceptor global |
 
 > **Paginación:** Todos los endpoints `GET /` list retornan `PaginatedResult<T>` con `{ data, total, page, limit, totalPages }`. Default limit: 20. Los repositorios usan `Promise.all([findMany({ skip, take }), count()])` en paralelo.
+
+> **Producción (un solo dominio):** `https://kamerinos.sandrapinzonsaludybelleza.com.co` sirve frontend + backend vía proxy `/api/*` en Nginx. Webhook WhatsApp: `https://kamerinos.sandrapinzonsaludybelleza.com.co/api/whatsapp/webhook` (verify token `kamerinos_webhook_2026`).
 
 ## Modelo de Datos
 
