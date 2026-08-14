@@ -20,6 +20,7 @@ describe('UsersRepository', () => {
     description: null,
     role: 'CLIENTE' as Role,
     isActive: true,
+    emailVerified: false,
     refreshToken: 'refresh-token-abc',
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
