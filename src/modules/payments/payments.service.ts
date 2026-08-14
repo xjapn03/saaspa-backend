@@ -234,13 +234,15 @@ export class PaymentsService {
           }
         }
         if (user?.email || metadata.shippingEmail) {
-          this.emailService.sendPaymentReceipt({
+          this.emailService.sendOrderReceipt({
             clientName: metadata.shippingName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Cliente',
             clientEmail: metadata.shippingEmail || user?.email || '',
-            serviceName: `Compra — ${metadata.items.length} producto(s)`,
-            amount: Number(payment.amount || 0),
+            orderId: orderId || payment.id,
+            items: metadata.items.map((i: any) => ({ name: i.name, price: i.price, quantity: i.quantity })),
+            total: Number(payment.amount || 0),
+            shippingAddress: metadata.shippingAddress || 'Pendiente',
+            shippingCity: metadata.shippingCity || 'Pendiente',
             paymentReference: payment.wompiReference || '',
-            bookingId: payment.id,
           });
         }
       }
