@@ -65,8 +65,13 @@ export class AuthService {
 
   async verifyEmail(token: string) {
     const verificationToken = await this.prisma.verificationToken.findUnique({ where: { token } });
-    if (!verificationToken || verificationToken.expiresAt < new Date()) {
-      throw new UnauthorizedException('El enlace de verificación no es válido o ha expirado.');
+
+    if (!verificationToken) {
+      return { verified: true, message: 'Tu cuenta ya está verificada. Ya puedes iniciar sesión.' };
+    }
+
+    if (verificationToken.expiresAt < new Date()) {
+      throw new UnauthorizedException('El enlace de verificación ha expirado. Solicita uno nuevo.');
     }
 
     await this.usersRepo.update(verificationToken.userId, { emailVerified: true } as any);
