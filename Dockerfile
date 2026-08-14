@@ -7,7 +7,6 @@ RUN npm ci
 COPY . .
 RUN npx prisma generate
 RUN npm run build
-RUN npm prune --production
 
 FROM node:20-alpine
 WORKDIR /app
@@ -15,13 +14,16 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV HOME=/tmp
 
+RUN apk add --no-cache openssl
+
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma
 
 # No ejecutar como root (seguridad)
-RUN mkdir -p /app/uploads && chown node:node /app/uploads
+RUN mkdir -p /app/uploads \
+ && chown -R node:node /app/uploads /app/node_modules/@prisma /app/node_modules/.prisma
 USER node
 
 EXPOSE 3001

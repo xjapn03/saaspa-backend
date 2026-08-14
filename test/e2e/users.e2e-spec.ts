@@ -32,11 +32,11 @@ describe('Users (e2e)', () => {
     await app.init();
     prisma = app.get(PrismaService);
 
-    await prisma.$executeRawUnsafe('DELETE FROM "users" WHERE email != \'admin@sandrapsaludybelleza.com.co\'');
+    await prisma.$executeRawUnsafe('DELETE FROM "users" WHERE email != \'admin@sandrapinzonsaludybelleza.com.co\'');
 
     const adminLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ email: 'admin@sandrapsaludybelleza.com.co', password: 'admin123' });
+      .send({ email: 'admin@sandrapinzonsaludybelleza.com.co', password: 'admin123' });
     adminToken = adminLogin.body.accessToken;
 
     await request(app.getHttpServer()).post('/api/auth/register').send({
@@ -64,7 +64,7 @@ describe('Users (e2e)', () => {
 
       // Assert
       expect(response.status).toBe(200);
-      expect(response.body.email).toBe('admin@sandrapsaludybelleza.com.co');
+      expect(response.body.email).toBe('admin@sandrapinzonsaludybelleza.com.co');
       expect(response.body.role).toBe('ADMIN');
       expect(response.body.passwordHash).toBeUndefined();
     });
