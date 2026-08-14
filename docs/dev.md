@@ -36,10 +36,10 @@ npx prisma generate                      # Regenerar cliente
 
 | # | Módulo      | Estado       | Endpoints                                  |
 |---|-------------|-------------|--------------------------------------------|
-| 1 | Auth        | **Completo** | `POST /api/auth/register`, `/login`, `/refresh`, `/forgot-password`, `/reset-password`, `/logout` |
+| 1 | Auth        | **Completo** | `POST /api/auth/register` (envía email de verificación), `/login`, `/refresh`, `/logout`, `/forgot-password`, `/reset-password`, `GET /verify-email/:token` |
 | 2 | Users       | **Completo** | `GET /me`, `PATCH /me`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` |
 | 3 | Services    | **Completo** | `GET /`, `GET /public`, `GET /public/:slug`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` — slug único (auto-generado del nombre) |
-| 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reopen`, `PATCH /:id/reschedule`, `GET /:id/balance` — bloqueo GLOBAL de horarios (agenda única) + completa solo con saldo pagado |
+| 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reopen`, `PATCH /:id/reschedule`, `GET /:id/balance`, `POST /admin/sync-calendar` — bloqueo GLOBAL de horarios (agenda única), completa solo con saldo pagado, Google Calendar síncrono con reintento (`calendarSync`) |
 | 5 | Payments    | **Completo** | `POST /init` (ABONO/SALDO), `POST /init-cart`, `POST /webhook` (idempotente), `POST /manual` (efectivo/transferencia), `GET /transactions` (admin, trazabilidad con filtros), `GET /revenue?month=` (admin), `GET /:bookingId/status` |
 | 6 | Categories  | **Completo** | `GET /` (includeInactive), `GET /tree`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
 | 7 | Products    | **Completo** | `GET /` (público + filtros), `GET /admin/all`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
@@ -47,11 +47,11 @@ npx prisma generate                      # Regenerar cliente
 | 9 | Coupons     | **Completo** | CRUD + `POST /validate` + `GET /:id/usages` — límites de uso y trazabilidad por usuario |
 | 10| Calendar    | **Completo** | Google Calendar sync (common/google-calendar) |
 | 11| Meta        | **Completo** | Meta CAPI (Schedule + Purchase) |
-| 12| Email       | **Completo** | SendGrid transaccional (booking receipt + payment receipt) |
+| 12| Email       | **Completo** | SendGrid transaccional — welcome/verificación, password reset, booking receipt, payment receipt, order receipt y order status (replyTo configurable) |
 | 13| Health      | **Completo** | `GET /api/health` — DB + Redis check |
-| 14| Upload      | **Completo** | `POST /api/upload` — imágenes con multer |
+| 14| Upload      | **Completo** | `POST /api/upload` — imágenes con multer; organizadas por producto: `products/<slug>/main.jpg` + `gallery-<ts>.jpg` (folder/imageType por query) |
 | 15| Throttler   | **Completo** | Rate limiting global (100 req/min) |
-| 16| Orders      | **Completo** | `GET /` (admin, con filtros: search/status/dateFrom/dateTo), `GET /my` (cliente), `PATCH /:id/status` (admin) — auto-creados desde webhook de pago de carrito |
+| 16| Orders      | **Completo** | `GET /` (admin, con filtros: search/status/dateFrom/dateTo), `GET /my` (cliente), `PATCH /:id/status` (admin) — auto-creados desde webhook de pago de carrito + emails de estado |
 | 17| Whatsapp    | **Completo** | `GET/POST /api/whatsapp/webhook` — verificación (GET: hub.mode + hub.verify_token → 200 + challenge / 403) + recepción (POST → 200) + recepcionista con menú interactivo (ConversationState). IA conversacional pendiente en `saaspa-IA` |
 | 18| Audit       | **Completo** | `GET /audit-logs` (admin) — registro de mutaciones vía interceptor global |
 
@@ -255,7 +255,7 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (267 tests, 39 suites) — no requiere BD
+npm test              # Unit tests (287 tests, 42 suites) — no requiere BD
 npm run test:cov      # Cobertura
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 ```
@@ -286,7 +286,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (39 suites, 267 tests)
+### Inventario de suites (42 suites, 287 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
