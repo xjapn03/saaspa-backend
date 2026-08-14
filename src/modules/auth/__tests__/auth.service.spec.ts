@@ -318,12 +318,31 @@ describe('AuthService', () => {
       expect(prisma.verificationToken.delete).toHaveBeenCalledWith({ where: { id: 'vt-1' } });
     });
 
-    it('should throw UnauthorizedException when token is invalid or expired', async () => {
+    it('should be idempotent and return success when token already consumed', async () => {
       // Arrange
       prisma.verificationToken.findUnique.mockResolvedValue(null);
 
+      // Act
+      const result = await service.verifyEmail('used-token');
+
+      // Assert
+      expect(result.verified).toBe(true);
+      expect(usersRepo.update).not.toHaveBeenCalled();
+      expect(prisma.verificationToken.delete).not.toHaveBeenCalled();
+    });
+
+    it('should throw UnauthorizedException when token is expired', async () => {
+      // Arrange
+      prisma.verificationToken.findUnique.mockResolvedValue({
+        id: 'vt-expired',
+        userId: 'user-1',
+        token: 'expired-token',
+        expiresAt: new Date(Date.now() - 1000),
+        createdAt: new Date(),
+      } as any);
+
       // Act & Assert
-      await expect(service.verifyEmail('bad-token')).rejects.toThrow(UnauthorizedException);
+      await expect(service.verifyEmail('expired-token')).rejects.toThrow(UnauthorizedException);
     });
   });
 });
