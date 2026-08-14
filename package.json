@@ -49,7 +49,9 @@
     "passport-jwt": "^4.0.1",
     "prisma": "^5.12.0",
     "reflect-metadata": "^0.2.1",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.24",
@@ -74,9 +76,7 @@
     "supertest": "^6.3.4",
     "ts-jest": "^29.1.0",
     "ts-loader": "^9.5.0",
-    "ts-node": "^10.9.2",
-    "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.4.0"
+    "tsconfig-paths": "^4.2.0"
   },
   "overrides": {
     "js-yaml": "5.2.3"
@@ -91,7 +91,12 @@
     "testRegex": ".*\\.spec\\.ts$",
     "maxWorkers": 2,
     "transform": {
-      "^.+\\.(t|j)s$": ["ts-jest", { "isolatedModules": true }]
+      "^.+\\.(t|j)s$": [
+        "ts-jest",
+        {
+          "isolatedModules": true
+        }
+      ]
     },
     "collectCoverageFrom": [
       "**/*.service.ts",

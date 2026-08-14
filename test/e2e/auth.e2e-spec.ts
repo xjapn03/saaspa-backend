@@ -31,7 +31,7 @@ describe('Auth (e2e)', () => {
   });
 
   beforeEach(async () => {
-    await prisma.$executeRawUnsafe('DELETE FROM "users" WHERE email != \'admin@kamerinosspa.com\'');
+    await prisma.$executeRawUnsafe('DELETE FROM "users" WHERE email != \'admin@sandrapsaludybelleza.com.co\'');
   });
 
   afterAll(async () => {
@@ -67,7 +67,7 @@ describe('Auth (e2e)', () => {
     it('should return 401 when email already exists', async () => {
       // Arrange
       const body = {
-        email: 'admin@kamerinosspa.com',
+        email: 'admin@sandrapsaludybelleza.com.co',
         firstName: 'Dup',
         lastName: 'User',
         password: 'password123',
@@ -96,7 +96,7 @@ describe('Auth (e2e)', () => {
     it('should login admin (seed) and return tokens (200)', async () => {
       // Arrange
       const body = {
-        email: 'admin@kamerinosspa.com',
+        email: 'admin@sandrapsaludybelleza.com.co',
         password: 'admin123',
       };
 
@@ -107,14 +107,14 @@ describe('Auth (e2e)', () => {
       expect(response.status).toBe(200);
       expect(response.body.accessToken).toBeDefined();
       expect(response.body.refreshToken).toBeDefined();
-      expect(response.body.user.email).toBe('admin@kamerinosspa.com');
+      expect(response.body.user.email).toBe('admin@sandrapsaludybelleza.com.co');
       expect(response.body.user.role).toBe('ADMIN');
     });
 
     it('should return 401 with wrong password', async () => {
       // Arrange
       const body = {
-        email: 'admin@kamerinosspa.com',
+        email: 'admin@sandrapsaludybelleza.com.co',
         password: 'wrongpassword',
       };
 
@@ -145,7 +145,7 @@ describe('Auth (e2e)', () => {
       // Arrange — first login to get a valid refresh token
       const loginRes = await request(app.getHttpServer())
         .post('/api/auth/login')
-        .send({ email: 'admin@kamerinosspa.com', password: 'admin123' });
+        .send({ email: 'admin@sandrapsaludybelleza.com.co', password: 'admin123' });
       const refreshToken = loginRes.body.refreshToken;
 
       // Act
@@ -187,7 +187,7 @@ describe('Auth (e2e)', () => {
       // Arrange — login to get tokens
       const loginRes = await request(app.getHttpServer())
         .post('/api/auth/login')
-        .send({ email: 'admin@kamerinosspa.com', password: 'admin123' });
+        .send({ email: 'admin@sandrapsaludybelleza.com.co', password: 'admin123' });
       const accessToken = loginRes.body.accessToken;
       const refreshToken = loginRes.body.refreshToken;
 
@@ -205,7 +205,7 @@ describe('Auth (e2e)', () => {
       // Arrange — login, then logout to revoke the access token
       const loginRes = await request(app.getHttpServer())
         .post('/api/auth/login')
-        .send({ email: 'admin@kamerinosspa.com', password: 'admin123' });
+        .send({ email: 'admin@sandrapsaludybelleza.com.co', password: 'admin123' });
       const accessToken = loginRes.body.accessToken;
 
       await request(app.getHttpServer())
@@ -226,7 +226,7 @@ describe('Auth (e2e)', () => {
       // Arrange — login, then logout with refresh token to revoke it
       const loginRes = await request(app.getHttpServer())
         .post('/api/auth/login')
-        .send({ email: 'admin@kamerinosspa.com', password: 'admin123' });
+        .send({ email: 'admin@sandrapsaludybelleza.com.co', password: 'admin123' });
       const accessToken = loginRes.body.accessToken;
       const refreshToken = loginRes.body.refreshToken;
 

@@ -21,6 +21,7 @@ COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma
 
 # No ejecutar como root (seguridad)
+RUN mkdir -p /app/uploads && chown node:node /app/uploads
 USER node
 
 EXPOSE 3001

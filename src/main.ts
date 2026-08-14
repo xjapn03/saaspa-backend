@@ -81,7 +81,7 @@ async function runSeedIfEnabled(logger: Logger) {
   const prisma = new PrismaClient();
   try {
     const adminExists = await prisma.user.findUnique({
-      where: { email: 'admin@kamerinosspa.com' },
+      where: { email: 'admin@sandrapsaludybelleza.com.co' },
     });
 
     if (adminExists) {
