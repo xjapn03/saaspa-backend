@@ -2,10 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { OrdersService } from '../orders.service';
 import { IOrdersRepository } from '../../../repositories/interfaces/orders.repository';
+import { EmailService } from '../../../common/email/email.service';
 
 describe('OrdersService', () => {
   let service: OrdersService;
   let repo: DeepMockProxy<IOrdersRepository>;
+  let emailService: DeepMockProxy<EmailService>;
 
   const mockOrder = {
     id: 'order-1',
@@ -26,8 +28,13 @@ describe('OrdersService', () => {
 
   beforeEach(async () => {
     repo = mockDeep<IOrdersRepository>();
+    emailService = mockDeep<EmailService>();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [OrdersService, { provide: IOrdersRepository, useValue: repo }],
+      providers: [
+        OrdersService,
+        { provide: IOrdersRepository, useValue: repo },
+        { provide: EmailService, useValue: emailService },
+      ],
     }).compile();
     service = module.get<OrdersService>(OrdersService);
   });
@@ -81,11 +88,24 @@ describe('OrdersService', () => {
   });
 
   describe('updateStatus', () => {
-    it('should delegate status update to repository', async () => {
+    it('should delegate status update to repository and send status email', async () => {
       repo.updateStatus.mockResolvedValue({ ...mockOrder, status: 'ENVIADO' });
       const result = await service.updateStatus('order-1', 'ENVIADO');
       expect(result.status).toBe('ENVIADO');
       expect(repo.updateStatus).toHaveBeenCalledWith('order-1', 'ENVIADO');
+      expect(emailService.sendOrderStatus).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 'order-1',
+          status: 'Enviado',
+          clientEmail: 'maria@test.com',
+        }),
+      );
+    });
+
+    it('should not send email when order has no recipient email', async () => {
+      repo.updateStatus.mockResolvedValue({ ...mockOrder, shippingEmail: '', user: undefined } as any);
+      await service.updateStatus('order-1', 'CANCELADO');
+      expect(emailService.sendOrderStatus).not.toHaveBeenCalled();
     });
   });
 });
