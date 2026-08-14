@@ -45,4 +45,8 @@ export default () => ({
     url: process.env.IA_BOT_URL || 'http://localhost:8000',
     apiKey: process.env.IA_BOT_API_KEY,
   },
+
+  frontend: {
+    url: process.env.FRONTEND_URL || 'https://kamerinos.sandrapinzonsaludybelleza.com.co',
+  },
 });
