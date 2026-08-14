@@ -36,7 +36,7 @@ npx prisma generate                      # Regenerar cliente
 
 | # | Módulo      | Estado       | Endpoints                                  |
 |---|-------------|-------------|--------------------------------------------|
-| 1 | Auth        | **Completo** | `POST /api/auth/register` (envía email de verificación), `/login`, `/refresh`, `/logout`, `/forgot-password`, `/reset-password`, `GET /verify-email/:token` |
+| 1 | Auth        | **Completo** | `POST /api/auth/register` (envía email de verificación), `/login`, `/refresh`, `/logout`, `/forgot-password`, `/reset-password`, `GET /verify-email/:token` (idempotente: re-click responde "ya verificada") |
 | 2 | Users       | **Completo** | `GET /me`, `PATCH /me`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` |
 | 3 | Services    | **Completo** | `GET /`, `GET /public`, `GET /public/:slug`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` — slug único (auto-generado del nombre) |
 | 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reopen`, `PATCH /:id/reschedule`, `GET /:id/balance`, `POST /admin/sync-calendar` — bloqueo GLOBAL de horarios (agenda única), completa solo con saldo pagado, Google Calendar síncrono con reintento (`calendarSync`) |
@@ -158,6 +158,20 @@ npx prisma migrate deploy                      # aplica migraciones pendientes
 npm run start:dev                              # levanta la API (seed si RUN_SEED=true)
 ```
 
+### Prisma en la imagen Docker (alpine)
+
+- La imagen final es `node:20-alpine`. El generator de `schema.prisma` incluye
+  `binaryTargets = ["native", "linux-musl-openssl-3.0.x"]` para que el Query
+  Engine del cliente cargue correctamente (con `openssl` instalado en la imagen).
+- `ts-node` y `typescript` están en **`dependencies`** (no devDependencies):
+  `npm prune --production` los eliminaría y el seed (`npx ts-node prisma/seed.ts`)
+  no correría en producción.
+- El `Dockerfile` copia **`tsconfig.json`** a la imagen final: `ts-node` lo
+  necesita para compilar `seed.ts` (target ES2021, soporta `async/await`).
+- El volumen de uploads (`/app/uploads`) se crea con `chown node:node` y los
+  directorios de Prisma (`node_modules/@prisma`, `.prisma`) quedan escribibles
+  por el usuario `node` (no-root).
+
 ## Auto-Seed (RUN_SEED)
 
 El seed solo se ejecuta si `RUN_SEED=true` en el `.env` **y** el admin no existe en la DB.
@@ -174,7 +188,7 @@ RUN_SEED=false
 ```
 
 El seed usa `upsert` en `prisma/seed.ts`, así que es idempotente:
-- Crea admin `admin@kamerinosspa.com` / `admin123` si no existe
+- Crea admin `admin@sandrapinzonsaludybelleza.com.co` / `admin123` si no existe
 - Crea 8 categorías (Masajes, Faciales, Uñas, Depilación, Corporal, Cremas, Sérums, Mascarillas)
 - Crea 8 servicios con `categoryId` FK apuntando a las categorías
 - Crea 8 productos con `slug`, `sku`, `sponsor`, `categoryId` FK
@@ -255,7 +269,7 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (287 tests, 42 suites) — no requiere BD
+npm test              # Unit tests (288 tests, 42 suites) — no requiere BD
 npm run test:cov      # Cobertura
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 ```
@@ -286,7 +300,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (42 suites, 287 tests)
+### Inventario de suites (42 suites, 288 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
