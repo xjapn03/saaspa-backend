@@ -20,6 +20,7 @@ describe('UsersRepository', () => {
     description: null,
     role: 'CLIENTE' as Role,
     isActive: true,
+    emailVerified: false,
     refreshToken: 'refresh-token-abc',
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
@@ -35,18 +36,15 @@ describe('UsersRepository', () => {
 
   describe('findAll', () => {
     it('should return only active users without passwordHash or refreshToken', async () => {
-      // Arrange
       prisma.user.findMany.mockResolvedValue([mockUser] as any);
-
-      // Act
+      prisma.user.count.mockResolvedValue(1);
       const result = await repo.findAll();
-
-      // Assert
-      expect(result).toHaveLength(1);
-      expect(prisma.user.findMany).toHaveBeenCalledWith({
+      expect(result.data).toHaveLength(1);
+      expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
         where: { isActive: true },
         select: expect.objectContaining({ email: true }),
-      });
+        orderBy: expect.any(Object),
+      }));
     });
   });
 

@@ -4,6 +4,7 @@ import { execSync } from 'child_process';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import * as compression from 'compression';
 import { PrismaClient } from '@prisma/client';
@@ -13,30 +14,32 @@ import { ConfigService } from '@nestjs/config';
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
-  if (process.env.NODE_ENV !== 'test') {
-    try {
-      logger.log('Aplicando migraciones pendientes...');
-      execSync('npx prisma migrate deploy', { stdio: 'pipe' });
-      logger.log('Migraciones aplicadas.');
-    } catch {
-      logger.warn(
-        'No se pudieron aplicar migraciones. ¿PostgreSQL está corriendo? La API inicia de todos modos.',
-      );
-    }
-  }
-
   await runSeedIfEnabled(logger);
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
 
   app.setGlobalPrefix(config.get<string>('API_PREFIX', 'api'));
 
+  // Detrás de Nginx/Cloudflare: confiar en X-Forwarded-For para que el
+  // Throttler, los logs y el AuditLog registren la IP real del cliente.
+  app.set('trust proxy', true);
+
   app.use(helmet());
   app.use(compression());
 
+  const corsOrigins = (config.get<string>('corsOrigin') || 'http://localhost:3000')
+    .split(',')
+    .map((o: string) => o.trim());
+
   app.enableCors({
-    origin: config.get<string>('CORS_ORIGIN', '*'),
+    origin: (origin: string | undefined, callback: (err: Error | null, allowed?: boolean) => void) => {
+      if (!origin || corsOrigins.includes('*') || corsOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
@@ -78,7 +81,7 @@ async function runSeedIfEnabled(logger: Logger) {
   const prisma = new PrismaClient();
   try {
     const adminExists = await prisma.user.findUnique({
-      where: { email: 'admin@kamerinosspa.com' },
+      where: { email: 'admin@sandrapsaludybelleza.com.co' },
     });
 
     if (adminExists) {

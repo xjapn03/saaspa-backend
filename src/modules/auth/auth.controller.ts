@@ -1,5 +1,6 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, Headers } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, HttpCode, HttpStatus, Headers } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -21,6 +22,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Iniciar sesión' })
@@ -50,5 +52,36 @@ export class AuthController {
   ) {
     const accessToken = authorization?.replace('Bearer ', '');
     await this.authService.logout(accessToken, refreshToken);
+  }
+
+  @Public()
+  @Get('verify-email/:token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verificar cuenta con token enviado por email' })
+  @ApiResponse({ status: 200, description: 'Cuenta verificada' })
+  @ApiResponse({ status: 401, description: 'Token inválido o expirado' })
+  verifyEmail(@Param('token') token: string) {
+    return this.authService.verifyEmail(token);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Solicitar recuperación de contraseña' })
+  @ApiResponse({ status: 200, description: 'Instrucciones enviadas si el email existe' })
+  forgotPassword(@Body('email') email: string) {
+    return this.authService.forgotPassword(email);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Restablecer contraseña con token' })
+  @ApiResponse({ status: 200, description: 'Contraseña actualizada' })
+  @ApiResponse({ status: 401, description: 'Token inválido o expirado' })
+  resetPassword(@Body('token') token: string, @Body('newPassword') newPassword: string) {
+    return this.authService.resetPassword(token, newPassword);
   }
 }

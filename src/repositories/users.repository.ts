@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
-import { IUsersRepository } from './interfaces/users.repository';
+import { IUsersRepository, UserFilters } from './interfaces/users.repository';
+import { paginated } from '../common/interfaces/paginated-result';
 
 const userSelect = {
   id: true,
@@ -23,11 +24,26 @@ export class UsersRepository extends IUsersRepository {
     super();
   }
 
-  async findAll() {
-    return this.prisma.user.findMany({
-      where: { isActive: true },
-      select: userSelect,
-    });
+  async findAll(filters: UserFilters = {}) {
+    const where: Prisma.UserWhereInput = filters.includeInactive ? {} : { isActive: true };
+    if (filters.role) where.role = filters.role as any;
+    const orderBy: Prisma.UserOrderByWithRelationInput = {};
+    const sortBy = filters.sortBy || 'firstName';
+    const order = filters.order || 'asc';
+    if (sortBy === 'firstName') orderBy.firstName = order;
+    else if (sortBy === 'createdAt') orderBy.createdAt = order;
+    else orderBy.firstName = 'asc';
+
+    const page = filters.page || 1;
+    const limit = filters.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.user.findMany({ where, select: userSelect, orderBy, skip, take: limit }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return paginated(data, total, page, limit);
   }
 
   async findById(id: string) {

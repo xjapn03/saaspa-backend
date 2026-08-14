@@ -1,10 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from '../auth.service';
 import { IUsersRepository } from '../../../repositories/interfaces/users.repository';
+import { PrismaService } from '../../../database/prisma.service';
 import { TokenBlacklistService } from '../../../common/redis/token-blacklist.service';
+import { EmailService } from '../../../common/email/email.service';
 import { TokenService } from '../token.service';
 import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
@@ -15,6 +18,8 @@ describe('AuthService', () => {
   let usersRepo: DeepMockProxy<IUsersRepository>;
   let tokenService: DeepMockProxy<TokenService>;
   let tokenBlacklist: DeepMockProxy<TokenBlacklistService>;
+  let prisma: DeepMockProxy<PrismaService>;
+  let emailService: DeepMockProxy<EmailService>;
 
   const mockUser = {
     id: 'user-1',
@@ -27,6 +32,7 @@ describe('AuthService', () => {
     description: null,
     role: 'CLIENTE' as Role,
     isActive: true,
+    emailVerified: false,
     refreshToken: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -36,6 +42,8 @@ describe('AuthService', () => {
     usersRepo = mockDeep<IUsersRepository>();
     tokenService = mockDeep<TokenService>();
     tokenBlacklist = mockDeep<TokenBlacklistService>();
+    prisma = mockDeep<PrismaService>();
+    emailService = mockDeep<EmailService>();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -43,6 +51,9 @@ describe('AuthService', () => {
         { provide: IUsersRepository, useValue: usersRepo },
         { provide: TokenService, useValue: tokenService },
         { provide: TokenBlacklistService, useValue: tokenBlacklist },
+        { provide: PrismaService, useValue: prisma },
+        { provide: EmailService, useValue: emailService },
+        { provide: ConfigService, useValue: new ConfigService({ CORS_ORIGIN: 'http://localhost:3000' }) },
       ],
     }).compile();
     service = module.get<AuthService>(AuthService);
@@ -284,6 +295,35 @@ describe('AuthService', () => {
 
       // Assert
       expect(result?.email).toBe('test@test.com');
+    });
+  });
+
+  describe('verifyEmail', () => {
+    it('should mark user as verified and delete the token', async () => {
+      // Arrange
+      prisma.verificationToken.findUnique.mockResolvedValue({
+        id: 'vt-1',
+        userId: 'user-1',
+        token: 'token-abc',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        createdAt: new Date(),
+      } as any);
+
+      // Act
+      const result = await service.verifyEmail('token-abc');
+
+      // Assert
+      expect(result.verified).toBe(true);
+      expect(usersRepo.update).toHaveBeenCalledWith('user-1', { emailVerified: true } as any);
+      expect(prisma.verificationToken.delete).toHaveBeenCalledWith({ where: { id: 'vt-1' } });
+    });
+
+    it('should throw UnauthorizedException when token is invalid or expired', async () => {
+      // Arrange
+      prisma.verificationToken.findUnique.mockResolvedValue(null);
+
+      // Act & Assert
+      await expect(service.verifyEmail('bad-token')).rejects.toThrow(UnauthorizedException);
     });
   });
 });

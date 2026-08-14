@@ -6,11 +6,34 @@ import Redis from 'ioredis';
 export class RedisService extends Redis implements OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
 
+  private static parseConnection(configService: ConfigService) {
+    const url = configService.get<string>('REDIS_URL');
+
+    let host = configService.get<string>('REDIS_HOST') || 'localhost';
+    let port = parseInt(configService.get<string>('REDIS_PORT') || '6379', 10);
+    let password = configService.get<string>('REDIS_PASSWORD') || undefined;
+
+    if (url) {
+      try {
+        const parsed = new URL(url);
+        host = parsed.hostname || host;
+        port = parsed.port ? parseInt(parsed.port, 10) : port;
+        password = parsed.password ? decodeURIComponent(parsed.password) : password;
+      } catch {
+        new Logger(RedisService.name).warn('REDIS_URL inválida, usando REDIS_HOST/REDIS_PORT');
+      }
+    }
+
+    return { host, port, password };
+  }
+
   constructor(configService: ConfigService) {
+    const { host, port, password } = RedisService.parseConnection(configService);
+
     super({
-      host: configService.get<string>('REDIS_HOST') || 'localhost',
-      port: parseInt(configService.get<string>('REDIS_PORT') || '6379', 10),
-      password: configService.get<string>('REDIS_PASSWORD') || undefined,
+      host,
+      port,
+      password,
       lazyConnect: true,
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false,

@@ -1,7 +1,8 @@
-import { Controller, Get, Patch, Delete, Param, Body, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { UsersService } from './users.service';
+import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -16,8 +17,22 @@ export class UsersController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Listar todos los usuarios (Admin)' })
   @ApiResponse({ status: 200, description: 'Lista de usuarios activos' })
-  findAll() {
-    return this.usersService.findAll();
+  @ApiQuery({ name: 'role', required: false, enum: Role })
+  @ApiQuery({ name: 'sortBy', required: false })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'includeInactive', required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  findAll(@Query('role') role?: string, @Query('sortBy') sortBy?: string, @Query('order') order?: string, @Query('includeInactive') includeInactive?: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.usersService.findAll({ role, sortBy, order: order as 'asc' | 'desc', includeInactive: includeInactive === 'true', page: page ? parseInt(page) : undefined, limit: limit ? parseInt(limit) : undefined });
+  }
+
+  @Post()
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Crear usuario (Admin) — para clientes, empleados o admins' })
+  @ApiResponse({ status: 201, description: 'Usuario creado' })
+  create(@Body() dto: CreateUserDto) {
+    return this.usersService.create(dto);
   }
 
   @Get('me')

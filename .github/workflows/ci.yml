@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  backend:
+    name: Backend (NestJS)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: Colombia2026*
+          POSTGRES_DB: kamerinos_db_tests
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://admin:Colombia2026*@localhost:5432/kamerinos_db_tests
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: test-jwt-secret
+      CORS_ORIGIN: http://localhost:3000
+      WOMPI_PUBLIC_KEY: pub_test_test123
+      WOMPI_PRIVATE_KEY: prv_test_test123
+      WOMPI_EVENTS_KEY: events_test_test123
+      WOMPI_INTEGRITY_SECRET: integ_test_test123
+      RUN_SEED: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-be-${{ hashFiles('package-lock.json') }}
+          restore-keys: ${{ runner.os }}-be-
+
+      - run: npm ci
+
+      - run: npx prisma generate
+
+      - run: npx prisma migrate deploy
+
+      - run: npx tsc --noEmit
+
+      - run: npm run build
+
+      - run: npm test

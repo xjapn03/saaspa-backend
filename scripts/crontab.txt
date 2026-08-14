@@ -1,0 +1,5 @@
+# Kamerinos SPA — Crontab de Backups
+# Instalar con: crontab -e
+
+# Backup diario de PostgreSQL a las 3:00 AM
+0 3 * * * /opt/kamerinos/scripts/backup.sh >> /var/log/kamerinos-backup.log 2>&1

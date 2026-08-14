@@ -34,6 +34,24 @@ describe('RedisService', () => {
       expect(service.options.port).toBe(6379);
       expect(service.options.lazyConnect).toBe(true);
     });
+
+    it('should parse REDIS_URL when provided', async () => {
+      const urlConfig = mockDeep<ConfigService>();
+      urlConfig.get.mockImplementation((key: string) => {
+        if (key === 'REDIS_URL') return 'redis://redis:6380';
+        return undefined;
+      });
+
+      const urlService = new RedisService(urlConfig);
+      expect(urlService.options.host).toBe('redis');
+      expect(urlService.options.port).toBe(6380);
+      try { await urlService.quit(); } catch { /* ignore */ }
+    });
+
+    it('should fall back to REDIS_HOST when REDIS_URL is absent', () => {
+      expect(service.options.host).toBe('localhost');
+      expect(service.options.port).toBe(6379);
+    });
   });
 
   describe('onModuleDestroy', () => {

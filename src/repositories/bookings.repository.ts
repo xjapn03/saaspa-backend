@@ -1,0 +1,146 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../database/prisma.service';
+import { IBookingsRepository, BookingFilters, IBookingSafe, PaginatedResult } from './interfaces/bookings.repository';
+
+const bookingSelect = {
+  id: true,
+  userId: true,
+  serviceId: true,
+  startTime: true,
+  endTime: true,
+  status: true,
+  googleEventId: true,
+  calendarSync: true,
+  notes: true,
+  createdAt: true,
+  updatedAt: true,
+  user: { select: { firstName: true, lastName: true, email: true } },
+  service: { select: { name: true, duration: true, price: true } },
+} satisfies Prisma.BookingSelect;
+
+@Injectable()
+export class BookingsRepository extends IBookingsRepository {
+  constructor(private prisma: PrismaService) {
+    super();
+  }
+
+  async findAll(filters: BookingFilters = {}): Promise<PaginatedResult<IBookingSafe>> {
+    const where: Prisma.BookingWhereInput = {};
+    if (filters.userId) where.userId = filters.userId;
+    if (filters.status) where.status = filters.status as any;
+    if (filters.date) {
+      const [yyyy, mm, dd] = filters.date.split('-').map(Number);
+      const dayStart = new Date(yyyy, mm - 1, dd, 0, 0, 0);
+      const dayEnd = new Date(yyyy, mm - 1, dd, 23, 59, 59, 999);
+      where.startTime = { gte: dayStart, lte: dayEnd };
+    }
+    if (filters.search) {
+      where.OR = [
+        { user: { firstName: { contains: filters.search, mode: 'insensitive' } } },
+        { user: { lastName: { contains: filters.search, mode: 'insensitive' } } },
+        { service: { name: { contains: filters.search, mode: 'insensitive' } } },
+      ];
+    }
+    const orderBy: Prisma.BookingOrderByWithRelationInput = {};
+    const sortBy = filters.sortBy || 'startTime';
+    const order = filters.order || 'desc';
+    if (sortBy === 'startTime') orderBy.startTime = order;
+    else if (sortBy === 'createdAt') orderBy.createdAt = order;
+    else orderBy.startTime = 'desc';
+
+    const page = filters.page || 1;
+    const limit = filters.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.booking.findMany({
+        where,
+        select: bookingSelect,
+        orderBy,
+        skip,
+        take: limit,
+      }),
+      this.prisma.booking.count({ where }),
+    ]);
+
+    return {
+      data: data as unknown as IBookingSafe[],
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async findById(id: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id },
+      select: bookingSelect,
+    });
+    if (!booking) throw new NotFoundException('Cita no encontrada');
+    return booking as unknown as IBookingSafe;
+  }
+
+  async findBySlot(serviceId: string, startTime: Date, endTime: Date) {
+    return this.prisma.booking.findFirst({
+      where: {
+        serviceId,
+        startTime,
+        endTime,
+        status: { notIn: ['CANCELADA', 'NO_ASISTIO'] },
+      },
+    });
+  }
+
+  async findOverlapping(startTime: Date, endTime: Date) {
+    return this.prisma.booking.findFirst({
+      where: {
+        status: { notIn: ['CANCELADA', 'NO_ASISTIO'] },
+        startTime: { lt: endTime },
+        endTime: { gt: startTime },
+      },
+      orderBy: { startTime: 'asc' },
+    });
+  }
+
+  async findOccupied(date: string) {
+    const [yyyy, mm, dd] = date.split('-').map(Number);
+    const dayStart = new Date(yyyy, mm - 1, dd, 0, 0, 0);
+    const dayEnd = new Date(yyyy, mm - 1, dd, 23, 59, 59, 999);
+
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        startTime: { gte: dayStart, lte: dayEnd },
+        status: { notIn: ['CANCELADA', 'NO_ASISTIO'] },
+      },
+      select: { startTime: true, endTime: true },
+    });
+    return bookings.map((b) => ({ startTime: b.startTime, endTime: b.endTime }));
+  }
+
+  async create(data: Prisma.BookingCreateInput) {
+    return this.prisma.booking.create({ data });
+  }
+
+  async update(id: string, data: Prisma.BookingUpdateInput) {
+    await this.findById(id);
+    return this.prisma.booking.update({
+      where: { id },
+      data,
+      select: bookingSelect,
+    }) as unknown as IBookingSafe;
+  }
+
+  async findPendingCalendarSync(): Promise<IBookingSafe[]> {
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        status: 'CONFIRMADA',
+        calendarSync: { in: ['PENDING', 'FAILED'] },
+      },
+      select: bookingSelect,
+      orderBy: { startTime: 'asc' },
+    });
+    return bookings as unknown as IBookingSafe[];
+  }
+}

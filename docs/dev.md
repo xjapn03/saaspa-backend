@@ -17,7 +17,7 @@
 docker compose up -d postgres redis
 
 # Backend
-npm run start:dev        # Levanta en :3001 (aplica migraciones + seed si RUN_SEED=true)
+npm run start:dev        # Levanta en :3001 (seed si RUN_SEED=true; migraciones manuales)
 npm run test             # Tests unitarios
 npm run test:e2e         # Tests end-to-end
 npm run prisma:studio    # Explorar DB con Prisma Studio
@@ -36,15 +36,28 @@ npx prisma generate                      # Regenerar cliente
 
 | # | Módulo      | Estado       | Endpoints                                  |
 |---|-------------|-------------|--------------------------------------------|
-| 1 | Auth        | **Completo** | `POST /api/auth/register`, `/login`, `/refresh` |
+| 1 | Auth        | **Completo** | `POST /api/auth/register` (envía email de verificación), `/login`, `/refresh`, `/logout`, `/forgot-password`, `/reset-password`, `GET /verify-email/:token` |
 | 2 | Users       | **Completo** | `GET /me`, `PATCH /me`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` |
-| 3 | Services    | Pendiente   | —                                          |
-| 4 | Bookings    | Pendiente   | Users, Services, Redis                     |
-| 5 | Payments    | Pendiente   | Bookings, Wompi API                        |
-| 6 | Calendar    | Pendiente   | Bookings, Google API                       |
-| 7 | Coupons     | Pendiente   | Users                                      |
-| 8 | Whatsapp    | Pendiente   | Meta API, IA Bot                           |
-| 9 | Meta        | Pendiente   | Meta CAPI, Payments                        |
+| 3 | Services    | **Completo** | `GET /`, `GET /public`, `GET /public/:slug`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` — slug único (auto-generado del nombre) |
+| 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reopen`, `PATCH /:id/reschedule`, `GET /:id/balance`, `POST /admin/sync-calendar` — bloqueo GLOBAL de horarios (agenda única), completa solo con saldo pagado, Google Calendar síncrono con reintento (`calendarSync`) |
+| 5 | Payments    | **Completo** | `POST /init` (ABONO/SALDO), `POST /init-cart`, `POST /webhook` (idempotente), `POST /manual` (efectivo/transferencia), `GET /transactions` (admin, trazabilidad con filtros), `GET /revenue?month=` (admin), `GET /:bookingId/status` |
+| 6 | Categories  | **Completo** | `GET /` (includeInactive), `GET /tree`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
+| 7 | Products    | **Completo** | `GET /` (público + filtros), `GET /admin/all`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
+| 8 | Cart        | **Completo** | `GET /`, `POST /items`, `PATCH /items/:productId`, `DELETE /items/:productId`, `DELETE /`, `POST /merge` |
+| 9 | Coupons     | **Completo** | CRUD + `POST /validate` + `GET /:id/usages` — límites de uso y trazabilidad por usuario |
+| 10| Calendar    | **Completo** | Google Calendar sync (common/google-calendar) |
+| 11| Meta        | **Completo** | Meta CAPI (Schedule + Purchase) |
+| 12| Email       | **Completo** | SendGrid transaccional — welcome/verificación, password reset, booking receipt, payment receipt, order receipt y order status (replyTo configurable) |
+| 13| Health      | **Completo** | `GET /api/health` — DB + Redis check |
+| 14| Upload      | **Completo** | `POST /api/upload` — imágenes con multer; organizadas por producto: `products/<slug>/main.jpg` + `gallery-<ts>.jpg` (folder/imageType por query) |
+| 15| Throttler   | **Completo** | Rate limiting global (100 req/min) |
+| 16| Orders      | **Completo** | `GET /` (admin, con filtros: search/status/dateFrom/dateTo), `GET /my` (cliente), `PATCH /:id/status` (admin) — auto-creados desde webhook de pago de carrito + emails de estado |
+| 17| Whatsapp    | **Completo** | `GET/POST /api/whatsapp/webhook` — verificación (GET: hub.mode + hub.verify_token → 200 + challenge / 403) + recepción (POST → 200) + recepcionista con menú interactivo (ConversationState). IA conversacional pendiente en `saaspa-IA` |
+| 18| Audit       | **Completo** | `GET /audit-logs` (admin) — registro de mutaciones vía interceptor global |
+
+> **Paginación:** Todos los endpoints `GET /` list retornan `PaginatedResult<T>` con `{ data, total, page, limit, totalPages }`. Default limit: 20. Los repositorios usan `Promise.all([findMany({ skip, take }), count()])` en paralelo.
+
+> **Producción (un solo dominio):** `https://kamerinos.sandrapinzonsaludybelleza.com.co` sirve frontend + backend vía proxy `/api/*` en Nginx. Webhook WhatsApp: `https://kamerinos.sandrapinzonsaludybelleza.com.co/api/whatsapp/webhook` (verify token `kamerinos_webhook_2026`).
 
 ## Modelo de Datos
 
@@ -54,40 +67,95 @@ User (users)
 ├── phone?, birthday?, description? (Text)
 ├── role: CLIENTE | EMPLEADO | ADMIN
 ├── isActive, refreshToken
-├── → bookings, payments, coupons
+├── → bookings, payments, coupons, cartItems
 
 Service (services)
-├── name, description?, price (Decimal), duration (min)
-├── category?, imageUrl?, isActive
+├── name, slug (unique), description?, price (Decimal), duration (min)
+├── categoryId?, imageUrl?, isActive
 ├── → bookings
+
+Category (categories)
+├── name, slug (unique), description?, imageUrl?
+├── parentId? (self-reference para subcategorías)
+├── isActive
+├── → services, products, children (subcategorías)
+
+Product (products)
+├── name, slug (unique), description? (Text), price (Decimal)
+├── compareAtPrice? (Decimal), stock, sku? (unique)
+├── mainImage?, carouselImages? (JSON), sponsor?
+├── isActive, isFeatured, categoryId?
+├── → cartItems
 
 Booking (bookings)
 ├── userId → User, serviceId → Service
 ├── startTime, endTime, status: PENDIENTE_PAGO → CONFIRMADA → COMPLETADA
 ├── googleEventId?, notes?
-├── → payment (1:1)
+├── → payments (1:N)
 
 Payment (payments)
-├── bookingId → Booking (unique), userId → User
-├── amount (Decimal), status: PENDIENTE → APROBADO | RECHAZADO | REEMBOLSADO
-├── wompiPaymentId?, wompiReference?, paidAt?
+├── bookingId → Booking, userId → User
+├── amount (Decimal), type: ABONO | SALDO
+├── status: PENDIENTE → APROBADO | RECHAZADO | REEMBOLSADO
+├── paymentMethod?: WOMAPI | EFECTIVO | TRANSFERENCIA
+├── wompiPaymentId?, wompiReference?, metadata? (JSON)
+├── paidAt?
+
+CartItem (cart_items)
+├── userId → User, productId → Product
+├── quantity
+├── @@unique([userId, productId])
+
+Order (orders)
+├── userId → User, paymentId? → Payment
+├── total (Decimal), status: PENDIENTE → CONFIRMADO → ENVIADO → ENTREGADO | CANCELADO
+├── shippingName, shippingEmail, shippingPhone, shippingAddress, shippingCity, shippingNotes?
+├── → items (OrderItem[])
+
+OrderItem (order_items)
+├── orderId → Order, productId → Product
+├── name, price (Decimal), quantity (snapshot al momento de compra)
 
 Coupon (coupons)
 ├── code (unique), discount (Decimal 5,4)
-├── isUsed, expiresAt, userId? → User
+├── isActive, maxUses?, usedCount, perUserLimit, expiresAt, userId? → User
+├── usages (CouponUsage[])
+
+CouponUsage (coupon_usages)
+├── couponId → Coupon, userId → User, orderId?, usedAt
+├── @@unique([couponId, userId]) — una vez por usuario
+
+AuditLog (audit_logs)
+├── actorId?, actorEmail?, action, entity, entityId?, ip?, createdAt
 
 ConversationState (conversation_states)
 ├── waId (unique), state (JSONB)
+
+ResetToken (reset_tokens)
+├── email, token (unique), expiresAt
 ```
 
-## Auto-Migrate al Arrancar
+### Índices de Base de Datos
 
-El `main.ts` ejecuta `npx prisma migrate deploy` automáticamente antes de levantar la API.
-Esto aplica las migraciones pendientes sin generar nuevas. Para crear nuevas migraciones:
+| Modelo | Índices | Propósito |
+|--------|---------|-----------|
+| Booking | `@@index([userId, status])`, `@@index([startTime])`, `@@index([serviceId, startTime])` | Cliente filtrando por estado, ordenamiento por fecha, búsqueda de slots |
+| Payment | `@@index([bookingId])`, `@@index([status, createdAt])` | Pagos por cita, revenue/facturación por mes |
+| AuditLog | `@@index([entity, entityId])`, `@@index([createdAt])` | Consultas de auditoría por entidad y fecha |
+
+## Módulo de Recuperación de Contraseña
+
+El módulo Auth incluye recuperación self-service:
+1. `POST /api/auth/forgot-password` — recibe `{ email }`, genera token temporal (1h), envía email vía SendGrid si `SENDGRID_API_KEY` está configurado, o loguea la URL en consola
+2. `POST /api/auth/reset-password` — recibe `{ token, newPassword }`, valida token, actualiza contraseña
+
+Las migraciones se aplican en el arranque del contenedor de producción (`Dockerfile`: `npx prisma migrate deploy && node dist/main`).
+En desarrollo local, aplicar migraciones manualmente:
 
 ```bash
 npx prisma migrate dev --name <descripcion>   # crea la migración a partir de schema.prisma
-npm run start:dev                              # auto-aplica la migración al arrancar
+npx prisma migrate deploy                      # aplica migraciones pendientes
+npm run start:dev                              # levanta la API (seed si RUN_SEED=true)
 ```
 
 ## Auto-Seed (RUN_SEED)
@@ -107,8 +175,10 @@ RUN_SEED=false
 
 El seed usa `upsert` en `prisma/seed.ts`, así que es idempotente:
 - Crea admin `admin@kamerinosspa.com` / `admin123` si no existe
-- Crea 4 servicios de ejemplo
-- Si ya existe el admin, no duplica nada
+- Crea 8 categorías (Masajes, Faciales, Uñas, Depilación, Corporal, Cremas, Sérums, Mascarillas)
+- Crea 8 servicios con `categoryId` FK apuntando a las categorías
+- Crea 8 productos con `slug`, `sku`, `sponsor`, `categoryId` FK
+- Si ya existen los datos, no duplica nada (usa `upsert`)
 
 ## Logging de Requests
 
@@ -185,9 +255,20 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (46 tests) — no requiere BD
-npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
+npm test              # Unit tests (287 tests, 42 suites) — no requiere BD
 npm run test:cov      # Cobertura
+npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
+```
+
+### Configuración optimizada
+
+El `jest` config en `package.json` incluye `maxWorkers: 2` y `ts-jest` con `isolatedModules: true` para evitar consumo excesivo de RAM en desarrollo (~500-800 MB vs ~3-4 GB sin optimizar). Ver `docs-general/TEST-COVERAGE.md` para el plan completo.
+
+### Comandos seguros
+
+```bash
+npx jest --runInBand --no-cache      # 1 worker, sin caché (~1 min)
+npm test                              # 2 workers (recomendado)
 ```
 
 ### Bases de datos por entorno
@@ -205,15 +286,13 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-| Suite | Archivo | Tests |
-|-------|---------|-------|
-| Unit | `users.repository.spec.ts` | findById, findByEmail, findAll, create, update, remove, setRefreshToken, error cases |
-| Unit | `token.service.spec.ts` | generateTokens, verifyToken |
-| Unit | `auth.service.spec.ts` | register, login, refresh con casos de error |
-| Unit | `users.service.spec.ts` | Delegación al repositorio |
-| Unit | `auth.controller.spec.ts` | HTTP status, formato de respuesta |
-| Unit | `users.controller.spec.ts` | CRUD, admin vs cliente |
-| Unit | `jwt-auth.guard.spec.ts` | Rutas @Public(), autenticación |
-| Unit | `roles.guard.spec.ts` | Validación de roles |
-| E2E | `auth.e2e-spec.ts` | Register, Login, Refresh flujo completo |
-| E2E | `users.e2e-spec.ts` | CRUD con tokens reales, admin vs cliente 403 |
+### Inventario de suites (42 suites, 287 tests)
+
+| Capa | Suites | Tests |
+|------|--------|-------|
+| Services | auth, users, services, bookings, payments, coupons, categories, products, cart, meta, email, google-calendar | ~150 |
+| Controllers | auth, users, services, bookings, payments, coupons, categories, products, cart, health, upload | ~50 |
+| Repositories | users, bookings, products, cart, payments, categories, services, coupons | ~55 |
+| Guards | jwt-auth, roles | ~9 |
+| Redis | redis, token-blacklist | ~8 |
+| E2E | auth, users | ~19 |

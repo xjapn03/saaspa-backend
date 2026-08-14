@@ -13,14 +13,17 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:cov": "jest --coverage",
+    "test": "jest --maxWorkers=2",
+    "test:watch": "jest --watch --maxWorkers=2",
+    "test:cov": "jest --coverage --maxWorkers=2",
     "test:e2e": "jest --config ./test/e2e/jest-e2e.json",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.28",
@@ -29,19 +32,26 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.1.28",
+    "@nestjs/serve-static": "^5.0.5",
     "@nestjs/swagger": "^11.4.6",
+    "@nestjs/throttler": "^6.5.0",
     "@prisma/client": "^5.12.0",
+    "@sendgrid/mail": "^8.1.6",
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "compression": "^1.7.4",
+    "googleapis": "^174.0.1",
     "helmet": "^7.1.0",
     "ioredis": "^5.4.0",
     "joi": "^17.12.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "prisma": "^5.12.0",
     "reflect-metadata": "^0.2.1",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.24",
@@ -62,14 +72,11 @@
     "jest": "^29.7.0",
     "jest-mock-extended": "^4.0.1",
     "prettier": "^3.2.0",
-    "prisma": "^5.12.0",
     "source-map-support": "^0.5.21",
     "supertest": "^6.3.4",
     "ts-jest": "^29.1.0",
     "ts-loader": "^9.5.0",
-    "ts-node": "^10.9.2",
-    "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.4.0"
+    "tsconfig-paths": "^4.2.0"
   },
   "overrides": {
     "js-yaml": "5.2.3"
@@ -82,16 +89,29 @@
     ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
+    "maxWorkers": 2,
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)s$": [
+        "ts-jest",
+        {
+          "isolatedModules": true
+        }
+      ]
     },
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "**/*.service.ts",
+      "**/*.controller.ts",
+      "**/*.repository.ts",
+      "**/guards/*.ts",
+      "**/redis/*.service.ts",
+      "**/interceptors/*.ts",
+      "**/filters/*.ts"
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
     "moduleNameMapper": {
-      "^@/(.*)$": "<rootDir>/$1"
+      "^@/(.*)$": "<rootDir>/$1",
+      "^googleapis$": "<rootDir>/common/google-calendar/__tests__/__mocks__/googleapis"
     }
   }
 }

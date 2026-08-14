@@ -1,5 +1,6 @@
 import { User } from '@prisma/client';
 import { Prisma } from '@prisma/client';
+import { PaginatedResult } from '../../common/interfaces/paginated-result';
 
 export interface IUserSafe {
   id: string;
@@ -15,8 +16,17 @@ export interface IUserSafe {
   updatedAt: Date;
 }
 
+export interface UserFilters {
+  role?: string;
+  sortBy?: string;
+  order?: 'asc' | 'desc';
+  includeInactive?: boolean;
+  page?: number;
+  limit?: number;
+}
+
 export abstract class IUsersRepository {
-  abstract findAll(): Promise<IUserSafe[]>;
+  abstract findAll(filters?: UserFilters): Promise<PaginatedResult<IUserSafe>>;
   abstract findById(id: string): Promise<IUserSafe>;
   abstract findByEmail(email: string): Promise<User | null>;
   abstract findByIdWithCredentials(id: string): Promise<User | null>;
