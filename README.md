@@ -41,7 +41,7 @@ src/
 │   ├── meta/        # Meta Conversions API (CAPI)
 │   ├── health/      # Health check (DB + Redis)
 │   ├── upload/      # Subida de imágenes (multer)
-│   └── whatsapp/    # Webhooks Meta Cloud API → IA Bot (placeholder)
+│   └── whatsapp/    # Webhook WhatsApp Cloud API + recepcionista (menú interactivo)
 ├── repositories/    # Repository Pattern (interfaces + implementaciones Prisma)
 ├── app.module.ts
 └── main.ts
@@ -66,6 +66,16 @@ npm run start:dev
 
 - API: `http://localhost:3001/api`
 - Swagger: `http://localhost:3001/docs`
+
+## Despliegue (un solo dominio)
+
+En producción todo se sirve bajo **un solo dominio**:
+`https://kamerinos.sandrapinzonsaludybelleza.com.co` — frontend (Next.js) + backend
+vía proxy `/api/*` en Nginx. **No** hay subdominio `api.` separado.
+
+Webhooks:
+- WhatsApp: `https://kamerinos.sandrapinzonsaludybelleza.com.co/api/whatsapp/webhook` (verify token `kamerinos_webhook_2026`)
+- Wompi: `https://kamerinos.sandrapinzonsaludybelleza.com.co/api/payments/webhook`
 
 ## Tests
 
