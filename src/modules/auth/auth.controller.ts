@@ -1,4 +1,4 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, Headers } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, HttpCode, HttpStatus, Headers } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -50,6 +50,16 @@ export class AuthController {
   ) {
     const accessToken = authorization?.replace('Bearer ', '');
     await this.authService.logout(accessToken, refreshToken);
+  }
+
+  @Public()
+  @Get('verify-email/:token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verificar cuenta con token enviado por email' })
+  @ApiResponse({ status: 200, description: 'Cuenta verificada' })
+  @ApiResponse({ status: 401, description: 'Token inválido o expirado' })
+  verifyEmail(@Param('token') token: string) {
+    return this.authService.verifyEmail(token);
   }
 
   @Public()

@@ -47,6 +47,12 @@ enum PaymentMethod {
   TRANSFERENCIA
 }
 
+enum CalendarSyncStatus {
+  SYNCED
+  PENDING
+  FAILED
+}
+
 
 model User {
   id           String    @id @default(uuid())
@@ -59,6 +65,7 @@ model User {
   description  String?   @db.Text
   role         Role      @default(CLIENTE)
   isActive     Boolean   @default(true)
+  emailVerified Boolean  @default(false)
   refreshToken String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -69,6 +76,7 @@ model User {
   couponUsages CouponUsage[]
   cartItems    CartItem[]
   orders       Order[]
+  verificationTokens VerificationToken[]
 
   @@map("users")
 }
@@ -144,6 +152,7 @@ model Booking {
   endTime       DateTime
   status        BookingStatus @default(PENDIENTE_PAGO)
   googleEventId String?
+  calendarSync  CalendarSyncStatus @default(SYNCED)
   notes         String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -232,6 +241,18 @@ model ResetToken {
   createdAt DateTime @default(now())
 
   @@map("reset_tokens")
+}
+
+model VerificationToken {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("verification_tokens")
 }
 
 model CartItem {

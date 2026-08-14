@@ -32,6 +32,7 @@ describe('AuthService', () => {
     description: null,
     role: 'CLIENTE' as Role,
     isActive: true,
+    emailVerified: false,
     refreshToken: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -294,6 +295,35 @@ describe('AuthService', () => {
 
       // Assert
       expect(result?.email).toBe('test@test.com');
+    });
+  });
+
+  describe('verifyEmail', () => {
+    it('should mark user as verified and delete the token', async () => {
+      // Arrange
+      prisma.verificationToken.findUnique.mockResolvedValue({
+        id: 'vt-1',
+        userId: 'user-1',
+        token: 'token-abc',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        createdAt: new Date(),
+      } as any);
+
+      // Act
+      const result = await service.verifyEmail('token-abc');
+
+      // Assert
+      expect(result.verified).toBe(true);
+      expect(usersRepo.update).toHaveBeenCalledWith('user-1', { emailVerified: true } as any);
+      expect(prisma.verificationToken.delete).toHaveBeenCalledWith({ where: { id: 'vt-1' } });
+    });
+
+    it('should throw UnauthorizedException when token is invalid or expired', async () => {
+      // Arrange
+      prisma.verificationToken.findUnique.mockResolvedValue(null);
+
+      // Act & Assert
+      await expect(service.verifyEmail('bad-token')).rejects.toThrow(UnauthorizedException);
     });
   });
 });

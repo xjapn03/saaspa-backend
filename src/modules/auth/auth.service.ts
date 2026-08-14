@@ -44,7 +44,35 @@ export class AuthService {
     const tokens = this.tokenService.generateTokens(user.id, user.email, user.role);
     await this.usersRepo.setRefreshToken(user.id, tokens.refreshToken);
 
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    await this.prisma.verificationToken.upsert({
+      where: { userId: user.id },
+      update: { token: verificationToken, expiresAt: new Date(Date.now() + 60 * 60 * 1000) },
+      create: { userId: user.id, token: verificationToken, expiresAt: new Date(Date.now() + 60 * 60 * 1000) },
+    });
+
+    const frontendBase = this.config.get<string>('CORS_ORIGIN')?.split(',')[0] || 'http://localhost:3000';
+    const verifyUrl = `${frontendBase}/verificar-email/${verificationToken}`;
+    const userName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : '';
+    this.emailService.sendWelcomeEmail({
+      clientName: userName || 'Cliente',
+      clientEmail: user.email,
+      verifyUrl,
+    });
+
     return { user: this.sanitizeUser(user), ...tokens };
+  }
+
+  async verifyEmail(token: string) {
+    const verificationToken = await this.prisma.verificationToken.findUnique({ where: { token } });
+    if (!verificationToken || verificationToken.expiresAt < new Date()) {
+      throw new UnauthorizedException('El enlace de verificación no es válido o ha expirado.');
+    }
+
+    await this.usersRepo.update(verificationToken.userId, { emailVerified: true } as any);
+    await this.prisma.verificationToken.delete({ where: { id: verificationToken.id } });
+
+    return { verified: true, message: 'Cuenta verificada correctamente. Ya puedes iniciar sesión.' };
   }
 
   async login(dto: LoginDto) {
