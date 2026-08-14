@@ -1,11 +1,19 @@
-import { Controller, Post, Req, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Post, Req, BadRequestException, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { mkdirSync } from 'fs';
+import { memoryStorage } from 'multer';
+import { join } from 'path';
+import { mkdirSync, statSync } from 'fs';
 import { Role } from '@prisma/client';
 import { Roles } from '../../common/decorators/roles.decorator';
+import * as sharpNS from 'sharp';
+
+type SharpFactory = (input: sharpNS.SharpInput, options?: sharpNS.SharpOptions) => sharpNS.Sharp;
+const sharp = sharpNS as unknown as SharpFactory;
+
+const MAX_DIMENSION = 1600;
+const WEBP_QUALITY = 80;
+const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
 
 function sanitizeSegment(segment: string): string {
   return segment.replace(/[^a-zA-Z0-9-_]/g, '-').replace(/^-+|-+$/g, '');
@@ -31,6 +39,14 @@ function extractImageType(req: any): string | undefined {
   return value ? String(value) : undefined;
 }
 
+function generateFilename(imageType: string | undefined): string {
+  if (imageType === 'main') {
+    return `main.webp`;
+  }
+  const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+  return `gallery-${unique}.webp`;
+}
+
 @ApiTags('Upload')
 @ApiBearerAuth()
 @Controller('upload')
@@ -50,40 +66,36 @@ export class UploadController {
     },
   })
   @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({
-      destination: (_req, file, cb) => {
-        const folder = extractFolder(_req);
-        const dir = join(process.cwd(), 'uploads', folder);
-        try {
-          mkdirSync(dir, { recursive: true });
-        } catch {
-          // ignore, multer reportará el error si no puede escribir
-        }
-        cb(null, dir);
-      },
-      filename: (_req, file, cb) => {
-        const imageType = extractImageType(_req);
-        const ext = extname(file.originalname).toLowerCase();
-        if (imageType === 'main') {
-          cb(null, `main${ext}`);
-        } else {
-          const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-          cb(null, `gallery-${unique}${ext}`);
-        }
-      },
-    }),
-    limits: { fileSize: 5 * 1024 * 1024 },
+    storage: memoryStorage(),
+    limits: { fileSize: MAX_UPLOAD_SIZE },
     fileFilter: (_req, file, cb) => {
-      if (!file.mimetype.match(/^image\/(jpeg|png|gif|webp)$/)) {
-        cb(new Error('Solo imágenes (JPEG, PNG, GIF, WEBP)'), false);
-      } else {
-        cb(null, true);
-      }
+      cb(null, /^image\/(jpeg|png|webp)$/.test(file.mimetype));
     },
   }))
-  uploadFile(@UploadedFile() file: any, @Req() req: any) {
+  async uploadFile(@UploadedFile() file: any, @Req() req: any) {
+    if (!file) {
+      throw new BadRequestException('Solo imágenes (JPEG, PNG, WEBP)');
+    }
+
     const folder = extractFolder(req);
-    const url = `/uploads/${folder}/${file.filename}`;
-    return { url, filename: file.filename, size: file.size, mimetype: file.mimetype };
+    const imageType = extractImageType(req);
+    const filename = generateFilename(imageType);
+    const dir = join(process.cwd(), 'uploads', folder);
+    mkdirSync(dir, { recursive: true });
+
+    const outputPath = join(dir, filename);
+    try {
+      await sharp(file.buffer)
+        .rotate()
+        .resize({ width: MAX_DIMENSION, height: MAX_DIMENSION, fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: WEBP_QUALITY })
+        .toFile(outputPath);
+    } catch {
+      throw new BadRequestException('No se pudo procesar la imagen. Verifica que sea una imagen válida.');
+    }
+
+    const { size } = statSync(outputPath);
+    const url = `/uploads/${folder}/${filename}`;
+    return { url, filename, size, mimetype: 'image/webp' };
   }
 }

@@ -10,6 +10,7 @@ import * as compression from 'compression';
 import { PrismaClient } from '@prisma/client';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
+import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -52,6 +53,8 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
+
+  app.useGlobalFilters(new MulterExceptionFilter());
 
   if (config.get<string>('NODE_ENV') !== 'production') {
     const swaggerConfig = new DocumentBuilder()
