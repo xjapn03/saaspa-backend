@@ -134,7 +134,7 @@ describe('GoogleCalendarService', () => {
         const patchArgs = mockCalendarClient.events.patch.mock.calls[0][0];
         expect(patchArgs.calendarId).toBe('primary');
         expect(patchArgs.eventId).toBe('evt-123');
-        expect(patchArgs.requestBody.summary).toBe('Facial — Maria Gomez (Reagendado)');
+        expect(patchArgs.requestBody.summary).toBe('Facial — Maria Gomez');
       });
 
       it('should not throw on Google API error', async () => {

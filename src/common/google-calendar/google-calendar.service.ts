@@ -39,35 +39,67 @@ export class GoogleCalendarService {
     id: string;
     startTime: Date;
     endTime: Date;
+    status?: string;
     user?: { firstName: string; lastName: string; email: string };
-    service?: { name: string };
+    service?: { name: string; price?: number };
   }): Promise<string | null> {
     const calendar = this.getClient();
     if (!calendar) return null;
 
-    try {
-      const clientName = booking.user
-        ? `${booking.user.firstName} ${booking.user.lastName}`
-        : 'Cliente';
+    const clientName = booking.user
+      ? `${booking.user.firstName} ${booking.user.lastName}`.trim()
+      : 'Cliente';
+    const serviceName = booking.service?.name || 'Servicio';
+    const price = booking.service?.price;
+    const clientEmail = booking.user?.email;
 
-      const serviceName = booking.service?.name || 'Servicio';
+    const description = [
+      `Cita #${booking.id}`,
+      `Cliente: ${clientName}`,
+      `Servicio: ${serviceName}`,
+      price !== undefined ? `Precio: $${Number(price).toLocaleString('es-CO')}` : null,
+      booking.status ? `Estado: ${booking.status}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
 
-      const res = await calendar.events.insert({
-        calendarId: this.calendarId,
-        requestBody: {
-          summary: `${serviceName} — ${clientName}`,
-          description: `Cita agendada para ${clientName}\nServicio: ${serviceName}\nID: ${booking.id}`,
-          start: { dateTime: booking.startTime.toISOString(), timeZone: 'America/Bogota' },
-          end: { dateTime: booking.endTime.toISOString(), timeZone: 'America/Bogota' },
-        },
-      });
+    const requestBody: any = {
+      summary: `${serviceName} — ${clientName}`,
+      description,
+      start: { dateTime: booking.startTime.toISOString(), timeZone: 'America/Bogota' },
+      end: { dateTime: booking.endTime.toISOString(), timeZone: 'America/Bogota' },
+      reminders: {
+        useDefault: false,
+        overrides: [
+          { method: 'popup', minutes: 60 },
+          { method: 'email', minutes: 24 * 60 },
+        ],
+      },
+    };
 
-      this.logger.log(`Evento creado en Google Calendar: ${res.data.id}`);
-      return res.data.id || null;
-    } catch (err: any) {
-      this.logger.error(`Error al crear evento en Google Calendar: ${err.message}`);
-      return null;
+    if (clientEmail) {
+      requestBody.attendees = [{ email: clientEmail }];
     }
+
+    let lastError: any;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const res = await calendar.events.insert({
+          calendarId: this.calendarId,
+          requestBody,
+          sendNotifications: true,
+        });
+        this.logger.log(`Evento creado en Google Calendar: ${res.data.id}`);
+        return res.data.id || null;
+      } catch (err: any) {
+        lastError = err;
+        this.logger.warn(`Intento ${attempt} fallido al crear evento: ${err.message}`);
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+
+    this.logger.error(`Error al crear evento en Google Calendar: ${lastError?.message}`);
+    return null;
   }
 
   async deleteEvent(googleEventId: string): Promise<void> {
@@ -99,7 +131,7 @@ export class GoogleCalendarService {
 
     try {
       const clientName = booking.user
-        ? `${booking.user.firstName} ${booking.user.lastName}`
+        ? `${booking.user.firstName} ${booking.user.lastName}`.trim()
         : 'Cliente';
       const serviceName = booking.service?.name || 'Servicio';
 
@@ -107,7 +139,8 @@ export class GoogleCalendarService {
         calendarId: this.calendarId,
         eventId: googleEventId,
         requestBody: {
-          summary: `${serviceName} — ${clientName} (Reagendado)`,
+          summary: `${serviceName} — ${clientName}`,
+          description: `Cita reagendada\nCliente: ${clientName}\nServicio: ${serviceName}`,
           start: { dateTime: booking.startTime.toISOString(), timeZone: 'America/Bogota' },
           end: { dateTime: booking.endTime.toISOString(), timeZone: 'America/Bogota' },
         },

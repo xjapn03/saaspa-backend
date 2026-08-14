@@ -11,6 +11,7 @@ const bookingSelect = {
   endTime: true,
   status: true,
   googleEventId: true,
+  calendarSync: true,
   notes: true,
   createdAt: true,
   updatedAt: true,
@@ -129,5 +130,17 @@ export class BookingsRepository extends IBookingsRepository {
       data,
       select: bookingSelect,
     }) as unknown as IBookingSafe;
+  }
+
+  async findPendingCalendarSync(): Promise<IBookingSafe[]> {
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        status: 'CONFIRMADA',
+        calendarSync: { in: ['PENDING', 'FAILED'] },
+      },
+      select: bookingSelect,
+      orderBy: { startTime: 'asc' },
+    });
+    return bookings as unknown as IBookingSafe[];
   }
 }

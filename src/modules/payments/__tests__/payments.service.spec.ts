@@ -9,6 +9,7 @@ import { IProductsRepository } from '../../../repositories/interfaces/products.r
 import { IOrdersRepository } from '../../../repositories/interfaces/orders.repository';
 import { MetaCapiService } from '../../meta/meta-capi.service';
 import { EmailService } from '../../../common/email/email.service';
+import { BookingSyncService } from '../../bookings/booking-sync.service';
 
 describe('PaymentsService', () => {
   let service: PaymentsService;
@@ -19,6 +20,7 @@ describe('PaymentsService', () => {
   let ordersRepo: DeepMockProxy<IOrdersRepository>;
   let metaCapi: DeepMockProxy<MetaCapiService>;
   let emailService: DeepMockProxy<EmailService>;
+  let bookingSync: DeepMockProxy<BookingSyncService>;
 
   const mockBooking = {
     id: 'booking-1',
@@ -61,6 +63,7 @@ describe('PaymentsService', () => {
     ordersRepo = mockDeep<IOrdersRepository>();
     metaCapi = mockDeep<MetaCapiService>();
     emailService = mockDeep<EmailService>();
+    bookingSync = mockDeep<BookingSyncService>();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -72,6 +75,7 @@ describe('PaymentsService', () => {
         { provide: IOrdersRepository, useValue: ordersRepo },
         { provide: MetaCapiService, useValue: metaCapi },
         { provide: EmailService, useValue: emailService },
+        { provide: BookingSyncService, useValue: bookingSync },
         {
           provide: ConfigService,
           useValue: new ConfigService({
@@ -213,7 +217,7 @@ describe('PaymentsService', () => {
 
       expect(result).toEqual({ received: true });
       expect(paymentsRepo.update).toHaveBeenCalled();
-      expect(bookingsRepo.update).toHaveBeenCalledWith('booking-1', { status: 'CONFIRMADA' } as any);
+      expect(bookingSync.confirmAndSync).toHaveBeenCalledWith('booking-1');
     });
 
     it('should approve SALDO payment without changing booking status', async () => {

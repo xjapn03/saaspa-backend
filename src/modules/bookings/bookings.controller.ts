@@ -98,6 +98,14 @@ export class BookingsController {
     return this.bookingsService.confirm(id);
   }
 
+  @Post('admin/sync-calendar')
+  @Roles(Role.ADMIN, Role.EMPLEADO)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Reintentar sincronización de Google Calendar pendiente (Admin/Empleado)' })
+  syncCalendar() {
+    return this.bookingsService.syncPendingCalendar();
+  }
+
   @Patch(':id/cancel')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cancelar cita — dueño o admin' })
