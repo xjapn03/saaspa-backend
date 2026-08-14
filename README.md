@@ -66,6 +66,7 @@ npm run start:dev
 
 - API: `http://localhost:3001/api`
 - Swagger: `http://localhost:3001/docs`
+- Admin seed: `admin@sandrapinzonsaludybelleza.com.co` / `admin123`
 
 ## Despliegue (un solo dominio)
 
@@ -80,7 +81,7 @@ Webhooks:
 ## Tests
 
 ```bash
-npm test                 # Unit tests (287 tests, 42 suites) — maxWorkers=2 optimizado
+npm test                 # Unit tests (288 tests, 42 suites) — maxWorkers=2 optimizado
 npm run test:cov         # Cobertura
 npm run test:e2e         # End-to-end (requiere PostgreSQL corriendo)
 ```
