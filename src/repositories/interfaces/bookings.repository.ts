@@ -9,6 +9,7 @@ export interface IBookingSafe {
   endTime: Date;
   status: string;
   googleEventId: string | null;
+  calendarSync?: string;
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -43,4 +44,5 @@ export abstract class IBookingsRepository {
   abstract findOccupied(date: string): Promise<{ startTime: Date; endTime: Date }[]>;
   abstract create(data: Prisma.BookingCreateInput): Promise<Booking>;
   abstract update(id: string, data: Prisma.BookingUpdateInput): Promise<IBookingSafe>;
+  abstract findPendingCalendarSync(): Promise<IBookingSafe[]>;
 }

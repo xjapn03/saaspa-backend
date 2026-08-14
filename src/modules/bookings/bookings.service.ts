@@ -4,7 +4,7 @@ import { IServicesRepository } from '../../repositories/interfaces/services.repo
 import { IPaymentsRepository } from '../../repositories/interfaces/payments.repository';
 import { RedisService } from '../../common/redis/redis.service';
 import { GoogleCalendarService } from '../../common/google-calendar/google-calendar.service';
-import { MetaCapiService } from '../meta/meta-capi.service';
+import { BookingSyncService } from './booking-sync.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 
 const SLOT_INTERVAL = 30;
@@ -21,7 +21,7 @@ export class BookingsService {
     private paymentsRepo: IPaymentsRepository,
     private redis: RedisService,
     private calendar: GoogleCalendarService,
-    private metaCapi: MetaCapiService,
+    private bookingSync: BookingSyncService,
   ) {}
 
   async findAll(filters: { userId?: string; date?: string; status?: string }) {
@@ -106,39 +106,11 @@ export class BookingsService {
   }
 
   async confirm(id: string) {
-    const booking = await this.bookingsRepo.findById(id);
-    if (booking.status !== 'PENDIENTE_PAGO') {
-      throw new BadRequestException('Solo citas pendientes pueden confirmarse');
-    }
-    const dateKey = new Date(booking.startTime).toISOString().split('T')[0];
-    const lockKey = `slot:${dateKey}:${new Date(booking.startTime).toISOString()}`;
-    try { await this.redis.del(lockKey); } catch {}
+    return this.bookingSync.confirmAndSync(id);
+  }
 
-    const updated = await this.bookingsRepo.update(id, { status: 'CONFIRMADA' } as any);
-
-    const googleEventId = await this.calendar.createEvent({
-      id: booking.id,
-      startTime: new Date(booking.startTime),
-      endTime: new Date(booking.endTime),
-      user: booking.user as any,
-      service: booking.service as any,
-    });
-
-    if (googleEventId) {
-      await this.bookingsRepo.update(id, { googleEventId } as any);
-    }
-
-    this.metaCapi.sendEvent({
-      eventName: 'Schedule',
-      customData: {
-        currency: 'COP',
-        value: (booking.service as any)?.price ? Number((booking.service as any).price) : undefined,
-        contentName: (booking.service as any)?.name,
-        bookingId: booking.id,
-      },
-    });
-
-    return updated;
+  async syncPendingCalendar() {
+    return this.bookingSync.syncPending();
   }
 
   async cancel(id: string, userId: string, isAdmin: boolean) {
@@ -216,6 +188,18 @@ export class BookingsService {
         user: oldBooking.user as any,
         service: oldBooking.service as any,
       });
+    } else if (oldBooking.status === 'CONFIRMADA') {
+      const createdId = await this.calendar.createEvent({
+        id: oldBooking.id,
+        startTime,
+        endTime,
+        status: oldBooking.status,
+        user: oldBooking.user as any,
+        service: oldBooking.service as any,
+      });
+      if (createdId) {
+        await this.bookingsRepo.update(id, { googleEventId: createdId, calendarSync: 'SYNCED' } as any);
+      }
     }
 
     const oldDateKey = new Date(oldBooking.startTime).toISOString().split('T')[0];

@@ -8,6 +8,7 @@ import { IProductsRepository } from '../../repositories/interfaces/products.repo
 import { IOrdersRepository } from '../../repositories/interfaces/orders.repository';
 import { MetaCapiService } from '../meta/meta-capi.service';
 import { EmailService } from '../../common/email/email.service';
+import { BookingSyncService } from '../bookings/booking-sync.service';
 
 @Injectable()
 export class PaymentsService {
@@ -22,6 +23,7 @@ export class PaymentsService {
     private config: ConfigService,
     private metaCapi: MetaCapiService,
     private emailService: EmailService,
+    private bookingSync: BookingSyncService,
   ) {}
 
   generateIntegritySignature(reference: string, amountInCents: number, currency: string): string {
@@ -140,7 +142,7 @@ export class PaymentsService {
       } as any);
 
       if (payment.type === 'ABONO') {
-        await this.bookingsRepo.update(payment.bookingId, { status: 'CONFIRMADA' } as any);
+        await this.bookingSync.confirmAndSync(payment.bookingId);
       }
 
       const booking = await this.bookingsRepo.findById(payment.bookingId).catch(() => null);
@@ -338,7 +340,7 @@ export class PaymentsService {
     } as any);
 
     if (booking.status === 'PENDIENTE_PAGO') {
-      await this.bookingsRepo.update(bookingId, { status: 'CONFIRMADA' } as any);
+      await this.bookingSync.confirmAndSync(bookingId);
     }
 
     return { success: true, amount: remaining, totalPaid: Math.round((totalPaid + remaining) * 100) / 100 };

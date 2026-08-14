@@ -7,7 +7,7 @@ import { IServicesRepository } from '../../../repositories/interfaces/services.r
 import { IPaymentsRepository } from '../../../repositories/interfaces/payments.repository';
 import { RedisService } from '../../../common/redis/redis.service';
 import { GoogleCalendarService } from '../../../common/google-calendar/google-calendar.service';
-import { MetaCapiService } from '../../meta/meta-capi.service';
+import { BookingSyncService } from '../booking-sync.service';
 
 describe('BookingsService', () => {
   let service: BookingsService;
@@ -16,7 +16,7 @@ describe('BookingsService', () => {
   let paymentsRepo: DeepMockProxy<IPaymentsRepository>;
   let redis: DeepMockProxy<RedisService>;
   let calendar: DeepMockProxy<GoogleCalendarService>;
-  let metaCapi: DeepMockProxy<MetaCapiService>;
+  let bookingSync: DeepMockProxy<BookingSyncService>;
 
   const mockService = {
     id: 'svc-1',
@@ -49,7 +49,7 @@ describe('BookingsService', () => {
     paymentsRepo = mockDeep<IPaymentsRepository>();
     redis = mockDeep<RedisService>();
     calendar = mockDeep<GoogleCalendarService>();
-    metaCapi = mockDeep<MetaCapiService>();
+    bookingSync = mockDeep<BookingSyncService>();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -59,7 +59,7 @@ describe('BookingsService', () => {
         { provide: IPaymentsRepository, useValue: paymentsRepo },
         { provide: RedisService, useValue: redis },
         { provide: GoogleCalendarService, useValue: calendar },
-        { provide: MetaCapiService, useValue: metaCapi },
+        { provide: BookingSyncService, useValue: bookingSync },
       ],
     }).compile();
     service = module.get<BookingsService>(BookingsService);
@@ -114,35 +114,24 @@ describe('BookingsService', () => {
   });
 
   describe('confirm', () => {
-    it('should confirm booking and set Google Calendar event', async () => {
-      bookingsRepo.findById.mockResolvedValue({ ...mockBooking, status: 'PENDIENTE_PAGO' });
-      bookingsRepo.update.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' });
-      calendar.createEvent.mockResolvedValue('google-event-123');
+    it('should delegate confirmation and calendar sync to BookingSyncService', async () => {
+      bookingSync.confirmAndSync.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' } as any);
 
       const result = await service.confirm('booking-1');
 
-      expect(redis.del).toHaveBeenCalled();
-      expect(calendar.createEvent).toHaveBeenCalled();
-      expect(bookingsRepo.update).toHaveBeenCalledWith('booking-1', { status: 'CONFIRMADA' } as any);
-      expect(metaCapi.sendEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ eventName: 'Schedule' }),
-      );
+      expect(result.status).toBe('CONFIRMADA');
+      expect(bookingSync.confirmAndSync).toHaveBeenCalledWith('booking-1');
     });
+  });
 
-    it('should not update googleEventId if calendar returns null', async () => {
-      bookingsRepo.findById.mockResolvedValue({ ...mockBooking, status: 'PENDIENTE_PAGO' });
-      bookingsRepo.update.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' });
-      calendar.createEvent.mockResolvedValue(null);
+  describe('syncPendingCalendar', () => {
+    it('should delegate to BookingSyncService', async () => {
+      bookingSync.syncPending.mockResolvedValue({ synced: 2, failed: 0 });
 
-      await service.confirm('booking-1');
+      const result = await service.syncPendingCalendar();
 
-      expect(bookingsRepo.update).toHaveBeenCalledTimes(1);
-    });
-
-    it('should throw if booking is not PENDIENTE_PAGO', async () => {
-      bookingsRepo.findById.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' });
-
-      await expect(service.confirm('booking-1')).rejects.toThrow(BadRequestException);
+      expect(result).toEqual({ synced: 2, failed: 0 });
+      expect(bookingSync.syncPending).toHaveBeenCalled();
     });
   });
 

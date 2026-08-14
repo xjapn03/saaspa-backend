@@ -12,6 +12,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { ServicesModule } from './modules/services/services.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
+import { BookingSyncModule } from './modules/bookings/booking-sync.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { GoogleCalendarModule } from './common/google-calendar/google-calendar.module';
 import { CouponsModule } from './modules/coupons/coupons.module';
@@ -42,6 +43,7 @@ import { AuditInterceptor } from './common/audit/audit.interceptor';
     UsersModule,
     ServicesModule,
     BookingsModule,
+    BookingSyncModule,
     PaymentsModule,
     GoogleCalendarModule,
     CouponsModule,
