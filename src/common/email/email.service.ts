@@ -64,11 +64,13 @@ const BORDER = '#e8dcd0';
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private readonly from = { email: 'info@sandrapinzonsaludybelleza.com.co', name: 'Kamerinos SPA' };
+  private readonly replyTo: string;
   private readonly isEnabled: boolean;
 
   constructor(private config: ConfigService) {
     const apiKey = this.config.get<string>('SENDGRID_API_KEY');
     this.isEnabled = !!apiKey;
+    this.replyTo = this.config.get<string>('SENDGRID_REPLY_TO') || 'kamerinosg@gmail.com';
     if (apiKey) {
       sgMail.setApiKey(apiKey);
     } else {
@@ -235,6 +237,7 @@ export class EmailService {
       await sgMail.send({
         to,
         from: this.from,
+        replyTo: this.replyTo,
         subject,
         html,
       });
