@@ -36,9 +36,9 @@ npx prisma generate                      # Regenerar cliente
 
 | # | Módulo      | Estado       | Endpoints                                  |
 |---|-------------|-------------|--------------------------------------------|
-| 1 | Auth        | **Completo** | `POST /api/auth/register` (envía email de verificación), `/login`, `/refresh`, `/logout`, `/forgot-password`, `/reset-password`, `GET /verify-email/:token` (idempotente: re-click responde "ya verificada") |
+| 1 | Auth        | **Completo** | `POST /api/auth/register`, `/login`, `/refresh`, `/logout` (**cookies httpOnly**: access `Path=/`, refresh `Path=/api/auth`), `/forgot-password`, `/reset-password`, `GET /verify-email/:token` (idempotente), `POST /auth/email-change/request` + `/confirm` (cambio de email con código) |
 | 2 | Users       | **Completo** | `GET /me`, `PATCH /me`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` |
-| 3 | Services    | **Completo** | `GET /`, `GET /public`, `GET /public/:slug`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` — slug único (auto-generado del nombre) |
+| 3 | Services    | **Completo** | `GET /`, `GET /public` (+ `?featured=true`), `GET /public/:slug`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` — slug único; `mainImage`, `carouselImages`, `isFeatured`, `compareAtPrice` |
 | 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reopen`, `PATCH /:id/reschedule`, `GET /:id/balance`, `POST /admin/sync-calendar` — bloqueo GLOBAL de horarios (agenda única), completa solo con saldo pagado, Google Calendar síncrono con reintento (`calendarSync`) |
 | 5 | Payments    | **Completo** | `POST /init` (ABONO/SALDO), `POST /init-cart`, `POST /webhook` (idempotente), `POST /manual` (efectivo/transferencia), `GET /transactions` (admin, trazabilidad con filtros), `GET /revenue?month=` (admin), `GET /:bookingId/status` |
 | 6 | Categories  | **Completo** | `GET /` (includeInactive), `GET /tree`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
@@ -49,7 +49,8 @@ npx prisma generate                      # Regenerar cliente
 | 11| Meta        | **Completo** | Meta CAPI (Schedule + Purchase) |
 | 12| Email       | **Completo** | SendGrid transaccional — welcome/verificación, password reset, booking receipt, payment receipt, order receipt y order status (replyTo configurable) |
 | 13| Health      | **Completo** | `GET /api/health` — DB + Redis check |
-| 14| Upload      | **Completo** | `POST /api/upload` — imágenes con multer; organizadas por producto: `products/<slug>/main.jpg` + `gallery-<ts>.jpg` (folder/imageType por query) |
+| 14| Upload      | **Completo** | `POST /api/upload` — multer + **sharp**: resize 1600px + **WebP q80** + auto-orientación; límite 10 MB; folders genéricos (`products/<slug>`, `services/<slug>`, `banners`) |
+| 21| Banners      | **Completo** | CRUD admin + `GET /banners/public?position=HERO|STRIP` — campañas de temporada en el home |
 | 15| Throttler   | **Completo** | Rate limiting global (100 req/min) |
 | 16| Orders      | **Completo** | `GET /` (admin, con filtros: search/status/dateFrom/dateTo), `GET /my` (cliente), `PATCH /:id/status` (admin) — auto-creados desde webhook de pago de carrito + emails de estado |
 | 17| Whatsapp    | **Completo** | `GET/POST /api/whatsapp/webhook` — verificación (GET: hub.mode + hub.verify_token → 200 + challenge / 403) + recepción (POST → 200) + recepcionista con menú interactivo (ConversationState). IA conversacional pendiente en `saaspa-IA` |
@@ -269,7 +270,7 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (288 tests, 42 suites) — no requiere BD
+npm test              # Unit tests (296 tests, 43 suites) — no requiere BD
 npm run test:cov      # Cobertura
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 ```
@@ -293,6 +294,25 @@ npm test                              # 2 workers (recomendado)
 | `.env.test` | `kamerinos_db_tests` | E2E tests (`npm run test:e2e`) |
 | VPS/Docker | `kamerinos_db` | Producción |
 
+> **Nota de archivos:** `@nestjs/config` (`config.module.ts`) carga **solo `.env`**
+> (`envFilePath: ['.env']`). No existe `.env.local`. Ver `docs-general/ENV.md`.
+
+### Variables de integración por entorno (anti-contaminación)
+
+En **dev**, `.env` usa valores de **prueba** para no afectar producción:
+
+| Variable | Dev (`.env`) | Prod (Docker) |
+|----------|-------------|---------------|
+| `WOMPI_*` | **Sandbox** (`pub_test_` / `prv_test_` / `test_events_` / `test_integrity_`) | Reales (`pub_prod_` / `prv_prod_` / `prod_events_` / `prod_integrity_`) |
+| `META_CAPI_PIXEL_ID` / `META_CAPI_ACCESS_TOKEN` | **vacías** → CAPI apagado | Reales |
+| `META_WHATSAPP_*` | **vacías** | Reales |
+| `GOOGLE_CLIENT_EMAIL` / `GOOGLE_PRIVATE_KEY` | **vacías** → sync omitido | Reales |
+| `SENDGRID_API_KEY` | **vacía** → emails en consola | Reales |
+
+Los servicios ya omiten envíos si la credencial está vacía (`MetaCapiService`,
+`EmailService`, `GoogleCalendarService`). Las credenciales reales **solo** viven
+en `kamerinos-infra/.env` (producción).
+
 El flujo de E2E:
 1. `test/e2e/setup.ts` (Jest `setupFiles`) carga `.env.test` ANTES de que `@nestjs/config` lea `.env`. Como dotenv no sobreescribe variables existentes en `process.env`, `DATABASE_URL` apunta a `kamerinos_db_tests`.
 2. Cada test E2E ejecuta `npx prisma migrate deploy` en `beforeAll` contra la BD de tests.
@@ -300,7 +320,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (42 suites, 288 tests)
+### Inventario de suites (43 suites, 296 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|

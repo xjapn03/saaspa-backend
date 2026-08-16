@@ -77,6 +77,11 @@ async function main() {
     productsCreated++;
   }
 
+  // Los banners de campaña (modelo Banner, posición HERO/STRIP) NO se siembran
+  // aquí porque requieren imágenes reales subidas por el admin
+  // (/dashboard/banners → POST /api/upload?folder=banners). El home solo
+  // muestra banners activos; si no hay, la página se ve limpia.
+
   console.log(`Seed ejecutado: admin=${admin.email}, categorías=${categories.length}, servicios=${services.length}, productos=${productsCreated}`);
 }
 

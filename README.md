@@ -27,9 +27,9 @@ src/
 ├── config/          # Variables de entorno (Joi + @nestjs/config)
 ├── database/        # PrismaService global
 ├── modules/
-│   ├── auth/        # JWT, registro, login, refresh, forgot/reset password
-│   ├── users/       # Gestión de usuarios con sort/filtros + includeInactive
-│   ├── services/    # Catálogo de servicios (con slug + category FK)
+│   ├── auth/        # JWT (cookies httpOnly), registro, login, refresh, logout, email-change con código
+│   ├── users/       # Gestión de usuarios con sort/filtros + includeInactive + UpdateProfileDto (/me)
+│   ├── services/    # Catálogo de servicios (imagen principal + galería, isFeatured, compareAtPrice, slug + category FK)
 │   ├── bookings/    # Reservas con Redis slot locking (bloqueo GLOBAL de horarios)
 │   ├── payments/    # Wompi (ABONO + SALDO, webhooks idempotentes, cart checkout, pago manual)
 │   ├── coupons/     # Cupones con límites de uso (maxUses/usedCount/perUserLimit)
@@ -38,9 +38,10 @@ src/
 │   ├── products/    # Productos e-commerce (Shop)
 │   ├── cart/        # Carrito server-side (CartItem)
 │   ├── orders/      # Pedidos (Order + OrderItem)
+│   ├── banners/     # Banners de campaña (HERO/STRIP) — admin CRUD + público
 │   ├── meta/        # Meta Conversions API (CAPI)
 │   ├── health/      # Health check (DB + Redis)
-│   ├── upload/      # Subida de imágenes (multer)
+│   ├── upload/      # Subida de imágenes (multer + sharp → WebP)
 │   └── whatsapp/    # Webhook WhatsApp Cloud API + recepcionista (menú interactivo)
 ├── repositories/    # Repository Pattern (interfaces + implementaciones Prisma)
 ├── app.module.ts
@@ -81,7 +82,7 @@ Webhooks:
 ## Tests
 
 ```bash
-npm test                 # Unit tests (288 tests, 42 suites) — maxWorkers=2 optimizado
+npm test                 # Unit tests (296 tests, 43 suites) — maxWorkers=2 optimizado
 npm run test:cov         # Cobertura
 npm run test:e2e         # End-to-end (requiere PostgreSQL corriendo)
 ```
@@ -106,6 +107,17 @@ Ver `.env.example` para la lista completa. Claves principales:
 | `SENDGRID_API_KEY`      | API key de SendGrid (recuperación de contraseña, opcional) |
 | `META_*`                | Credenciales WhatsApp Cloud API y CAPI |
 | `IA_BOT_URL`            | URL del microservicio Python IA Bot  |
+
+### Archivos por entorno
+
+- **`.env`** → **desarrollo local** (se carga siempre; `envFilePath: ['.env']`).
+  Valores de **prueba**: Wompi **sandbox**, `META_*`/`SENDGRID_API_KEY`/`GOOGLE_*`
+  **vacías** (los servicios omiten envíos → no contamina Pixel/CAPI/emails/calendario).
+- **`.env.test`** → solo **tests E2E** (`kamerinos_db_tests`, `NODE_ENV=test`).
+- **Producción** → las credenciales reales se inyectan vía **Docker Compose**
+  desde `kamerinos-infra/.env` (no viven en este repo).
+
+> Detalle completo y reglas anti-contaminación: `docs-general/ENV.md`.
 
 ## Repositorios Relacionados
 
