@@ -105,6 +105,7 @@ Ver `.env.example` para la lista completa. Claves principales:
 | `GOOGLE_CLIENT_EMAIL`   | Service account Google Calendar      |
 | `GOOGLE_PRIVATE_KEY`    | Clave privada de la service account  |
 | `SENDGRID_API_KEY`      | API key de SendGrid (recuperación de contraseña, opcional) |
+| `ADMIN_NOTIFY_EMAIL`    | Copia interna de citas/pedidos para el personal (default `kamerinosg@gmail.com`) |
 | `META_*`                | Credenciales WhatsApp Cloud API y CAPI |
 | `IA_BOT_URL`            | URL del microservicio Python IA Bot  |
 

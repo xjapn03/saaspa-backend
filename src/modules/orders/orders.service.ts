@@ -47,6 +47,14 @@ export class OrdersService {
           items: (updated as any).items || [],
           total: Number((updated as any).total || 0),
         });
+        await this.emailService.sendAdminOrderStatusNotification({
+          clientName: (updated as any)?.shippingName || `${(updated as any)?.user?.firstName || ''} ${(updated as any)?.user?.lastName || ''}`.trim() || 'Cliente',
+          clientEmail: recipient,
+          orderId: (updated as any).id,
+          status: STATUS_LABELS[status] || status,
+          items: (updated as any).items || [],
+          total: Number((updated as any).total || 0),
+        });
       } catch (err: any) {
         this.logger.warn(`No se pudo enviar el email de estado del pedido ${id}: ${err?.message}`);
       }

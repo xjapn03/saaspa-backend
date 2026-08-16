@@ -51,7 +51,6 @@ export class GoogleCalendarService {
       : 'Cliente';
     const serviceName = booking.service?.name || 'Servicio';
     const price = booking.service?.price;
-    const clientEmail = booking.user?.email;
 
     const description = [
       `Cita #${booking.id}`,
@@ -77,17 +76,12 @@ export class GoogleCalendarService {
       },
     };
 
-    if (clientEmail) {
-      requestBody.attendees = [{ email: clientEmail }];
-    }
-
     let lastError: any;
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const res = await calendar.events.insert({
           calendarId: this.calendarId,
           requestBody,
-          sendNotifications: true,
         });
         this.logger.log(`Evento creado en Google Calendar: ${res.data.id}`);
         return res.data.id || null;

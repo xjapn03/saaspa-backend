@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { IBookingsRepository, IBookingSafe } from '../../repositories/interfaces/bookings.repository';
 import { GoogleCalendarService } from '../../common/google-calendar/google-calendar.service';
-import { MetaCapiService } from '../../modules/meta/meta-capi.service';
+import { MetaCapiService, hashCapiValue, hashCapiPhone } from '../../modules/meta/meta-capi.service';
 import { RedisService } from '../../common/redis/redis.service';
 
 @Injectable()
@@ -48,6 +48,10 @@ export class BookingSyncService {
 
     this.metaCapi.sendEvent({
       eventName: 'Schedule',
+      userData: {
+        em: (booking.user as any)?.email ? hashCapiValue((booking.user as any).email) : undefined,
+        ph: (booking.user as any)?.phone ? hashCapiPhone((booking.user as any).phone) : undefined,
+      },
       customData: {
         currency: 'COP',
         value: (booking.service as any)?.price ? Number((booking.service as any).price) : undefined,

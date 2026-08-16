@@ -6,7 +6,7 @@ import { IBookingsRepository } from '../../repositories/interfaces/bookings.repo
 import { ICouponsRepository } from '../../repositories/interfaces/coupons.repository';
 import { IProductsRepository } from '../../repositories/interfaces/products.repository';
 import { IOrdersRepository } from '../../repositories/interfaces/orders.repository';
-import { MetaCapiService } from '../meta/meta-capi.service';
+import { MetaCapiService, hashCapiValue, hashCapiPhone } from '../meta/meta-capi.service';
 import { EmailService } from '../../common/email/email.service';
 import { BookingSyncService } from '../bookings/booking-sync.service';
 
@@ -149,6 +149,10 @@ export class PaymentsService {
       if (booking) {
         this.metaCapi.sendEvent({
           eventName: 'Purchase',
+          userData: {
+            em: (booking as any)?.user?.email ? hashCapiValue((booking as any).user.email) : undefined,
+            ph: (booking as any)?.user?.phone ? hashCapiPhone((booking as any).user.phone) : undefined,
+          },
           customData: {
             currency: 'COP',
             value: data.amount_in_cents ? data.amount_in_cents / 100 : undefined,
@@ -170,6 +174,19 @@ export class PaymentsService {
         this.emailService.sendBookingReceipt({
           clientName: clientName || 'Cliente',
           clientEmail: (booking as any)?.user?.email || '',
+          serviceName: (booking as any)?.service?.name || 'Servicio',
+          date: dateStr,
+          time: timeStr,
+          depositAmount: depositPaid,
+          remainingAmount: Math.round((servicePrice - depositPaid) * 100) / 100,
+          bookingId: payment.bookingId,
+          paymentReference: payment.wompiReference || data.reference || '',
+        });
+
+        this.emailService.sendAdminBookingNotification({
+          clientName: clientName || 'Cliente',
+          clientEmail: (booking as any)?.user?.email || '',
+          clientPhone: (booking as any)?.user?.phone || undefined,
           serviceName: (booking as any)?.service?.name || 'Servicio',
           date: dateStr,
           time: timeStr,
@@ -234,7 +251,7 @@ export class PaymentsService {
           }
         }
         if (user?.email || metadata.shippingEmail) {
-          this.emailService.sendOrderReceipt({
+          const orderReceiptData = {
             clientName: metadata.shippingName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Cliente',
             clientEmail: metadata.shippingEmail || user?.email || '',
             orderId: orderId || payment.id,
@@ -243,6 +260,11 @@ export class PaymentsService {
             shippingAddress: metadata.shippingAddress || 'Pendiente',
             shippingCity: metadata.shippingCity || 'Pendiente',
             paymentReference: payment.wompiReference || '',
+          };
+          this.emailService.sendOrderReceipt(orderReceiptData);
+          this.emailService.sendAdminOrderNotification({
+            ...orderReceiptData,
+            clientPhone: user?.phone || undefined,
           });
         }
       }
