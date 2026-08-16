@@ -48,7 +48,7 @@ describe('MetaCapiService', () => {
 
       expect(fetchSpy).toHaveBeenCalledTimes(1);
       const [url, options] = fetchSpy.mock.calls[0];
-      expect(url).toContain('graph.facebook.com/v18.0/1234567890/events');
+      expect(url).toContain('graph.facebook.com/v21.0/1234567890/events');
       expect(url).toContain('access_token=test-token');
       expect(options.method).toBe('POST');
 
@@ -57,6 +57,17 @@ describe('MetaCapiService', () => {
       expect(body.data[0].action_source).toBe('website');
       expect(body.data[0].custom_data.currency).toBe('COP');
       expect(body.data[0].custom_data.value).toBe(100000);
+    });
+
+    it('should include event_id for deduplication when provided', async () => {
+      await service.sendEvent({
+        eventName: 'Purchase',
+        eventId: 'purchase-123',
+        customData: { value: 30000 },
+      });
+
+      const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
+      expect(body.data[0].event_id).toBe('purchase-123');
     });
 
     it('should send a Purchase event', async () => {

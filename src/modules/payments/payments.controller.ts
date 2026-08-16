@@ -21,7 +21,12 @@ export class PaymentsController {
   @ApiOperation({ summary: 'Iniciar pago — retorna config para widget Wompi. type=ABONO (default) o SALDO' })
   @ApiResponse({ status: 201, description: 'Configuración de pago generada' })
   init(@Body() dto: InitPaymentDto) {
-    return this.paymentsService.initPayment(dto.bookingId, (dto.type as 'ABONO' | 'SALDO') || 'ABONO');
+    return this.paymentsService.initPayment(dto.bookingId, (dto.type as 'ABONO' | 'SALDO') || 'ABONO', {
+      payFull: !!dto.payFull,
+      fbc: dto.fbc,
+      fbp: dto.fbp,
+      eventId: dto.eventId,
+    });
   }
 
   @Post('init-cart')
