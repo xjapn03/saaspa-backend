@@ -54,6 +54,11 @@ describe('GoogleCalendarService', () => {
         expect(insertArgs.requestBody.summary).toBe('Facial — Maria Gomez');
         expect(insertArgs.requestBody.start.dateTime).toBe(mockBooking.startTime.toISOString());
         expect(insertArgs.requestBody.end.dateTime).toBe(mockBooking.endTime.toISOString());
+        // Las cuentas de servicio no pueden invitar asistentes sin Domain-Wide Delegation:
+        // el evento se crea SIN attendees ni sendNotifications (el cliente se avisa por SendGrid).
+        expect(insertArgs).not.toHaveProperty('attendees');
+        expect(insertArgs).not.toHaveProperty('sendNotifications');
+        expect(insertArgs.requestBody).not.toHaveProperty('attendees');
       });
 
       it('should handle null user gracefully', async () => {

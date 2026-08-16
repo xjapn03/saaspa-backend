@@ -214,7 +214,7 @@ CloudWatch/Datadog, se inyecta un servicio de logging dentro del interceptor.
 ### Ciclo de vida de tokens
 
 ```
-Login/Register ──► accessToken (15m) + refreshToken (7d, guardado en DB)
+Login/Register ──► accessToken (15m) + refreshToken (1d, guardado en DB)
                          │
 Refresco ──► refreshToken válido ──► nuevos tokens (rotación)
                          │
@@ -228,8 +228,8 @@ Logout ──► accessToken → blacklist en Redis (TTL = tiempo restante)
 |--------|------|-------------|
 | POST | `/api/auth/register` | Crear usuario + tokens |
 | POST | `/api/auth/login` | Autenticar + tokens |
-| POST | `/api/auth/refresh` | Rotar tokens (body: refreshToken) |
-| POST | `/api/auth/logout` | Invalidar tokens (header Bearer + body refreshToken) |
+| POST | `/api/auth/refresh` | Rotar tokens (lee la cookie httpOnly `kamerinos_refresh_token`) |
+| POST | `/api/auth/logout` | Invalidar tokens (lee cookies httpOnly y las limpia) |
 
 ### Cómo funciona el logout (Token Blacklist)
 

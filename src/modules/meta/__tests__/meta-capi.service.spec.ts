@@ -147,3 +147,27 @@ describe('MetaCapiService', () => {
     });
   });
 });
+
+describe('Meta CAPI hashing helpers', () => {
+  const crypto = require('crypto');
+
+  it('hashCapiValue should return sha256 hex of the normalized (lowercase) value', () => {
+    const { hashCapiValue } = require('../meta-capi.service');
+    const expected = crypto.createHash('sha256').update('MARIA@EMAIL.COM'.trim().toLowerCase()).digest('hex');
+    expect(hashCapiValue(' MARIA@EMAIL.COM ')).toBe(expected);
+  });
+
+  it('hashCapiPhone should normalize digits and prefix country code 57', () => {
+    const { hashCapiPhone } = require('../meta-capi.service');
+    const expected = crypto.createHash('sha256').update('573001234567').digest('hex');
+    expect(hashCapiPhone('300 123 4567')).toBe(expected);
+    // Ya tiene prefijo 57 → no lo duplica
+    const expected57 = crypto.createHash('sha256').update('573001234567').digest('hex');
+    expect(hashCapiPhone('573001234567')).toBe(expected57);
+  });
+
+  it('hashCapiPhone should return undefined for empty phone', () => {
+    const { hashCapiPhone } = require('../meta-capi.service');
+    expect(hashCapiPhone('')).toBeUndefined();
+  });
+});

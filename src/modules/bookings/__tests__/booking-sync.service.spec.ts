@@ -59,7 +59,12 @@ describe('BookingSyncService', () => {
 
     expect(bookingsRepo.update).toHaveBeenCalledWith('booking-1', { status: 'CONFIRMADA' } as any);
     expect(bookingsRepo.update).toHaveBeenCalledWith('booking-1', { googleEventId: 'evt-123', calendarSync: 'SYNCED' } as any);
-    expect(metaCapi.sendEvent).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'Schedule' }));
+    expect(metaCapi.sendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'Schedule',
+        userData: expect.objectContaining({ em: expect.any(String) }),
+      }),
+    );
   });
 
   it('should mark calendarSync FAILED when calendar returns null', async () => {

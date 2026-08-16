@@ -218,6 +218,8 @@ describe('PaymentsService', () => {
       expect(result).toEqual({ received: true });
       expect(paymentsRepo.update).toHaveBeenCalled();
       expect(bookingSync.confirmAndSync).toHaveBeenCalledWith('booking-1');
+      expect(emailService.sendBookingReceipt).toHaveBeenCalled();
+      expect(emailService.sendAdminBookingNotification).toHaveBeenCalled();
     });
 
     it('should approve SALDO payment without changing booking status', async () => {

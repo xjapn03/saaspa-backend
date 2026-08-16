@@ -47,6 +47,36 @@ describe('EmailService', () => {
     it('should log payment receipt to console without sending', async () => {
       await expect(service.sendPaymentReceipt(paymentData)).resolves.toBeUndefined();
     });
+
+    it('should log admin booking notification without throwing', async () => {
+      await expect(service.sendAdminBookingNotification(bookingData)).resolves.toBeUndefined();
+    });
+
+    it('should log admin order notification without throwing', async () => {
+      const orderData = {
+        clientName: 'Maria Gomez',
+        clientEmail: 'maria@example.com',
+        orderId: 'order-1',
+        items: [{ name: 'Crema', price: 50000, quantity: 1 }],
+        total: 50000,
+        shippingAddress: 'Calle 1',
+        shippingCity: 'Bogotá',
+        paymentReference: 'ref-abc',
+      };
+      await expect(service.sendAdminOrderNotification(orderData)).resolves.toBeUndefined();
+    });
+
+    it('should log admin order status notification without throwing', async () => {
+      const statusData = {
+        clientName: 'Maria Gomez',
+        clientEmail: 'maria@example.com',
+        orderId: 'order-1',
+        status: 'CONFIRMADO',
+        items: [{ name: 'Crema', price: 50000, quantity: 1 }],
+        total: 50000,
+      };
+      await expect(service.sendAdminOrderStatusNotification(statusData)).resolves.toBeUndefined();
+    });
   });
 
   describe('with API key (mocked)', () => {
