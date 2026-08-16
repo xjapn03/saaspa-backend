@@ -124,6 +124,31 @@ describe('PaymentsService', () => {
 
       expect(result.amountInCents).toBe(3000000);
     });
+
+    it('should charge full price when payFull is true', async () => {
+      bookingsRepo.findById.mockResolvedValue(mockBooking as any);
+      paymentsRepo.create.mockResolvedValue({ id: 'pay-1' } as any);
+
+      const result = await service.initPayment('booking-1', 'ABONO', { payFull: true });
+
+      expect(result.amountInCents).toBe(10000000);
+      expect(paymentsRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 100000, metadata: expect.objectContaining({ payFull: true }) }),
+      );
+    });
+
+    it('should store fbc/fbp/eventId in payment metadata', async () => {
+      bookingsRepo.findById.mockResolvedValue(mockBooking as any);
+      paymentsRepo.create.mockResolvedValue({ id: 'pay-1' } as any);
+
+      await service.initPayment('booking-1', 'ABONO', { fbc: 'fb.1.abc', fbp: 'fb.2.def', eventId: 'evt-9' });
+
+      expect(paymentsRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ fbc: 'fb.1.abc', fbp: 'fb.2.def', eventId: 'evt-9' }),
+        }),
+      );
+    });
   });
 
   describe('initPayment — SALDO', () => {
@@ -217,7 +242,7 @@ describe('PaymentsService', () => {
 
       expect(result).toEqual({ received: true });
       expect(paymentsRepo.update).toHaveBeenCalled();
-      expect(bookingSync.confirmAndSync).toHaveBeenCalledWith('booking-1');
+      expect(bookingSync.confirmAndSync).toHaveBeenCalledWith('booking-1', expect.objectContaining({ fbc: undefined }));
       expect(emailService.sendBookingReceipt).toHaveBeenCalled();
       expect(emailService.sendAdminBookingNotification).toHaveBeenCalled();
     });

@@ -21,14 +21,35 @@ describe('PaymentsController', () => {
       service.initPayment.mockResolvedValue({ publicKey: 'pk', signature: 'sig', reference: 'ref', amountInCents: 5000, currency: 'COP' });
       const result = await controller.init({ bookingId: 'booking-1' });
       expect(result.publicKey).toBe('pk');
-      expect(service.initPayment).toHaveBeenCalledWith('booking-1', 'ABONO');
+      expect(service.initPayment).toHaveBeenCalledWith('booking-1', 'ABONO', {
+        payFull: false,
+        fbc: undefined,
+        fbp: undefined,
+        eventId: undefined,
+      });
     });
 
     it('should pass SALDO type when specified', async () => {
       service.initPayment.mockResolvedValue({ publicKey: 'pk', signature: 'sig', reference: 'ref', amountInCents: 3000, currency: 'COP' });
       const result = await controller.init({ bookingId: 'booking-1', type: 'SALDO' });
       expect(result.publicKey).toBe('pk');
-      expect(service.initPayment).toHaveBeenCalledWith('booking-1', 'SALDO');
+      expect(service.initPayment).toHaveBeenCalledWith('booking-1', 'SALDO', {
+        payFull: false,
+        fbc: undefined,
+        fbp: undefined,
+        eventId: undefined,
+      });
+    });
+
+    it('should pass payFull and attribution fields when provided', async () => {
+      service.initPayment.mockResolvedValue({ publicKey: 'pk', signature: 'sig', reference: 'ref', amountInCents: 10000, currency: 'COP' });
+      await controller.init({ bookingId: 'booking-1', type: 'ABONO', payFull: true, fbc: 'fb.1.abc', fbp: 'fb.2.def', eventId: 'evt-1' });
+      expect(service.initPayment).toHaveBeenCalledWith('booking-1', 'ABONO', {
+        payFull: true,
+        fbc: 'fb.1.abc',
+        fbp: 'fb.2.def',
+        eventId: 'evt-1',
+      });
     });
   });
 

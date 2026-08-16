@@ -15,7 +15,7 @@ export class BookingSyncService {
     private redis: RedisService,
   ) {}
 
-  async confirmAndSync(id: string): Promise<IBookingSafe> {
+  async confirmAndSync(id: string, attribution?: { fbc?: string; fbp?: string }): Promise<IBookingSafe> {
     const booking = await this.bookingsRepo.findById(id);
 
     if (['CANCELADA', 'COMPLETADA', 'NO_ASISTIO'].includes(booking.status)) {
@@ -48,9 +48,12 @@ export class BookingSyncService {
 
     this.metaCapi.sendEvent({
       eventName: 'Schedule',
+      eventId: `schedule-${booking.id}`,
       userData: {
         em: (booking.user as any)?.email ? hashCapiValue((booking.user as any).email) : undefined,
         ph: (booking.user as any)?.phone ? hashCapiPhone((booking.user as any).phone) : undefined,
+        fbc: attribution?.fbc || undefined,
+        fbp: attribution?.fbp || undefined,
       },
       customData: {
         currency: 'COP',

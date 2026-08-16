@@ -32,7 +32,11 @@ export class PaymentsService {
     return crypto.createHash('sha256').update(data).digest('hex');
   }
 
-  async initPayment(bookingId: string, type: 'ABONO' | 'SALDO' = 'ABONO') {
+  async initPayment(
+    bookingId: string,
+    type: 'ABONO' | 'SALDO' = 'ABONO',
+    options?: { payFull?: boolean; fbc?: string; fbp?: string; eventId?: string },
+  ) {
     const booking = await this.bookingsRepo.findById(bookingId);
     const servicePrice = Number((booking.service as any).price);
     let amountInCents: number;
@@ -42,7 +46,7 @@ export class PaymentsService {
       if (booking.status !== 'PENDIENTE_PAGO') {
         throw new BadRequestException('La cita no está pendiente de pago');
       }
-      amount = servicePrice * 0.3;
+      amount = options?.payFull ? servicePrice : servicePrice * 0.3;
       amountInCents = Math.round(amount * 100);
     } else {
       if (booking.status !== 'CONFIRMADA') {
@@ -70,6 +74,12 @@ export class PaymentsService {
       amount,
       type,
       wompiReference: reference,
+      metadata: {
+        fbc: options?.fbc || null,
+        fbp: options?.fbp || null,
+        eventId: options?.eventId || null,
+        payFull: options?.payFull || false,
+      },
     } as any);
 
     return {
@@ -142,16 +152,22 @@ export class PaymentsService {
       } as any);
 
       if (payment.type === 'ABONO') {
-        await this.bookingSync.confirmAndSync(payment.bookingId);
+        await this.bookingSync.confirmAndSync(payment.bookingId, {
+          fbc: (payment as any).metadata?.fbc,
+          fbp: (payment as any).metadata?.fbp,
+        });
       }
 
       const booking = await this.bookingsRepo.findById(payment.bookingId).catch(() => null);
       if (booking) {
         this.metaCapi.sendEvent({
           eventName: 'Purchase',
+          eventId: (payment as any).metadata?.eventId || `purchase-${payment.id}`,
           userData: {
             em: (booking as any)?.user?.email ? hashCapiValue((booking as any).user.email) : undefined,
             ph: (booking as any)?.user?.phone ? hashCapiPhone((booking as any).user.phone) : undefined,
+            fbc: (payment as any).metadata?.fbc || undefined,
+            fbp: (payment as any).metadata?.fbp || undefined,
           },
           customData: {
             currency: 'COP',
