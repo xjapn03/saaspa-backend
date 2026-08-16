@@ -7,6 +7,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import * as compression from 'compression';
+import * as cookieParser from 'cookie-parser';
 import { PrismaClient } from '@prisma/client';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
@@ -28,6 +29,7 @@ async function bootstrap() {
 
   app.use(helmet());
   app.use(compression());
+  app.use(cookieParser());
 
   const corsOrigins = (config.get<string>('corsOrigin') || 'http://localhost:3000')
     .split(',')

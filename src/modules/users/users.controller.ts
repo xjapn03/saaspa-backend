@@ -4,6 +4,7 @@ import { Role } from '@prisma/client';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 
@@ -43,9 +44,9 @@ export class UsersController {
   }
 
   @Patch('me')
-  @ApiOperation({ summary: 'Editar perfil propio' })
+  @ApiOperation({ summary: 'Editar perfil propio (sin email — el email se cambia con verificación)' })
   @ApiResponse({ status: 200, description: 'Perfil actualizado' })
-  updateProfile(@CurrentUser('id') userId: string, @Body() dto: UpdateUserDto) {
+  updateProfile(@CurrentUser('id') userId: string, @Body() dto: UpdateProfileDto) {
     return this.usersService.update(userId, dto);
   }
 

@@ -4,6 +4,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { Request } from 'express';
 import { TokenBlacklistService } from '../redis/token-blacklist.service';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { ACCESS_COOKIE } from '../auth/cookies';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -35,7 +36,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
   private extractToken(request: Request): string | null {
     const header = request.headers?.authorization;
-    if (!header) return null;
-    return header.replace('Bearer ', '');
+    if (header) return header.replace('Bearer ', '');
+    return (request as any)?.cookies?.[ACCESS_COOKIE] ?? null;
   }
 }

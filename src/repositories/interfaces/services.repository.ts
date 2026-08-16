@@ -8,11 +8,15 @@ export interface IServiceSafe {
   slug: string;
   description: string | null;
   price: number;
+  compareAtPrice: number | null;
   duration: number;
   isActive: boolean;
+  isFeatured: boolean;
   categoryId: string | null;
   categoryRel?: { id: string; name: string; slug: string } | null;
   imageUrl: string | null;
+  mainImage: string | null;
+  carouselImages: string[] | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -20,6 +24,7 @@ export interface IServiceSafe {
 export interface ServiceFilters {
   page?: number;
   limit?: number;
+  featured?: boolean;
 }
 
 export abstract class IServicesRepository {

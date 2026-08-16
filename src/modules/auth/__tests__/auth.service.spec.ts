@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, ConflictException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import * as bcrypt from 'bcryptjs';
@@ -343,6 +343,59 @@ describe('AuthService', () => {
 
       // Act & Assert
       await expect(service.verifyEmail('expired-token')).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('requestEmailChange', () => {
+    it('should throw ConflictException when email is already in use', async () => {
+      // Arrange
+      usersRepo.findByEmail.mockResolvedValue({ id: 'other', email: 'taken@test.com' } as any);
+
+      // Act & Assert
+      await expect(service.requestEmailChange('user-1', 'taken@test.com')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prisma.emailChangeCode.upsert).not.toHaveBeenCalled();
+    });
+
+    it('should generate a code and upsert it', async () => {
+      // Arrange
+      usersRepo.findByEmail.mockResolvedValue(null);
+      usersRepo.findById.mockResolvedValue({ id: 'user-1', firstName: 'Maria', lastName: 'Gomez' } as any);
+
+      // Act
+      const result = await service.requestEmailChange('user-1', 'new@test.com');
+
+      // Assert
+      expect(result.message).toContain('new@test.com');
+      expect(prisma.emailChangeCode.upsert).toHaveBeenCalled();
+      expect(emailService.sendEmailChangeCode).toHaveBeenCalledWith('new@test.com', expect.any(String), expect.stringMatching(/^\d{6}$/));
+    });
+  });
+
+  describe('confirmEmailChange', () => {
+    it('should throw UnauthorizedException when there is no pending request', async () => {
+      // Arrange
+      prisma.emailChangeCode.findUnique.mockResolvedValue(null);
+
+      // Act & Assert
+      await expect(service.confirmEmailChange('user-1', '123456')).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException when code is wrong', async () => {
+      // Arrange
+      const hash = await bcrypt.hash('999999', 4);
+      prisma.emailChangeCode.findUnique.mockResolvedValue({
+        id: 'ec-1',
+        userId: 'user-1',
+        newEmail: 'new@test.com',
+        codeHash: hash,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      } as any);
+
+      // Act & Assert
+      await expect(service.confirmEmailChange('user-1', '000000')).rejects.toThrow(UnauthorizedException);
+      expect(usersRepo.update).not.toHaveBeenCalled();
     });
   });
 });

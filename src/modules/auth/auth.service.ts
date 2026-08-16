@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { ConfigService } from '@nestjs/config';
@@ -181,6 +181,54 @@ export class AuthService {
     await this.prisma.resetToken.delete({ where: { id: resetToken.id } });
 
     return { message: 'Contraseña actualizada correctamente. Ya puedes iniciar sesión.' };
+  }
+
+  async requestEmailChange(userId: string, newEmail: string) {
+    const existing = await this.usersRepo.findByEmail(newEmail);
+    if (existing) {
+      throw new ConflictException('Ese correo ya está en uso');
+    }
+
+    const user = await this.usersRepo.findById(userId);
+    if (!user) throw new UnauthorizedException('Usuario no encontrado');
+
+    const code = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
+    const codeHash = await bcrypt.hash(code, 10);
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    await this.prisma.emailChangeCode.upsert({
+      where: { userId },
+      update: { newEmail, codeHash, expiresAt },
+      create: { userId, newEmail, codeHash, expiresAt },
+    });
+
+    const userName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : '';
+    this.emailService.sendEmailChangeCode(newEmail, userName, code);
+
+    return { message: `Enviamos un código de verificación a ${newEmail}.` };
+  }
+
+  async confirmEmailChange(userId: string, code: string) {
+    const record = await this.prisma.emailChangeCode.findUnique({ where: { userId } });
+    if (!record) {
+      throw new UnauthorizedException('No hay una solicitud de cambio de correo activa.');
+    }
+
+    if (record.expiresAt < new Date()) {
+      await this.prisma.emailChangeCode.delete({ where: { userId } });
+      throw new UnauthorizedException('El código ha expirado. Solicita uno nuevo.');
+    }
+
+    const valid = await bcrypt.compare(code, record.codeHash);
+    if (!valid) {
+      throw new UnauthorizedException('Código incorrecto.');
+    }
+
+    await this.usersRepo.update(userId, { email: record.newEmail } as any);
+    await this.usersRepo.setRefreshToken(userId, '');
+    await this.prisma.emailChangeCode.delete({ where: { userId } });
+
+    return { message: 'Correo actualizado correctamente. Inicia sesión de nuevo con tu nuevo correo.' };
   }
 
   private sanitizeUser(user: any) {

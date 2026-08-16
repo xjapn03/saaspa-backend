@@ -167,6 +167,19 @@ export class EmailService {
     await this.send(email, 'Restablece tu contraseña — Kamerinos SPA', this.renderLayout(inner), 'password-reset', `reset-${Date.now()}`);
   }
 
+  async sendEmailChangeCode(to: string, name: string, code: string): Promise<void> {
+    const inner = `
+      <h1 style="color: ${BRAND}; font-size: 20px; margin: 0 0 8px;">Cambio de correo electrónico</h1>
+      <p style="font-size: 15px; line-height: 1.6;">Hola${name ? ` <strong>${name}</strong>` : ''},</p>
+      <p style="font-size: 14px; line-height: 1.6;">Usa el siguiente código para confirmar tu nuevo correo:</p>
+      <p style="margin: 24px 0; text-align: center;">
+        <span style="background-color: ${BORDER}; color: ${INK}; font-size: 28px; letter-spacing: 8px; font-weight: bold; padding: 12px 24px; border-radius: 12px; display: inline-block;">${code}</span>
+      </p>
+      <p style="font-size: 12px; color: ${MUTED}; margin: 16px 0 0;">El código expira en 15 minutos. Si no solicitaste este cambio, ignora este mensaje.</p>
+    `;
+    await this.send(to, 'Tu código de cambio de correo — Kamerinos SPA', this.renderLayout(inner), 'email-change-code', `email-change-${Date.now()}`);
+  }
+
   async sendOrderReceipt(data: OrderReceiptData): Promise<void> {
     const rows = data.items
       .map(

@@ -78,22 +78,27 @@ model User {
   cartItems    CartItem[]
   orders       Order[]
   verificationTokens VerificationToken[]
+  emailChangeCode EmailChangeCode?
 
   @@map("users")
 }
 
 model Service {
-  id          String   @id @default(uuid())
-  name        String
-  slug        String   @unique
-  description String?
-  price       Decimal  @db.Decimal(10, 2)
-  duration    Int
-  isActive    Boolean  @default(true)
-  categoryId  String?
-  imageUrl    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(uuid())
+  name           String
+  slug           String   @unique
+  description    String?
+  price          Decimal  @db.Decimal(10, 2)
+  compareAtPrice Decimal? @db.Decimal(10, 2)
+  duration       Int
+  isActive       Boolean  @default(true)
+  isFeatured     Boolean  @default(false)
+  categoryId     String?
+  imageUrl       String?
+  mainImage      String?
+  carouselImages Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   categoryRel  Category? @relation(fields: [categoryId], references: [id])
   bookings    Booking[]
@@ -322,4 +327,41 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+enum BannerPosition {
+  HERO
+  STRIP
+}
+
+model Banner {
+  id        String         @id @default(uuid())
+  title     String?
+  subtitle  String?
+  imageUrl  String
+  ctaText   String?
+  ctaLink   String?
+  position  BannerPosition @default(HERO)
+  isActive  Boolean        @default(true)
+  sortOrder Int            @default(0)
+  startsAt  DateTime?
+  endsAt    DateTime?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([position, isActive])
+  @@map("banners")
+}
+
+model EmailChangeCode {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  newEmail  String
+  codeHash  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_change_codes")
 }

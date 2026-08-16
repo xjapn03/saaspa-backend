@@ -30,8 +30,13 @@ export class ServicesController {
   @ApiOperation({ summary: 'Listar servicios activos (público)' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
-  findActive(@Query('page') page?: string, @Query('limit') limit?: string) {
-    return this.servicesService.findActive({ page: page ? parseInt(page) : undefined, limit: limit ? parseInt(limit) : undefined });
+  @ApiQuery({ name: 'featured', required: false, type: Boolean })
+  findActive(@Query('page') page?: string, @Query('limit') limit?: string, @Query('featured') featured?: string) {
+    return this.servicesService.findActive({
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
+      featured: featured === 'true',
+    });
   }
 
   @Get('public/:slug')

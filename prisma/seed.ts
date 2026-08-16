@@ -38,21 +38,21 @@ async function main() {
     s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
   const services = [
-    { name: 'Masaje Relajante', description: 'Masaje corporal completo de 60 minutos con aceites esenciales.', price: 120000, duration: 60, categoryId: catMap.masajes },
-    { name: 'Masaje Deportivo', description: 'Masaje profundo para aliviar tensión muscular y mejorar la recuperación.', price: 140000, duration: 75, categoryId: catMap.masajes },
-    { name: 'Limpieza Facial Profunda', description: 'Limpieza facial con extracción y mascarilla hidratante.', price: 85000, duration: 45, categoryId: catMap.faciales },
-    { name: 'Hidratación Facial Premium', description: 'Tratamiento intensivo con ácido hialurónico y vitamina C.', price: 110000, duration: 60, categoryId: catMap.faciales },
-    { name: 'Manicure Semi-permanente', description: 'Aplicación de esmalte semi-permanente con preparación completa.', price: 55000, duration: 60, categoryId: catMap.unas },
-    { name: 'Pedicure Spa', description: 'Pedicure completo con exfoliación, hidratación y esmaltado.', price: 65000, duration: 50, categoryId: catMap.unas },
-    { name: 'Depilación con Cera Piernas', description: 'Depilación completa de piernas con cera tibia.', price: 70000, duration: 30, categoryId: catMap.depilacion },
-    { name: 'Depilación Axilas + Brazos', description: 'Depilación completa de axilas y brazos.', price: 45000, duration: 25, categoryId: catMap.depilacion },
+    { name: 'Masaje Relajante', description: 'Masaje corporal completo de 60 minutos con aceites esenciales.', price: 120000, compareAtPrice: 150000, duration: 60, categoryId: catMap.masajes, isFeatured: true },
+    { name: 'Masaje Deportivo', description: 'Masaje profundo para aliviar tensión muscular y mejorar la recuperación.', price: 140000, compareAtPrice: null, duration: 75, categoryId: catMap.masajes, isFeatured: true },
+    { name: 'Limpieza Facial Profunda', description: 'Limpieza facial con extracción y mascarilla hidratante.', price: 85000, compareAtPrice: 110000, duration: 45, categoryId: catMap.faciales, isFeatured: false },
+    { name: 'Hidratación Facial Premium', description: 'Tratamiento intensivo con ácido hialurónico y vitamina C.', price: 110000, compareAtPrice: null, duration: 60, categoryId: catMap.faciales, isFeatured: true },
+    { name: 'Manicure Semi-permanente', description: 'Aplicación de esmalte semi-permanente con preparación completa.', price: 55000, compareAtPrice: 70000, duration: 60, categoryId: catMap.unas, isFeatured: false },
+    { name: 'Pedicure Spa', description: 'Pedicure completo con exfoliación, hidratación y esmaltado.', price: 65000, compareAtPrice: null, duration: 50, categoryId: catMap.unas, isFeatured: false },
+    { name: 'Depilación con Cera Piernas', description: 'Depilación completa de piernas con cera tibia.', price: 70000, compareAtPrice: null, duration: 30, categoryId: catMap.depilacion, isFeatured: true },
+    { name: 'Depilación Axilas + Brazos', description: 'Depilación completa de axilas y brazos.', price: 45000, compareAtPrice: 60000, duration: 25, categoryId: catMap.depilacion, isFeatured: false },
   ];
 
   for (const s of services) {
     await prisma.service.upsert({
       where: { id: 'seed-' + s.name.toLowerCase().replace(/\s+/g, '-') },
-      update: { price: s.price, categoryId: s.categoryId, slug: slugify(s.name) },
-      create: { id: 'seed-' + s.name.toLowerCase().replace(/\s+/g, '-'), ...s, slug: slugify(s.name) },
+      update: { price: s.price, compareAtPrice: s.compareAtPrice, categoryId: s.categoryId, slug: slugify(s.name), isFeatured: s.isFeatured },
+      create: { id: 'seed-' + s.name.toLowerCase().replace(/\s+/g, '-'), ...s, slug: slugify(s.name), mainImage: null, carouselImages: [] },
     });
   }
 

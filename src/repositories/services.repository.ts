@@ -5,12 +5,17 @@ import { IServicesRepository, ServiceFilters } from './interfaces/services.repos
 import { paginated } from '../common/interfaces/paginated-result';
 
 const serviceSelect = {
-  id: true, name: true, slug: true, description: true, price: true, duration: true,
-  isActive: true, categoryId: true, imageUrl: true, createdAt: true, updatedAt: true,
+  id: true, name: true, slug: true, description: true, price: true, compareAtPrice: true,
+  duration: true, isActive: true, isFeatured: true, categoryId: true, imageUrl: true,
+  mainImage: true, carouselImages: true, createdAt: true, updatedAt: true,
   categoryRel: { select: { id: true, name: true, slug: true } },
 } satisfies Prisma.ServiceSelect;
 
-const toSafe = (s: any) => ({ ...s, price: Number(s.price) });
+const toSafe = (s: any) => ({
+  ...s,
+  price: Number(s.price),
+  compareAtPrice: s.compareAtPrice !== null && s.compareAtPrice !== undefined ? Number(s.compareAtPrice) : null,
+});
 
 @Injectable()
 export class ServicesRepository extends IServicesRepository {
@@ -35,6 +40,7 @@ export class ServicesRepository extends IServicesRepository {
     const skip = (page - 1) * limit;
 
     const where: Prisma.ServiceWhereInput = { isActive: true };
+    if (filters.featured) where.isFeatured = true;
     const [data, total] = await Promise.all([
       this.prisma.service.findMany({ where, select: serviceSelect, orderBy: { name: 'asc' }, skip, take: limit }),
       this.prisma.service.count({ where }),
