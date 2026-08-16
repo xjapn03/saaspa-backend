@@ -47,6 +47,23 @@ describe('BannersService', () => {
     );
   });
 
+  it('should auto-deactivate banners whose endsAt already passed', async () => {
+    prisma.banner.findMany.mockResolvedValue([] as any);
+    await service.findAll();
+    expect(prisma.banner.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ isActive: true, endsAt: { lt: expect.any(Date) } }),
+        data: { isActive: false },
+      }),
+    );
+  });
+
+  it('findPublic should also auto-deactivate expired banners', async () => {
+    prisma.banner.findMany.mockResolvedValue([] as any);
+    await service.findPublic('STRIP');
+    expect(prisma.banner.updateMany).toHaveBeenCalled();
+  });
+
   it('findById should throw when not found', async () => {
     prisma.banner.findUnique.mockResolvedValue(null);
     await expect(service.findById('missing')).rejects.toThrow(NotFoundException);
