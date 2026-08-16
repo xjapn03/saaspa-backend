@@ -10,7 +10,7 @@ export class MulterExceptionFilter implements ExceptionFilter {
     if (exception.code === 'LIMIT_FILE_SIZE') {
       return res.status(HttpStatus.PAYLOAD_TOO_LARGE).json({
         statusCode: HttpStatus.PAYLOAD_TOO_LARGE,
-        message: 'Imagen demasiado grande (máximo 10 MB)',
+        message: 'Imagen demasiado grande (máximo 20 MB)',
       });
     }
 

@@ -39,11 +39,11 @@ const OLD_CATEGORY_SLUGS = [
 ];
 
 async function main() {
-  const passwordHash = await bcrypt.hash('admin123', 10);
+  const passwordHash = await bcrypt.hash('admin123$', 10);
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@sandrapinzonsaludybelleza.com.co' },
-    update: { passwordHash },
+    update: { passwordHash, emailVerified: true },
     create: {
       email: 'admin@sandrapinzonsaludybelleza.com.co',
       passwordHash,
@@ -52,6 +52,7 @@ async function main() {
       phone: '3000000000',
       role: 'ADMIN',
       description: 'Administrador del sistema Kamerinos SPA',
+      emailVerified: true,
     },
   });
 

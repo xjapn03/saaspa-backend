@@ -9,6 +9,8 @@ import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequestEmailChangeDto } from './dto/request-email-change.dto';
 import { ConfirmEmailChangeDto } from './dto/confirm-email-change.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { ACCESS_COOKIE, REFRESH_COOKIE, setAuthCookies, clearAuthCookies } from '../../common/auth/cookies';
 
 @ApiTags('Auth')
@@ -105,6 +107,26 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Email actualizado, sesión invalidada' })
   confirmEmailChange(@CurrentUser('id') userId: string, @Body() dto: ConfirmEmailChangeDto) {
     return this.authService.confirmEmailChange(userId, dto.code);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reenviar enlace de verificación de cuenta' })
+  @ApiResponse({ status: 200, description: 'Enlace reenviado si el email existe' })
+  resendVerification(@Body() dto: ResendVerificationDto) {
+    return this.authService.resendVerification(dto.email);
+  }
+
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cambiar contraseña — requiere la contraseña actual' })
+  @ApiResponse({ status: 200, description: 'Contraseña actualizada, sesión invalidada' })
+  changePassword(@CurrentUser('id') userId: string, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(userId, dto.currentPassword, dto.newPassword);
   }
 
   @Public()
