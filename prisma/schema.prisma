@@ -332,6 +332,7 @@ model AuditLog {
 enum BannerPosition {
   HERO
   STRIP
+  PORTRAIT
 }
 
 model Banner {
