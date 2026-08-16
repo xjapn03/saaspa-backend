@@ -8,12 +8,21 @@ import { UpdateBannerDto } from './dto/update-banner.dto';
 export class BannersService {
   constructor(private prisma: PrismaService) {}
 
+  private async deactivateExpired(): Promise<void> {
+    await this.prisma.banner.updateMany({
+      where: { isActive: true, endsAt: { lt: new Date() } },
+      data: { isActive: false },
+    });
+  }
+
   async findAll() {
+    await this.deactivateExpired();
     const banners = await this.prisma.banner.findMany({ orderBy: [{ position: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }] });
     return banners.map((b) => ({ ...b, position: b.position }));
   }
 
   async findPublic(position?: BannerPosition) {
+    await this.deactivateExpired();
     const where: Prisma.BannerWhereInput = {
       isActive: true,
       ...(position ? { position } : {}),
