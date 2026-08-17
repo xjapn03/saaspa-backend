@@ -15,7 +15,7 @@ const bookingSelect = {
   notes: true,
   createdAt: true,
   updatedAt: true,
-  user: { select: { firstName: true, lastName: true, email: true } },
+  user: { select: { firstName: true, lastName: true, email: true, phone: true } },
   service: { select: { name: true, duration: true, price: true } },
 } satisfies Prisma.BookingSelect;
 

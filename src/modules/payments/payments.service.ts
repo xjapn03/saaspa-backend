@@ -241,6 +241,8 @@ export class PaymentsService {
             shippingPhone: metadata.shippingPhone || '',
             shippingAddress: metadata.shippingAddress || 'Pendiente',
             shippingCity: metadata.shippingCity || 'Pendiente',
+            shippingState: metadata.shippingState || null,
+            shippingNit: metadata.shippingNit || null,
             shippingNotes: metadata.shippingNotes || null,
             paymentId: payment.id,
             items: metadata.items.map((i: any) => ({
@@ -280,7 +282,7 @@ export class PaymentsService {
           this.emailService.sendOrderReceipt(orderReceiptData);
           this.emailService.sendAdminOrderNotification({
             ...orderReceiptData,
-            clientPhone: user?.phone || undefined,
+            clientPhone: metadata.shippingPhone || user?.phone || undefined,
           });
         }
       }
@@ -312,7 +314,7 @@ export class PaymentsService {
     };
   }
 
-  async initCartPayment(userId: string, dto: { items: { productId: string; name: string; price: number; quantity: number }[]; couponCode?: string; couponId?: string; shippingName?: string; shippingEmail?: string; shippingPhone?: string; shippingAddress?: string; shippingCity?: string; shippingNotes?: string }) {
+  async initCartPayment(userId: string, dto: { items: { productId: string; name: string; price: number; quantity: number }[]; couponCode?: string; couponId?: string; shippingName?: string; shippingEmail?: string; shippingPhone?: string; shippingAddress?: string; shippingCity?: string; shippingNotes?: string; shippingState?: string; shippingNit?: string }) {
     let subtotal = dto.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
     let discount = 0;
 
@@ -344,7 +346,7 @@ export class PaymentsService {
       amount: total,
       type: 'SALDO',
       wompiReference: reference,
-      metadata: { items: JSON.parse(JSON.stringify(dto.items)), couponId: dto.couponId || null, couponCode: dto.couponCode || null, shippingName: dto.shippingName || null, shippingEmail: dto.shippingEmail || null, shippingPhone: dto.shippingPhone || null, shippingAddress: dto.shippingAddress || null, shippingCity: dto.shippingCity || null, shippingNotes: dto.shippingNotes || null },
+      metadata: { items: JSON.parse(JSON.stringify(dto.items)), couponId: dto.couponId || null, couponCode: dto.couponCode || null, shippingName: dto.shippingName || null, shippingEmail: dto.shippingEmail || null, shippingPhone: dto.shippingPhone || null, shippingAddress: dto.shippingAddress || null, shippingCity: dto.shippingCity || null, shippingNotes: dto.shippingNotes || null, shippingState: dto.shippingState || null, shippingNit: dto.shippingNit || null },
     } as any);
 
     return { publicKey, reference, amountInCents, currency, signature };

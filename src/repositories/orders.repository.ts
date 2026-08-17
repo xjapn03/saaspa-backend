@@ -6,9 +6,9 @@ import { paginated, PaginatedResult } from '../common/interfaces/paginated-resul
 const orderSelect = {
   id: true, userId: true, total: true, status: true,
   shippingName: true, shippingEmail: true, shippingPhone: true,
-  shippingAddress: true, shippingCity: true, shippingNotes: true,
+  shippingAddress: true, shippingCity: true, shippingState: true, shippingNit: true, shippingNotes: true,
   paymentId: true, createdAt: true, updatedAt: true,
-  user: { select: { firstName: true, lastName: true, email: true } },
+  user: { select: { firstName: true, lastName: true, email: true, phone: true } },
   items: {
     select: { id: true, orderId: true, productId: true, name: true, price: true, quantity: true },
     orderBy: { createdAt: 'asc' as const },
