@@ -129,7 +129,7 @@ export class EmailService {
             ${inner}
           </div>
           <div style="padding: 20px 32px; background-color: #fdf9f4; border-top: 1px solid ${BORDER}; color: ${MUTED}; font-size: 12px; line-height: 1.6;">
-            <p style="margin: 0;">Kamerinos SPA — Usaquén, Bogotá</p>
+            <p style="margin: 0;">Kamerinos SPA — Teusaquillo, Bogotá</p>
             <p style="margin: 4px 0 0;">+57 304 1338567 · kamerinosg@gmail.com</p>
           </div>
         </div>
