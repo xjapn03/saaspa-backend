@@ -44,6 +44,10 @@ export interface OrderReceiptData {
   shippingAddress: string;
   shippingCity: string;
   paymentReference: string;
+  subtotal?: number;
+  discountAmount?: number | null;
+  couponCode?: string | null;
+  couponDiscountPercent?: number | null;
 }
 
 export interface OrderStatusData {
@@ -88,6 +92,29 @@ export class EmailService {
       currency: 'COP',
       minimumFractionDigits: 0,
     }).format(amount);
+  }
+
+  private buildOrderSummaryRows(data: OrderReceiptData): string {
+    const hasDiscount = (data.discountAmount ?? 0) > 0;
+    if (!hasDiscount) return '';
+
+    const subtotal = data.subtotal ?? data.total + (data.discountAmount ?? 0);
+    const couponLabel = [
+      data.couponCode,
+      data.couponDiscountPercent ? `${data.couponDiscountPercent}%` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+
+    return `
+      <tr>
+        <td style="padding: 8px 0; color: ${MUTED};">Subtotal</td>
+        <td style="padding: 8px 0; text-align: right;">${this.formatPrice(subtotal)}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 0; color: #16a34a;">Descuento${couponLabel ? ` (${couponLabel})` : ''}</td>
+        <td style="padding: 8px 0; text-align: right; color: #16a34a;">-${this.formatPrice(data.discountAmount ?? 0)}</td>
+      </tr>`;
   }
 
   private renderLayout(inner: string): string {
@@ -203,6 +230,7 @@ export class EmailService {
       <h2 style="font-size: 16px; color: ${BRAND}; margin: 0 0 12px;">Resumen de tu pedido</h2>
       <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
         ${rows}
+        ${this.buildOrderSummaryRows(data)}
         <tr>
           <td style="padding: 12px 0; font-weight: bold;">Total</td>
           <td style="padding: 12px 0; text-align: right; font-weight: bold;">${this.formatPrice(data.total)}</td>
@@ -290,6 +318,7 @@ export class EmailService {
       <h2 style="font-size: 16px; color: ${BRAND}; margin: 16px 0 8px;">Detalle</h2>
       <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
         ${rows}
+        ${this.buildOrderSummaryRows(data)}
         <tr><td style="padding: 12px 0; font-weight: bold;">Total</td><td style="padding: 12px 0; text-align: right; font-weight: bold;">${this.formatPrice(data.total)}</td></tr>
       </table>
       <p style="margin: 24px 0; text-align: center;">

@@ -271,6 +271,15 @@ export class PaymentsService {
           }
         }
         if (user?.email || metadata.shippingEmail) {
+          const subtotal =
+            Math.round(
+              metadata.items.reduce((s: number, i: any) => s + i.price * i.quantity, 0) * 100,
+            ) / 100;
+          const discountAmount = Math.round((subtotal - Number(payment.amount || 0)) * 100) / 100;
+          const couponDiscountPercent =
+            typeof metadata.couponDiscount === 'number'
+              ? Math.round(metadata.couponDiscount * 100)
+              : null;
           const orderReceiptData = {
             clientName:
               metadata.shippingName ||
@@ -284,6 +293,10 @@ export class PaymentsService {
               quantity: i.quantity,
             })),
             total: Number(payment.amount || 0),
+            subtotal,
+            discountAmount: discountAmount > 0 ? discountAmount : null,
+            couponCode: metadata.couponCode || null,
+            couponDiscountPercent,
             shippingAddress: metadata.shippingAddress || 'Pendiente',
             shippingCity: metadata.shippingCity || 'Pendiente',
             paymentReference: payment.wompiReference || '',
@@ -341,6 +354,7 @@ export class PaymentsService {
   ) {
     const subtotal = dto.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
     let discount = 0;
+    let couponDiscount: number | null = null;
 
     if (dto.couponId) {
       try {
@@ -351,7 +365,8 @@ export class PaymentsService {
           (coupon.maxUses === null || coupon.usedCount < coupon.maxUses);
         const usage = await this.couponsRepo.findUsage(dto.couponId, userId);
         if (withinLimits && !usage) {
-          discount = Math.round(subtotal * Number(coupon.discount) * 100) / 100;
+          couponDiscount = Number(coupon.discount);
+          discount = Math.round(subtotal * couponDiscount * 100) / 100;
         }
       } catch {}
     }
@@ -377,6 +392,9 @@ export class PaymentsService {
         items: JSON.parse(JSON.stringify(dto.items)),
         couponId: dto.couponId || null,
         couponCode: dto.couponCode || null,
+        subtotal: Math.round(subtotal * 100) / 100,
+        discount: Math.round(discount * 100) / 100,
+        couponDiscount,
         shippingName: dto.shippingName || null,
         shippingEmail: dto.shippingEmail || null,
         shippingPhone: dto.shippingPhone || null,

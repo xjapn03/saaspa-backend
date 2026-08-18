@@ -295,6 +295,63 @@ describe('PaymentsService', () => {
 
       expect(result).toEqual({ received: true });
     });
+
+    it('should create order and send receipt with coupon info for cart payment', async () => {
+      const cartPayment = {
+        id: 'pay-cart',
+        userId: 'user-1',
+        bookingId: null,
+        amount: 90000,
+        type: 'SALDO',
+        status: 'PENDIENTE',
+        wompiReference: 'ref-cart',
+        wompiPaymentId: null,
+        paidAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          items: [{ productId: 'prod-1', name: 'Product A', price: 50000, quantity: 2 }],
+          couponId: 'coupon-1',
+          couponCode: 'DESC10',
+          subtotal: 100000,
+          discount: 10000,
+          couponDiscount: 0.1,
+          shippingName: 'Maria Gomez',
+          shippingEmail: 'maria@example.com',
+          shippingPhone: '3000000000',
+          shippingAddress: 'Calle 1',
+          shippingCity: 'Bogotá',
+        },
+        user: { firstName: 'Maria', lastName: 'Gomez', email: 'maria@example.com' },
+      };
+      paymentsRepo.findByWompiId.mockResolvedValue(cartPayment as any);
+      paymentsRepo.update.mockResolvedValue(cartPayment as any);
+      productsRepo.findById.mockResolvedValue({ id: 'prod-1', stock: 10 } as any);
+      ordersRepo.findByPaymentId.mockResolvedValue(null as any);
+      ordersRepo.create.mockResolvedValue({ id: 'order-cart-1' } as any);
+      couponsRepo.consumeCoupon.mockResolvedValue({} as any);
+      bookingsRepo.findById.mockResolvedValue(null as any);
+
+      const result = await service.handleWebhook({}, 'checksum');
+
+      expect(result).toEqual({ received: true });
+      expect(ordersRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-1', total: 90000, paymentId: 'pay-cart' }),
+      );
+      expect(couponsRepo.consumeCoupon).toHaveBeenCalledWith('coupon-1', 'user-1', 'order-cart-1');
+      expect(emailService.sendOrderReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 'order-cart-1',
+          subtotal: 100000,
+          discountAmount: 10000,
+          couponCode: 'DESC10',
+          couponDiscountPercent: 10,
+        }),
+      );
+      expect(emailService.sendAdminOrderNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ couponCode: 'DESC10', couponDiscountPercent: 10 }),
+      );
+    });
   });
 
   describe('getPaymentStatus', () => {
@@ -330,6 +387,10 @@ describe('PaymentsService', () => {
       expect(result.amountInCents).toBe(13000000);
       expect(paymentsRepo.create).toHaveBeenCalled();
       expect(paymentProvider.createPaymentIntent).toHaveBeenCalled();
+      const metadata = paymentsRepo.create.mock.calls[0][0].metadata as any;
+      expect(metadata.subtotal).toBe(130000);
+      expect(metadata.discount).toBe(0);
+      expect(metadata.couponDiscount).toBeNull();
     });
 
     it('should apply coupon discount when valid coupon provided', async () => {
@@ -352,6 +413,10 @@ describe('PaymentsService', () => {
 
       expect(result.amountInCents).toBe(11700000);
       expect(couponsRepo.findById).toHaveBeenCalledWith('coupon-1');
+      const metadata = paymentsRepo.create.mock.calls[0][0].metadata as any;
+      expect(metadata.subtotal).toBe(130000);
+      expect(metadata.discount).toBe(13000);
+      expect(metadata.couponDiscount).toBe(0.1);
     });
 
     it('should throw if total is <= 0', async () => {
