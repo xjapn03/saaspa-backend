@@ -26,7 +26,7 @@ describe('BookingSyncService', () => {
     notes: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-    user: { firstName: 'María', lastName: 'Gómez', email: 'maria@test.com' },
+    user: { firstName: 'María', lastName: 'Gómez', email: 'maria@test.com', phone: '3001234567' },
     service: { name: 'Facial', price: 100000, duration: 60 },
   };
 

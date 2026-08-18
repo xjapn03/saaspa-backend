@@ -13,7 +13,7 @@ describe('PaymentsRepository', () => {
     amount: { toNumber: () => 30000 }, type: 'ABONO', status: 'APROBADO',
     wompiPaymentId: 'wompi-1', wompiReference: 'ref-1', metadata: null,
     paidAt: new Date(), createdAt: new Date(), updatedAt: new Date(),
-    user: { firstName: 'Test', lastName: 'User', email: 'test@test.com' },
+    user: { firstName: 'Test', lastName: 'User', email: 'test@test.com', phone: '3001234567' },
   };
 
   beforeEach(async () => {
