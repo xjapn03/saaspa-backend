@@ -238,6 +238,9 @@ describe('PaymentsService', () => {
         'booking-1',
         expect.objectContaining({ fbc: undefined }),
       );
+      expect(metaCapi.sendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ eventName: 'Purchase' }),
+      );
       expect(emailService.sendBookingReceipt).toHaveBeenCalled();
       expect(emailService.sendAdminBookingNotification).toHaveBeenCalled();
     });
@@ -258,6 +261,7 @@ describe('PaymentsService', () => {
       expect(result).toEqual({ received: true });
       expect(paymentsRepo.update).toHaveBeenCalled();
       expect(bookingsRepo.update).not.toHaveBeenCalled();
+      expect(metaCapi.sendEvent).not.toHaveBeenCalled();
     });
 
     it('should ignore duplicate APPROVED webhooks', async () => {
@@ -350,6 +354,24 @@ describe('PaymentsService', () => {
       );
       expect(emailService.sendAdminOrderNotification).toHaveBeenCalledWith(
         expect.objectContaining({ couponCode: 'DESC10', couponDiscountPercent: 10 }),
+      );
+      expect(metaCapi.sendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventName: 'Purchase',
+          eventId: 'purchase-pay-cart',
+          userData: expect.objectContaining({
+            fbc: undefined,
+            fbp: undefined,
+            clientIpAddress: undefined,
+            clientUserAgent: undefined,
+          }),
+          customData: expect.objectContaining({
+            value: 90000,
+            contentName: 'Carrito',
+            contentCategory: 'Tienda',
+            contentIds: ['prod-1'],
+          }),
+        }),
       );
     });
   });

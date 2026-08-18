@@ -31,4 +31,9 @@ export class InitPaymentDto {
   @IsOptional()
   @IsString()
   eventId?: string;
+
+  @ApiPropertyOptional({ description: 'User-Agent del navegador para deduplicación CAPI' })
+  @IsOptional()
+  @IsString()
+  clientUserAgent?: string;
 }

@@ -31,7 +31,14 @@ export class PaymentsService {
   async initPayment(
     bookingId: string,
     type: 'ABONO' | 'SALDO' = 'ABONO',
-    options?: { payFull?: boolean; fbc?: string; fbp?: string; eventId?: string },
+    options?: {
+      payFull?: boolean;
+      fbc?: string;
+      fbp?: string;
+      eventId?: string;
+      clientIpAddress?: string;
+      clientUserAgent?: string;
+    },
   ) {
     const booking = await this.bookingsRepo.findById(bookingId);
     const servicePrice = Number((booking.service as any).price);
@@ -76,6 +83,8 @@ export class PaymentsService {
         fbc: options?.fbc || null,
         fbp: options?.fbp || null,
         eventId: options?.eventId || null,
+        clientIpAddress: options?.clientIpAddress || null,
+        clientUserAgent: options?.clientUserAgent || null,
         payFull: options?.payFull || false,
       },
     } as any);
@@ -143,26 +152,30 @@ export class PaymentsService {
 
       const booking = await this.bookingsRepo.findById(payment.bookingId).catch(() => null);
       if (booking) {
-        this.metaCapi.sendEvent({
-          eventName: 'Purchase',
-          eventId: (payment as any).metadata?.eventId || `purchase-${payment.id}`,
-          userData: {
-            em: (booking as any)?.user?.email
-              ? hashCapiValue((booking as any).user.email)
-              : undefined,
-            ph: (booking as any)?.user?.phone
-              ? hashCapiPhone((booking as any).user.phone)
-              : undefined,
-            fbc: (payment as any).metadata?.fbc || undefined,
-            fbp: (payment as any).metadata?.fbp || undefined,
-          },
-          customData: {
-            currency: 'COP',
-            value: amountInCents ? Number(amountInCents) / 100 : undefined,
-            contentName: (booking as any)?.service?.name,
-            bookingId: payment.bookingId,
-          },
-        });
+        if (payment.type === 'ABONO') {
+          this.metaCapi.sendEvent({
+            eventName: 'Purchase',
+            eventId: (payment as any).metadata?.eventId || `purchase-${payment.id}`,
+            userData: {
+              em: (booking as any)?.user?.email
+                ? hashCapiValue((booking as any).user.email)
+                : undefined,
+              ph: (booking as any)?.user?.phone
+                ? hashCapiPhone((booking as any).user.phone)
+                : undefined,
+              fbc: (payment as any).metadata?.fbc || undefined,
+              fbp: (payment as any).metadata?.fbp || undefined,
+              clientIpAddress: (payment as any).metadata?.clientIpAddress || undefined,
+              clientUserAgent: (payment as any).metadata?.clientUserAgent || undefined,
+            },
+            customData: {
+              currency: 'COP',
+              value: amountInCents ? Number(amountInCents) / 100 : undefined,
+              contentName: (booking as any)?.service?.name,
+              bookingId: payment.bookingId,
+            },
+          });
+        }
 
         const clientName =
           `${(booking as any)?.user?.firstName || ''} ${(booking as any)?.user?.lastName || ''}`.trim();
@@ -307,6 +320,32 @@ export class PaymentsService {
             clientPhone: metadata.shippingPhone || user?.phone || undefined,
           });
         }
+
+        this.metaCapi.sendEvent({
+          eventName: 'Purchase',
+          eventId: metadata.eventId || `purchase-${payment.id}`,
+          userData: {
+            em:
+              user?.email || metadata.shippingEmail
+                ? hashCapiValue(user?.email || metadata.shippingEmail)
+                : undefined,
+            ph:
+              user?.phone || metadata.shippingPhone
+                ? hashCapiPhone(user?.phone || metadata.shippingPhone)
+                : undefined,
+            fbc: metadata.fbc || undefined,
+            fbp: metadata.fbp || undefined,
+            clientIpAddress: metadata.clientIpAddress || undefined,
+            clientUserAgent: metadata.clientUserAgent || undefined,
+          },
+          customData: {
+            currency: 'COP',
+            value: Number(payment.amount || 0),
+            contentName: 'Carrito',
+            contentCategory: 'Tienda',
+            contentIds: metadata.items.map((i: any) => i.productId),
+          },
+        });
       }
     } else if (status === 'DECLINED' || status === 'ERROR' || status === 'VOIDED') {
       await this.paymentsRepo.update(payment.id, { status: 'RECHAZADO' } as any);
@@ -350,7 +389,12 @@ export class PaymentsService {
       shippingNotes?: string;
       shippingState?: string;
       shippingNit?: string;
+      fbc?: string;
+      fbp?: string;
+      eventId?: string;
+      clientUserAgent?: string;
     },
+    options?: { clientIpAddress?: string },
   ) {
     const subtotal = dto.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
     let discount = 0;
@@ -395,6 +439,11 @@ export class PaymentsService {
         subtotal: Math.round(subtotal * 100) / 100,
         discount: Math.round(discount * 100) / 100,
         couponDiscount,
+        fbc: dto.fbc || null,
+        fbp: dto.fbp || null,
+        eventId: dto.eventId || null,
+        clientIpAddress: options?.clientIpAddress || null,
+        clientUserAgent: dto.clientUserAgent || null,
         shippingName: dto.shippingName || null,
         shippingEmail: dto.shippingEmail || null,
         shippingPhone: dto.shippingPhone || null,

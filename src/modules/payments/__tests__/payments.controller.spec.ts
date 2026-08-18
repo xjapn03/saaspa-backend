@@ -26,6 +26,8 @@ describe('PaymentsController', () => {
         fbc: undefined,
         fbp: undefined,
         eventId: undefined,
+        clientIpAddress: undefined,
+        clientUserAgent: undefined,
       });
     });
 
@@ -38,6 +40,8 @@ describe('PaymentsController', () => {
         fbc: undefined,
         fbp: undefined,
         eventId: undefined,
+        clientIpAddress: undefined,
+        clientUserAgent: undefined,
       });
     });
 
@@ -76,7 +80,9 @@ describe('PaymentsController', () => {
       const dto = { items: [{ productId: 'prod-1', name: 'A', price: 1000, quantity: 2 }] };
       const result = await controller.initCart('user-1', dto);
       expect(result.publicKey).toBe('pk');
-      expect(service.initCartPayment).toHaveBeenCalledWith('user-1', dto);
+      expect(service.initCartPayment).toHaveBeenCalledWith('user-1', dto, {
+        clientIpAddress: undefined,
+      });
     });
   });
 });

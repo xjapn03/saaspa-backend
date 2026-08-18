@@ -32,6 +32,7 @@ export interface MetaCapiEvent {
     contentName?: string;
     contentCategory?: string;
     bookingId?: string;
+    contentIds?: string[];
   };
 }
 

@@ -75,4 +75,24 @@ export class InitCartPaymentDto {
   @IsOptional()
   @IsString()
   shippingNit?: string;
+
+  @ApiPropertyOptional({ description: 'Meta click id (_fbc) para atribución CAPI' })
+  @IsOptional()
+  @IsString()
+  fbc?: string;
+
+  @ApiPropertyOptional({ description: 'Meta browser id (_fbp) para atribución CAPI' })
+  @IsOptional()
+  @IsString()
+  fbp?: string;
+
+  @ApiPropertyOptional({ description: 'event_id para deduplicación Pixel/CAPI' })
+  @IsOptional()
+  @IsString()
+  eventId?: string;
+
+  @ApiPropertyOptional({ description: 'User-Agent del navegador para deduplicación CAPI' })
+  @IsOptional()
+  @IsString()
+  clientUserAgent?: string;
 }
