@@ -1462,7 +1462,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"items\": [\n    { \"productId\": \"{{productId}}\", \"name\": \"Crema\", \"price\": 85000, \"quantity\": 1 }\n  ],\n  \"couponId\": \"{{couponId}}\"\n}"
+              "raw": "{\n  \"items\": [\n    { \"productId\": \"{{productId}}\", \"name\": \"Crema\", \"price\": 85000, \"quantity\": 1 }\n  ],\n  \"couponId\": \"{{couponId}}\",\n  \"shippingName\": \"María Gómez\",\n  \"shippingEmail\": \"cliente@email.com\",\n  \"shippingPhone\": \"3001234567\",\n  \"shippingAddress\": \"Calle 123 #45-67, Apto 101\",\n  \"shippingCity\": \"Bogotá\",\n  \"shippingState\": \"Cundinamarca\",\n  \"shippingNit\": \"123456789\",\n  \"shippingNotes\": \"Indicaciones de entrega\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/payments/init-cart",

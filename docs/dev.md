@@ -110,7 +110,7 @@ CartItem (cart_items)
 Order (orders)
 ├── userId → User, paymentId? → Payment
 ├── total (Decimal), status: PENDIENTE → CONFIRMADO → ENVIADO → ENTREGADO | CANCELADO
-├── shippingName, shippingEmail, shippingPhone, shippingAddress, shippingCity, shippingNotes?
+├── shippingName, shippingEmail, shippingPhone, shippingAddress, shippingCity, shippingState?, shippingNit?, shippingNotes?
 ├── → items (OrderItem[])
 
 OrderItem (order_items)
@@ -270,7 +270,7 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (296 tests, 43 suites) — no requiere BD
+npm test              # Unit tests (315 tests, 43 suites) — no requiere BD
 npm run test:cov      # Cobertura
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 ```
@@ -320,7 +320,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (43 suites, 296 tests)
+### Inventario de suites (43 suites, 315 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
