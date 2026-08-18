@@ -1,7 +1,8 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import * as crypto from 'crypto';
-import { IPaymentsRepository, PaymentTransactionFilters } from '../../repositories/interfaces/payments.repository';
+import {
+  IPaymentsRepository,
+  PaymentTransactionFilters,
+} from '../../repositories/interfaces/payments.repository';
 import { IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
 import { ICouponsRepository } from '../../repositories/interfaces/coupons.repository';
 import { IProductsRepository } from '../../repositories/interfaces/products.repository';
@@ -9,6 +10,7 @@ import { IOrdersRepository } from '../../repositories/interfaces/orders.reposito
 import { MetaCapiService, hashCapiValue, hashCapiPhone } from '../meta/meta-capi.service';
 import { EmailService } from '../../common/email/email.service';
 import { BookingSyncService } from '../bookings/booking-sync.service';
+import { IPaymentProvider } from './providers/payment-provider';
 
 @Injectable()
 export class PaymentsService {
@@ -20,17 +22,11 @@ export class PaymentsService {
     private couponsRepo: ICouponsRepository,
     private productsRepo: IProductsRepository,
     private ordersRepo: IOrdersRepository,
-    private config: ConfigService,
+    private paymentProvider: IPaymentProvider,
     private metaCapi: MetaCapiService,
     private emailService: EmailService,
     private bookingSync: BookingSyncService,
   ) {}
-
-  generateIntegritySignature(reference: string, amountInCents: number, currency: string): string {
-    const secret = this.config.get<string>('WOMPI_INTEGRITY_SECRET') || 'integ_test_xxx';
-    const data = `${reference}${amountInCents}${currency}${secret}`;
-    return crypto.createHash('sha256').update(data).digest('hex');
-  }
 
   async initPayment(
     bookingId: string,
@@ -64,9 +60,11 @@ export class PaymentsService {
 
     const reference = `kamerinos-${bookingId.slice(0, 8)}-${Date.now().toString(36)}`;
     const currency = 'COP';
-    const publicKey = this.config.get<string>('WOMPI_PUBLIC_KEY') || 'pub_test_xxx';
-
-    const signature = this.generateIntegritySignature(reference, amountInCents, currency);
+    const paymentConfig = this.paymentProvider.createPaymentIntent({
+      reference,
+      amountInCents,
+      currency,
+    });
 
     await this.paymentsRepo.create({
       booking: { connect: { id: bookingId } },
@@ -82,62 +80,47 @@ export class PaymentsService {
       },
     } as any);
 
-    return {
-      publicKey,
-      reference,
-      amountInCents,
-      currency,
-      signature,
-    };
-  }
-
-  validateWebhookSignature(
-    transactionId: string,
-    status: string,
-    amountInCents: string,
-    timestamp: string,
-    checksum: string,
-  ): boolean {
-    const secret = this.config.get<string>('WOMPI_EVENTS_KEY') || 'events_test_xxx';
-    const data = `${transactionId}${status}${amountInCents}${timestamp}${secret}`;
-    const computed = crypto.createHash('sha256').update(data).digest('hex');
-    return computed.toUpperCase() === checksum.toUpperCase();
+    return paymentConfig;
   }
 
   async handleWebhook(body: any, rawChecksum: string) {
-    const event = body.event;
-    const data = body.data?.transaction;
-    const timestamp = body.timestamp?.toString();
-    const checksum = rawChecksum || body.signature?.checksum;
+    const parsed = this.paymentProvider.parseWebhook(body, rawChecksum);
 
-    if (!data || !timestamp || !checksum) {
+    if (!parsed.ok) {
       throw new BadRequestException('Payload de webhook inválido');
     }
 
-    const isValid = this.validateWebhookSignature(
-      data.id, data.status, data.amount_in_cents?.toString(), timestamp, checksum,
-    );
+    const event = parsed.event;
+
+    const isValid = this.paymentProvider.verifyWebhookSignature(event);
 
     if (!isValid) {
       this.logger.warn('Firma de webhook inválida');
       throw new BadRequestException('Firma de webhook inválida');
     }
 
-    if (event !== 'transaction.updated') return { received: true };
+    if (event.eventName !== 'transaction.updated') return { received: true };
 
-    const status = data.status;
+    const status = event.status;
+    const transactionId = event.transactionId;
+    const reference = event.reference;
+    const amountInCents = event.amountInCents;
 
     let payment: any;
     try {
-      payment = await this.paymentsRepo.findByWompiReference(data.reference);
+      payment = await this.paymentsRepo.findByWompiReference(reference);
       if (!payment) {
-        try { payment = await this.paymentsRepo.findByWompiId(data.id); } catch {}
+        try {
+          payment = await this.paymentsRepo.findByWompiId(transactionId);
+        } catch {}
       }
       if (!payment) {
-        this.logger.warn(`Pago no encontrado para ref: ${data.reference} / id: ${data.id}`);
+        this.logger.warn(`Pago no encontrado para ref: ${reference} / id: ${transactionId}`);
         return { received: true };
       }
-    } catch { return { received: true }; }
+    } catch {
+      return { received: true };
+    }
 
     if (status === 'APPROVED') {
       if (payment.status === 'APROBADO') {
@@ -147,7 +130,7 @@ export class PaymentsService {
 
       await this.paymentsRepo.update(payment.id, {
         status: 'APROBADO',
-        wompiPaymentId: data.id,
+        wompiPaymentId: transactionId,
         paidAt: new Date(),
       } as any);
 
@@ -164,27 +147,36 @@ export class PaymentsService {
           eventName: 'Purchase',
           eventId: (payment as any).metadata?.eventId || `purchase-${payment.id}`,
           userData: {
-            em: (booking as any)?.user?.email ? hashCapiValue((booking as any).user.email) : undefined,
-            ph: (booking as any)?.user?.phone ? hashCapiPhone((booking as any).user.phone) : undefined,
+            em: (booking as any)?.user?.email
+              ? hashCapiValue((booking as any).user.email)
+              : undefined,
+            ph: (booking as any)?.user?.phone
+              ? hashCapiPhone((booking as any).user.phone)
+              : undefined,
             fbc: (payment as any).metadata?.fbc || undefined,
             fbp: (payment as any).metadata?.fbp || undefined,
           },
           customData: {
             currency: 'COP',
-            value: data.amount_in_cents ? data.amount_in_cents / 100 : undefined,
+            value: amountInCents ? Number(amountInCents) / 100 : undefined,
             contentName: (booking as any)?.service?.name,
             bookingId: payment.bookingId,
           },
         });
 
-        const clientName = `${(booking as any)?.user?.firstName || ''} ${(booking as any)?.user?.lastName || ''}`.trim();
+        const clientName =
+          `${(booking as any)?.user?.firstName || ''} ${(booking as any)?.user?.lastName || ''}`.trim();
         const servicePrice = Number((booking as any)?.service?.price || 0);
         const depositPaid = Number(payment.amount || 0);
         const dateStr = new Date(booking.startTime).toLocaleDateString('es-CO', {
-          day: 'numeric', month: 'long', year: 'numeric',
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
         });
         const timeStr = new Date(booking.startTime).toLocaleTimeString('es-CO', {
-          hour: '2-digit', minute: '2-digit', hour12: true,
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
         });
 
         this.emailService.sendBookingReceipt({
@@ -196,7 +188,7 @@ export class PaymentsService {
           depositAmount: depositPaid,
           remainingAmount: Math.round((servicePrice - depositPaid) * 100) / 100,
           bookingId: payment.bookingId,
-          paymentReference: payment.wompiReference || data.reference || '',
+          paymentReference: payment.wompiReference || reference || '',
         });
 
         this.emailService.sendAdminBookingNotification({
@@ -209,7 +201,7 @@ export class PaymentsService {
           depositAmount: depositPaid,
           remainingAmount: Math.round((servicePrice - depositPaid) * 100) / 100,
           bookingId: payment.bookingId,
-          paymentReference: payment.wompiReference || data.reference || '',
+          paymentReference: payment.wompiReference || reference || '',
         });
       }
 
@@ -217,7 +209,9 @@ export class PaymentsService {
       if (!booking && metadata?.items) {
         const existingOrder = await this.ordersRepo.findByPaymentId(payment.id);
         if (existingOrder) {
-          this.logger.log(`Orden ya existente para pago ${payment.id}, ignorando webhook duplicado`);
+          this.logger.log(
+            `Orden ya existente para pago ${payment.id}, ignorando webhook duplicado`,
+          );
           return { received: true };
         }
 
@@ -225,7 +219,9 @@ export class PaymentsService {
           try {
             const product = await this.productsRepo.findById(item.productId).catch(() => null);
             if (product && product.stock > 0) {
-              await this.productsRepo.update(item.productId, { stock: product.stock - item.quantity } as any);
+              await this.productsRepo.update(item.productId, {
+                stock: product.stock - item.quantity,
+              } as any);
             }
           } catch {}
         }
@@ -236,7 +232,11 @@ export class PaymentsService {
             userId: payment.userId,
             total: Number(payment.amount || 0),
             status: 'CONFIRMADO' as any,
-            shippingName: metadata.shippingName || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Cliente' : 'Cliente'),
+            shippingName:
+              metadata.shippingName ||
+              (user
+                ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Cliente'
+                : 'Cliente'),
             shippingEmail: metadata.shippingEmail || user?.email || '',
             shippingPhone: metadata.shippingPhone || '',
             shippingAddress: metadata.shippingAddress || 'Pendiente',
@@ -265,15 +265,24 @@ export class PaymentsService {
           try {
             await this.couponsRepo.consumeCoupon(metadata.couponId, payment.userId, orderId);
           } catch (err: any) {
-            this.logger.warn(`No se pudo registrar el uso del cupón ${metadata.couponId}: ${err?.message}`);
+            this.logger.warn(
+              `No se pudo registrar el uso del cupón ${metadata.couponId}: ${err?.message}`,
+            );
           }
         }
         if (user?.email || metadata.shippingEmail) {
           const orderReceiptData = {
-            clientName: metadata.shippingName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Cliente',
+            clientName:
+              metadata.shippingName ||
+              `${user?.firstName || ''} ${user?.lastName || ''}`.trim() ||
+              'Cliente',
             clientEmail: metadata.shippingEmail || user?.email || '',
             orderId: orderId || payment.id,
-            items: metadata.items.map((i: any) => ({ name: i.name, price: i.price, quantity: i.quantity })),
+            items: metadata.items.map((i: any) => ({
+              name: i.name,
+              price: i.price,
+              quantity: i.quantity,
+            })),
             total: Number(payment.amount || 0),
             shippingAddress: metadata.shippingAddress || 'Pendiente',
             shippingCity: metadata.shippingCity || 'Pendiente',
@@ -314,8 +323,23 @@ export class PaymentsService {
     };
   }
 
-  async initCartPayment(userId: string, dto: { items: { productId: string; name: string; price: number; quantity: number }[]; couponCode?: string; couponId?: string; shippingName?: string; shippingEmail?: string; shippingPhone?: string; shippingAddress?: string; shippingCity?: string; shippingNotes?: string; shippingState?: string; shippingNit?: string }) {
-    let subtotal = dto.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  async initCartPayment(
+    userId: string,
+    dto: {
+      items: { productId: string; name: string; price: number; quantity: number }[];
+      couponCode?: string;
+      couponId?: string;
+      shippingName?: string;
+      shippingEmail?: string;
+      shippingPhone?: string;
+      shippingAddress?: string;
+      shippingCity?: string;
+      shippingNotes?: string;
+      shippingState?: string;
+      shippingNit?: string;
+    },
+  ) {
+    const subtotal = dto.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
     let discount = 0;
 
     if (dto.couponId) {
@@ -338,18 +362,33 @@ export class PaymentsService {
     const reference = `kamerinos-cart-${userId.slice(0, 8)}-${Date.now().toString(36)}`;
     const amountInCents = Math.round(total * 100);
     const currency = 'COP';
-    const publicKey = this.config.get<string>('WOMPI_PUBLIC_KEY') || 'pub_test_xxx';
-    const signature = this.generateIntegritySignature(reference, amountInCents, currency);
+    const paymentConfig = this.paymentProvider.createPaymentIntent({
+      reference,
+      amountInCents,
+      currency,
+    });
 
     await this.paymentsRepo.create({
       user: { connect: { id: userId } },
       amount: total,
       type: 'SALDO',
       wompiReference: reference,
-      metadata: { items: JSON.parse(JSON.stringify(dto.items)), couponId: dto.couponId || null, couponCode: dto.couponCode || null, shippingName: dto.shippingName || null, shippingEmail: dto.shippingEmail || null, shippingPhone: dto.shippingPhone || null, shippingAddress: dto.shippingAddress || null, shippingCity: dto.shippingCity || null, shippingNotes: dto.shippingNotes || null, shippingState: dto.shippingState || null, shippingNit: dto.shippingNit || null },
+      metadata: {
+        items: JSON.parse(JSON.stringify(dto.items)),
+        couponId: dto.couponId || null,
+        couponCode: dto.couponCode || null,
+        shippingName: dto.shippingName || null,
+        shippingEmail: dto.shippingEmail || null,
+        shippingPhone: dto.shippingPhone || null,
+        shippingAddress: dto.shippingAddress || null,
+        shippingCity: dto.shippingCity || null,
+        shippingNotes: dto.shippingNotes || null,
+        shippingState: dto.shippingState || null,
+        shippingNit: dto.shippingNit || null,
+      },
     } as any);
 
-    return { publicKey, reference, amountInCents, currency, signature };
+    return paymentConfig;
   }
 
   async findAllTransactions(filters?: PaymentTransactionFilters) {
@@ -359,7 +398,9 @@ export class PaymentsService {
   async manualPayment(bookingId: string, paymentMethod: string) {
     const booking = await this.bookingsRepo.findById(bookingId);
     if (booking.status !== 'CONFIRMADA' && booking.status !== 'PENDIENTE_PAGO') {
-      throw new BadRequestException('Solo citas pendientes o confirmadas pueden recibir pago manual');
+      throw new BadRequestException(
+        'Solo citas pendientes o confirmadas pueden recibir pago manual',
+      );
     }
 
     const servicePrice = Number((booking.service as any).price);
@@ -385,7 +426,11 @@ export class PaymentsService {
       await this.bookingSync.confirmAndSync(bookingId);
     }
 
-    return { success: true, amount: remaining, totalPaid: Math.round((totalPaid + remaining) * 100) / 100 };
+    return {
+      success: true,
+      amount: remaining,
+      totalPaid: Math.round((totalPaid + remaining) * 100) / 100,
+    };
   }
 
   async getRevenue(month: string) {
