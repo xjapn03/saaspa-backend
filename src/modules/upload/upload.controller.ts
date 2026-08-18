@@ -13,7 +13,7 @@ const sharp = sharpNS as unknown as SharpFactory;
 
 const MAX_DIMENSION = 1600;
 const WEBP_QUALITY = 80;
-const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
+const MAX_UPLOAD_SIZE = 20 * 1024 * 1024;
 
 function sanitizeSegment(segment: string): string {
   return segment.replace(/[^a-zA-Z0-9-_]/g, '-').replace(/^-+|-+$/g, '');

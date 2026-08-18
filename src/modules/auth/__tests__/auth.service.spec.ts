@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, ConflictException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import * as bcrypt from 'bcryptjs';
@@ -124,6 +124,7 @@ describe('AuthService', () => {
         ...mockUser,
         email: dto.email,
         passwordHash: hashedPassword,
+        emailVerified: true,
       });
       tokenService.generateTokens.mockReturnValue({
         accessToken: 'at',
@@ -137,6 +138,20 @@ describe('AuthService', () => {
       // Assert
       expect(result.accessToken).toBe('at');
       expect(result.user.email).toBe(dto.email);
+    });
+
+    it('should throw when email is not verified', async () => {
+      // Arrange
+      const hashedPassword = await bcrypt.hash(dto.password, 10);
+      usersRepo.findByEmail.mockResolvedValue({
+        ...mockUser,
+        email: dto.email,
+        passwordHash: hashedPassword,
+        emailVerified: false,
+      });
+
+      // Act & Assert
+      await expect(service.login(dto)).rejects.toThrow('Debes verificar tu correo');
     });
 
     it('should throw UnauthorizedException when email not found', async () => {
@@ -156,6 +171,66 @@ describe('AuthService', () => {
 
       // Act & Assert
       await expect(service.login(dto)).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('resendVerification', () => {
+    it('should regenerate token and send welcome email when user exists', async () => {
+      usersRepo.findByEmail.mockResolvedValue(mockUser as any);
+      prisma.verificationToken.upsert.mockResolvedValue({} as any);
+      emailService.sendWelcomeEmail.mockResolvedValue();
+
+      const result = await service.resendVerification('test@test.com');
+
+      expect(prisma.verificationToken.upsert).toHaveBeenCalled();
+      expect(emailService.sendWelcomeEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ clientEmail: 'test@test.com' }),
+      );
+      expect(result.message).toContain('nuevo enlace');
+    });
+
+    it('should return a generic message when email does not exist', async () => {
+      usersRepo.findByEmail.mockResolvedValue(null);
+
+      const result = await service.resendVerification('missing@test.com');
+
+      expect(result.message).toContain('Si el correo existe');
+      expect(emailService.sendWelcomeEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('changePassword', () => {
+    it('should update the password and clear refresh token when current password matches', async () => {
+      usersRepo.findByIdWithCredentials.mockResolvedValue({
+        ...mockUser,
+        passwordHash: await bcrypt.hash('oldpass123', 10),
+      } as any);
+      usersRepo.update.mockResolvedValue({ ...mockUser } as any);
+      usersRepo.setRefreshToken.mockResolvedValue({ ...mockUser } as any);
+
+      const result = await service.changePassword('user-1', 'oldpass123', 'newpass123');
+
+      expect(usersRepo.update).toHaveBeenCalledWith('user-1', expect.objectContaining({ passwordHash: expect.any(String) }));
+      expect(usersRepo.setRefreshToken).toHaveBeenCalledWith('user-1', '');
+      expect(result.message).toContain('Contraseña actualizada');
+    });
+
+    it('should throw when current password is wrong', async () => {
+      usersRepo.findByIdWithCredentials.mockResolvedValue({
+        ...mockUser,
+        passwordHash: await bcrypt.hash('correct-password', 10),
+      } as any);
+
+      await expect(service.changePassword('user-1', 'wrong-password', 'newpass123')).rejects.toThrow('La contraseña actual es incorrecta');
+    });
+
+    it('should throw when new password is too short', async () => {
+      usersRepo.findByIdWithCredentials.mockResolvedValue({
+        ...mockUser,
+        passwordHash: await bcrypt.hash('correct-password', 10),
+      } as any);
+
+      await expect(service.changePassword('user-1', 'correct-password', '123')).rejects.toThrow('al menos 6 caracteres');
     });
   });
 
@@ -343,6 +418,59 @@ describe('AuthService', () => {
 
       // Act & Assert
       await expect(service.verifyEmail('expired-token')).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('requestEmailChange', () => {
+    it('should throw ConflictException when email is already in use', async () => {
+      // Arrange
+      usersRepo.findByEmail.mockResolvedValue({ id: 'other', email: 'taken@test.com' } as any);
+
+      // Act & Assert
+      await expect(service.requestEmailChange('user-1', 'taken@test.com')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prisma.emailChangeCode.upsert).not.toHaveBeenCalled();
+    });
+
+    it('should generate a code and upsert it', async () => {
+      // Arrange
+      usersRepo.findByEmail.mockResolvedValue(null);
+      usersRepo.findById.mockResolvedValue({ id: 'user-1', firstName: 'Maria', lastName: 'Gomez' } as any);
+
+      // Act
+      const result = await service.requestEmailChange('user-1', 'new@test.com');
+
+      // Assert
+      expect(result.message).toContain('new@test.com');
+      expect(prisma.emailChangeCode.upsert).toHaveBeenCalled();
+      expect(emailService.sendEmailChangeCode).toHaveBeenCalledWith('new@test.com', expect.any(String), expect.stringMatching(/^\d{6}$/));
+    });
+  });
+
+  describe('confirmEmailChange', () => {
+    it('should throw UnauthorizedException when there is no pending request', async () => {
+      // Arrange
+      prisma.emailChangeCode.findUnique.mockResolvedValue(null);
+
+      // Act & Assert
+      await expect(service.confirmEmailChange('user-1', '123456')).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException when code is wrong', async () => {
+      // Arrange
+      const hash = await bcrypt.hash('999999', 4);
+      prisma.emailChangeCode.findUnique.mockResolvedValue({
+        id: 'ec-1',
+        userId: 'user-1',
+        newEmail: 'new@test.com',
+        codeHash: hash,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      } as any);
+
+      // Act & Assert
+      await expect(service.confirmEmailChange('user-1', '000000')).rejects.toThrow(UnauthorizedException);
+      expect(usersRepo.update).not.toHaveBeenCalled();
     });
   });
 });

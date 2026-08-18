@@ -11,7 +11,7 @@ describe('ServicesRepository', () => {
   const mockService = {
     id: 'svc-1', name: 'Facial', description: null,
     price: 180000, duration: 75, isActive: true,
-    categoryId: null, imageUrl: null, createdAt: new Date(), updatedAt: new Date(),
+    categoryId: null, imageUrl: null, compareAtPrice: null, isFeatured: false, mainImage: null, carouselImages: null,  createdAt: new Date(), updatedAt: new Date(),
   };
 
   beforeEach(async () => {

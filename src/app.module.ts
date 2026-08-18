@@ -24,6 +24,7 @@ import { CartModule } from './modules/cart/cart.module';
 import { HealthModule } from './modules/health/health.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { BannersModule } from './modules/banners/banners.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -55,6 +56,7 @@ import { AuditInterceptor } from './common/audit/audit.interceptor';
     HealthModule,
     UploadModule,
     OrdersModule,
+    BannersModule,
     AuditModule,
   ],
   providers: [

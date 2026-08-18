@@ -62,63 +62,90 @@ describe('AuthController', () => {
   });
 
   describe('login', () => {
-    it('should return 200 with user and tokens', async () => {
+    it('should set cookies and return user only', async () => {
       // Arrange
       const dto: LoginDto = { email: 'test@test.com', password: 'password123' };
       authService.login.mockResolvedValue({
         user: mockUser,
         ...mockTokens,
       });
+      const mockRes = { cookie: jest.fn(), clearCookie: jest.fn() } as any;
 
       // Act
-      const result = await controller.login(dto);
+      const result = await controller.login(mockRes, dto);
 
       // Assert
       expect(result.user.email).toBe(dto.email);
-      expect(result.accessToken).toBe('at');
+      expect(result).not.toHaveProperty('accessToken');
+      expect(mockRes.cookie).toHaveBeenCalledTimes(2);
       expect(authService.login).toHaveBeenCalledWith(dto);
     });
   });
 
   describe('refresh', () => {
-    it('should return 200 with new tokens', async () => {
+    it('should read refresh token from cookie and return new tokens', async () => {
       // Arrange
       authService.refresh.mockResolvedValue({
         accessToken: 'new-at',
         refreshToken: 'new-rt',
       });
+      const mockRes = { cookie: jest.fn(), clearCookie: jest.fn() } as any;
+      const mockReq = { cookies: { kamerinos_refresh_token: 'old-refresh-token' }, body: {} } as any;
 
       // Act
-      const result = await controller.refresh('old-refresh-token');
+      const result = await controller.refresh(mockRes, mockReq);
 
       // Assert
       expect(result.accessToken).toBe('new-at');
       expect(result.refreshToken).toBe('new-rt');
+      expect(mockRes.cookie).toHaveBeenCalledTimes(2);
       expect(authService.refresh).toHaveBeenCalledWith('old-refresh-token');
+    });
+
+    it('should fallback to body refresh token when cookie is missing', async () => {
+      // Arrange
+      authService.refresh.mockResolvedValue({
+        accessToken: 'new-at',
+        refreshToken: 'new-rt',
+      });
+      const mockRes = { cookie: jest.fn(), clearCookie: jest.fn() } as any;
+      const mockReq = { cookies: {}, body: { refreshToken: 'body-refresh-token' } } as any;
+
+      // Act
+      const result = await controller.refresh(mockRes, mockReq);
+
+      // Assert
+      expect(authService.refresh).toHaveBeenCalledWith('body-refresh-token');
     });
   });
 
   describe('logout', () => {
-    it('should call service with access token from header and refresh token from body', async () => {
+    it('should call service with tokens and clear cookies', async () => {
       // Arrange
       authService.logout.mockResolvedValue(undefined);
+      const mockRes = { cookie: jest.fn(), clearCookie: jest.fn() } as any;
+      const mockReq = { cookies: {}, body: { refreshToken: 'refresh-token-abc' } } as any;
 
       // Act
-      await controller.logout('Bearer access-token-abc', 'refresh-token-abc');
+      await controller.logout(mockRes, mockReq, 'Bearer access-token-abc');
 
       // Assert
       expect(authService.logout).toHaveBeenCalledWith('access-token-abc', 'refresh-token-abc');
+      expect(mockRes.clearCookie).toHaveBeenCalled();
     });
 
-    it('should handle logout without refresh token', async () => {
+    it('should read access token from cookie when no header', async () => {
       // Arrange
       authService.logout.mockResolvedValue(undefined);
+      const mockRes = { cookie: jest.fn(), clearCookie: jest.fn() } as any;
+      const mockReq = { cookies: { kamerinos_access_token: 'cookie-access', kamerinos_refresh_token: 'cookie-refresh' }, body: {} } as any;
 
       // Act
-      await controller.logout('Bearer access-token-abc', undefined);
+      await controller.logout(mockRes, mockReq, undefined as any);
 
       // Assert
-      expect(authService.logout).toHaveBeenCalledWith('access-token-abc', undefined);
+      expect(authService.logout).toHaveBeenCalledWith('cookie-access', 'cookie-refresh');
+      expect(mockRes.clearCookie).toHaveBeenCalled();
     });
   });
 });

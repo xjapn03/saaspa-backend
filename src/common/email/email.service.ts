@@ -44,6 +44,10 @@ export interface OrderReceiptData {
   shippingAddress: string;
   shippingCity: string;
   paymentReference: string;
+  subtotal?: number;
+  discountAmount?: number | null;
+  couponCode?: string | null;
+  couponDiscountPercent?: number | null;
 }
 
 export interface OrderStatusData {
@@ -65,12 +69,16 @@ export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private readonly from = { email: 'info@sandrapinzonsaludybelleza.com.co', name: 'Kamerinos SPA' };
   private readonly replyTo: string;
+  private readonly adminNotifyEmail: string;
+  private readonly frontendUrl: string;
   private readonly isEnabled: boolean;
 
   constructor(private config: ConfigService) {
     const apiKey = this.config.get<string>('SENDGRID_API_KEY');
     this.isEnabled = !!apiKey;
     this.replyTo = this.config.get<string>('SENDGRID_REPLY_TO') || 'kamerinosg@gmail.com';
+    this.adminNotifyEmail = this.config.get<string>('ADMIN_NOTIFY_EMAIL') || 'kamerinosg@gmail.com';
+    this.frontendUrl = this.config.get<string>('FRONTEND_URL') || this.config.get<string>('CORS_ORIGIN')?.split(',')[0] || 'https://kamerinos.sandrapinzonsaludybelleza.com.co';
     if (apiKey) {
       sgMail.setApiKey(apiKey);
     } else {
@@ -86,19 +94,42 @@ export class EmailService {
     }).format(amount);
   }
 
+  private buildOrderSummaryRows(data: OrderReceiptData): string {
+    const hasDiscount = (data.discountAmount ?? 0) > 0;
+    if (!hasDiscount) return '';
+
+    const subtotal = data.subtotal ?? data.total + (data.discountAmount ?? 0);
+    const couponLabel = [
+      data.couponCode,
+      data.couponDiscountPercent ? `${data.couponDiscountPercent}%` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+
+    return `
+      <tr>
+        <td style="padding: 8px 0; color: ${MUTED};">Subtotal</td>
+        <td style="padding: 8px 0; text-align: right;">${this.formatPrice(subtotal)}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 0; color: #16a34a;">Descuento${couponLabel ? ` (${couponLabel})` : ''}</td>
+        <td style="padding: 8px 0; text-align: right; color: #16a34a;">-${this.formatPrice(data.discountAmount ?? 0)}</td>
+      </tr>`;
+  }
+
   private renderLayout(inner: string): string {
     return `
       <div style="font-family: Georgia, 'Times New Roman', serif; background-color: #faf6f1; padding: 32px 16px;">
         <div style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid ${BORDER};">
-          <div style="background-color: ${BRAND}; padding: 28px 32px;">
-            <p style="margin: 0; color: #ffffff; font-size: 26px; letter-spacing: 0.5px;">Kamerinos SPA</p>
-            <p style="margin: 6px 0 0; color: #f3e3d3; font-size: 13px;">Centro de estética y bienestar · Bogotá</p>
+          <div style="background-color: ${BRAND}; padding: 28px 32px; text-align: center;">
+            <img src="${this.frontendUrl}/LogokamerinosYellow.png" alt="Kamerinos SPA" style="max-height: 60px; margin-bottom: 8px;" />
+            <p style="margin: 0; color: #f3e3d3; font-size: 13px;">Centro de estética y bienestar · Bogotá</p>
           </div>
           <div style="padding: 32px; color: ${INK};">
             ${inner}
           </div>
           <div style="padding: 20px 32px; background-color: #fdf9f4; border-top: 1px solid ${BORDER}; color: ${MUTED}; font-size: 12px; line-height: 1.6;">
-            <p style="margin: 0;">Kamerinos SPA — Usaquén, Bogotá</p>
+            <p style="margin: 0;">Kamerinos SPA — Teusaquillo, Bogotá</p>
             <p style="margin: 4px 0 0;">+57 304 1338567 · kamerinosg@gmail.com</p>
           </div>
         </div>
@@ -167,6 +198,19 @@ export class EmailService {
     await this.send(email, 'Restablece tu contraseña — Kamerinos SPA', this.renderLayout(inner), 'password-reset', `reset-${Date.now()}`);
   }
 
+  async sendEmailChangeCode(to: string, name: string, code: string): Promise<void> {
+    const inner = `
+      <h1 style="color: ${BRAND}; font-size: 20px; margin: 0 0 8px;">Cambio de correo electrónico</h1>
+      <p style="font-size: 15px; line-height: 1.6;">Hola${name ? ` <strong>${name}</strong>` : ''},</p>
+      <p style="font-size: 14px; line-height: 1.6;">Usa el siguiente código para confirmar tu nuevo correo:</p>
+      <p style="margin: 24px 0; text-align: center;">
+        <span style="background-color: ${BORDER}; color: ${INK}; font-size: 28px; letter-spacing: 8px; font-weight: bold; padding: 12px 24px; border-radius: 12px; display: inline-block;">${code}</span>
+      </p>
+      <p style="font-size: 12px; color: ${MUTED}; margin: 16px 0 0;">El código expira en 15 minutos. Si no solicitaste este cambio, ignora este mensaje.</p>
+    `;
+    await this.send(to, 'Tu código de cambio de correo — Kamerinos SPA', this.renderLayout(inner), 'email-change-code', `email-change-${Date.now()}`);
+  }
+
   async sendOrderReceipt(data: OrderReceiptData): Promise<void> {
     const rows = data.items
       .map(
@@ -186,6 +230,7 @@ export class EmailService {
       <h2 style="font-size: 16px; color: ${BRAND}; margin: 0 0 12px;">Resumen de tu pedido</h2>
       <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
         ${rows}
+        ${this.buildOrderSummaryRows(data)}
         <tr>
           <td style="padding: 12px 0; font-weight: bold;">Total</td>
           <td style="padding: 12px 0; text-align: right; font-weight: bold;">${this.formatPrice(data.total)}</td>
@@ -221,6 +266,91 @@ export class EmailService {
       </table>
     `;
     await this.send(data.clientEmail, `Tu pedido está ${data.status} — Kamerinos SPA`, this.renderLayout(inner), 'order-status', data.orderId);
+  }
+
+  async sendAdminBookingNotification(data: BookingReceiptData & { clientPhone?: string }): Promise<void> {
+    const inner = `
+      <h1 style="color: ${BRAND}; font-size: 20px; margin: 0 0 8px;">Nueva cita confirmada</h1>
+      <p style="font-size: 14px; color: ${MUTED}; margin: 0 0 16px;">Notificación interna — Kamerinos SPA</p>
+      <hr style="border: none; border-top: 1px solid ${BORDER}; margin: 16px 0;" />
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <tr><td style="padding: 6px 0; color: ${MUTED}; width: 150px;">Cliente</td><td><strong>${data.clientName}</strong></td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Email</td><td>${data.clientEmail || '—'}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Teléfono</td><td>${data.clientPhone || '—'}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Servicio</td><td>${data.serviceName}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Fecha</td><td>${data.date} · ${data.time}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Abono</td><td>${this.formatPrice(data.depositAmount)}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Saldo</td><td>${this.formatPrice(data.remainingAmount)}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Cita</td><td>#${data.bookingId}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Referencia</td><td>${data.paymentReference || '—'}</td></tr>
+      </table>
+      <p style="margin: 24px 0; text-align: center;">
+        <a href="${this.frontendUrl}/dashboard/citas" style="background-color: ${BRAND}; color: #ffffff; padding: 12px 28px; border-radius: 24px; text-decoration: none; font-weight: bold; display: inline-block;">Ver Cita en Dashboard</a>
+      </p>
+      <p style="font-size: 12px; color: ${MUTED}; margin: 16px 0 0;">Recuerda registrar el saldo pendiente cuando se pague. Este correo es soporte/historial interno.</p>
+    `;
+    await this.send(this.adminNotifyEmail, 'Nueva cita confirmada — Kamerinos SPA', this.renderLayout(inner), 'admin-booking', data.bookingId);
+  }
+
+  async sendAdminOrderNotification(data: OrderReceiptData & { clientPhone?: string }): Promise<void> {
+    const rows = data.items
+      .map(
+        (i) => `
+          <tr>
+            <td style="padding: 8px 0; border-bottom: 1px solid ${BORDER};">${i.name} <span style="color: ${MUTED};">× ${i.quantity}</span></td>
+            <td style="padding: 8px 0; border-bottom: 1px solid ${BORDER}; text-align: right;">${this.formatPrice(i.price * i.quantity)}</td>
+          </tr>`,
+      )
+      .join('');
+
+    const inner = `
+      <h1 style="color: ${BRAND}; font-size: 20px; margin: 0 0 8px;">Nuevo pedido confirmado</h1>
+      <p style="font-size: 14px; color: ${MUTED}; margin: 0 0 16px;">Notificación interna — Kamerinos SPA</p>
+      <hr style="border: none; border-top: 1px solid ${BORDER}; margin: 16px 0;" />
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <tr><td style="padding: 6px 0; color: ${MUTED}; width: 150px;">Cliente</td><td><strong>${data.clientName}</strong></td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Email</td><td>${data.clientEmail || '—'}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Teléfono</td><td>${data.clientPhone || '—'}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Envío</td><td>${data.shippingAddress}, ${data.shippingCity}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Pedido</td><td>#${data.orderId}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Referencia</td><td>${data.paymentReference || '—'}</td></tr>
+      </table>
+      <h2 style="font-size: 16px; color: ${BRAND}; margin: 16px 0 8px;">Detalle</h2>
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        ${rows}
+        ${this.buildOrderSummaryRows(data)}
+        <tr><td style="padding: 12px 0; font-weight: bold;">Total</td><td style="padding: 12px 0; text-align: right; font-weight: bold;">${this.formatPrice(data.total)}</td></tr>
+      </table>
+      <p style="margin: 24px 0; text-align: center;">
+        <a href="${this.frontendUrl}/dashboard/pedidos" style="background-color: ${BRAND}; color: #ffffff; padding: 12px 28px; border-radius: 24px; text-decoration: none; font-weight: bold; display: inline-block;">Ver Pedido en Dashboard</a>
+      </p>
+      <p style="font-size: 12px; color: ${MUTED}; margin: 16px 0 0;">Recuerda gestionar el despacho. Este correo es soporte/historial interno.</p>
+    `;
+    await this.send(this.adminNotifyEmail, 'Nuevo pedido confirmado — Kamerinos SPA', this.renderLayout(inner), 'admin-order', data.orderId);
+  }
+
+  async sendAdminOrderStatusNotification(data: OrderStatusData): Promise<void> {
+    const rows = data.items
+      .map(
+        (i) => `
+          <tr>
+            <td style="padding: 8px 0; border-bottom: 1px solid ${BORDER};">${i.name} <span style="color: ${MUTED};">× ${i.quantity}</span></td>
+            <td style="padding: 8px 0; border-bottom: 1px solid ${BORDER}; text-align: right;">${this.formatPrice(i.price * i.quantity)}</td>
+          </tr>`,
+      )
+      .join('');
+
+    const inner = `
+      <h1 style="color: ${BRAND}; font-size: 20px; margin: 0 0 8px;">Pedido #${data.orderId} → ${data.status}</h1>
+      <p style="font-size: 14px; color: ${MUTED}; margin: 0 0 16px;">Notificación interna — Kamerinos SPA</p>
+      <p style="font-size: 15px; line-height: 1.6;">El pedido de <strong>${data.clientName}</strong> cambió a <strong>${data.status}</strong>.</p>
+      <hr style="border: none; border-top: 1px solid ${BORDER}; margin: 16px 0;" />
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        ${rows}
+        <tr><td style="padding: 12px 0; font-weight: bold;">Total</td><td style="padding: 12px 0; text-align: right; font-weight: bold;">${this.formatPrice(data.total)}</td></tr>
+      </table>
+    `;
+    await this.send(this.adminNotifyEmail, `Pedido #${data.orderId} → ${data.status} — Kamerinos SPA`, this.renderLayout(inner), 'admin-order-status', data.orderId);
   }
 
   private async send(to: string, subject: string, html: string, template: string, id: string): Promise<void> {

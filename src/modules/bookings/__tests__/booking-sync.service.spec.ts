@@ -26,7 +26,7 @@ describe('BookingSyncService', () => {
     notes: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-    user: { firstName: 'María', lastName: 'Gómez', email: 'maria@test.com' },
+    user: { firstName: 'María', lastName: 'Gómez', email: 'maria@test.com', phone: '3001234567' },
     service: { name: 'Facial', price: 100000, duration: 60 },
   };
 
@@ -59,7 +59,29 @@ describe('BookingSyncService', () => {
 
     expect(bookingsRepo.update).toHaveBeenCalledWith('booking-1', { status: 'CONFIRMADA' } as any);
     expect(bookingsRepo.update).toHaveBeenCalledWith('booking-1', { googleEventId: 'evt-123', calendarSync: 'SYNCED' } as any);
-    expect(metaCapi.sendEvent).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'Schedule' }));
+    expect(metaCapi.sendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'Schedule',
+        userData: expect.objectContaining({ em: expect.any(String) }),
+      }),
+    );
+  });
+
+  it('should pass fbc/fbp attribution to the Schedule event', async () => {
+    bookingsRepo.findById.mockResolvedValue(mockBooking as any);
+    bookingsRepo.update.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' } as any);
+    calendar.createEvent.mockResolvedValue('evt-123');
+    redis.del.mockResolvedValue(1);
+
+    await service.confirmAndSync('booking-1', { fbc: 'fb.1.abc', fbp: 'fb.2.def' });
+
+    expect(metaCapi.sendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'Schedule',
+        eventId: 'schedule-booking-1',
+        userData: expect.objectContaining({ fbc: 'fb.1.abc', fbp: 'fb.2.def' }),
+      }),
+    );
   });
 
   it('should mark calendarSync FAILED when calendar returns null', async () => {

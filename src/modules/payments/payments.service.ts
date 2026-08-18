@@ -1,14 +1,16 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import * as crypto from 'crypto';
-import { IPaymentsRepository, PaymentTransactionFilters } from '../../repositories/interfaces/payments.repository';
+import {
+  IPaymentsRepository,
+  PaymentTransactionFilters,
+} from '../../repositories/interfaces/payments.repository';
 import { IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
 import { ICouponsRepository } from '../../repositories/interfaces/coupons.repository';
 import { IProductsRepository } from '../../repositories/interfaces/products.repository';
 import { IOrdersRepository } from '../../repositories/interfaces/orders.repository';
-import { MetaCapiService } from '../meta/meta-capi.service';
+import { MetaCapiService, hashCapiValue, hashCapiPhone } from '../meta/meta-capi.service';
 import { EmailService } from '../../common/email/email.service';
 import { BookingSyncService } from '../bookings/booking-sync.service';
+import { IPaymentProvider } from './providers/payment-provider';
 
 @Injectable()
 export class PaymentsService {
@@ -20,19 +22,24 @@ export class PaymentsService {
     private couponsRepo: ICouponsRepository,
     private productsRepo: IProductsRepository,
     private ordersRepo: IOrdersRepository,
-    private config: ConfigService,
+    private paymentProvider: IPaymentProvider,
     private metaCapi: MetaCapiService,
     private emailService: EmailService,
     private bookingSync: BookingSyncService,
   ) {}
 
-  generateIntegritySignature(reference: string, amountInCents: number, currency: string): string {
-    const secret = this.config.get<string>('WOMPI_INTEGRITY_SECRET') || 'integ_test_xxx';
-    const data = `${reference}${amountInCents}${currency}${secret}`;
-    return crypto.createHash('sha256').update(data).digest('hex');
-  }
-
-  async initPayment(bookingId: string, type: 'ABONO' | 'SALDO' = 'ABONO') {
+  async initPayment(
+    bookingId: string,
+    type: 'ABONO' | 'SALDO' = 'ABONO',
+    options?: {
+      payFull?: boolean;
+      fbc?: string;
+      fbp?: string;
+      eventId?: string;
+      clientIpAddress?: string;
+      clientUserAgent?: string;
+    },
+  ) {
     const booking = await this.bookingsRepo.findById(bookingId);
     const servicePrice = Number((booking.service as any).price);
     let amountInCents: number;
@@ -42,7 +49,7 @@ export class PaymentsService {
       if (booking.status !== 'PENDIENTE_PAGO') {
         throw new BadRequestException('La cita no está pendiente de pago');
       }
-      amount = servicePrice * 0.3;
+      amount = options?.payFull ? servicePrice : servicePrice * 0.3;
       amountInCents = Math.round(amount * 100);
     } else {
       if (booking.status !== 'CONFIRMADA') {
@@ -60,9 +67,11 @@ export class PaymentsService {
 
     const reference = `kamerinos-${bookingId.slice(0, 8)}-${Date.now().toString(36)}`;
     const currency = 'COP';
-    const publicKey = this.config.get<string>('WOMPI_PUBLIC_KEY') || 'pub_test_xxx';
-
-    const signature = this.generateIntegritySignature(reference, amountInCents, currency);
+    const paymentConfig = this.paymentProvider.createPaymentIntent({
+      reference,
+      amountInCents,
+      currency,
+    });
 
     await this.paymentsRepo.create({
       booking: { connect: { id: bookingId } },
@@ -70,64 +79,57 @@ export class PaymentsService {
       amount,
       type,
       wompiReference: reference,
+      metadata: {
+        fbc: options?.fbc || null,
+        fbp: options?.fbp || null,
+        eventId: options?.eventId || null,
+        clientIpAddress: options?.clientIpAddress || null,
+        clientUserAgent: options?.clientUserAgent || null,
+        payFull: options?.payFull || false,
+      },
     } as any);
 
-    return {
-      publicKey,
-      reference,
-      amountInCents,
-      currency,
-      signature,
-    };
-  }
-
-  validateWebhookSignature(
-    transactionId: string,
-    status: string,
-    amountInCents: string,
-    timestamp: string,
-    checksum: string,
-  ): boolean {
-    const secret = this.config.get<string>('WOMPI_EVENTS_KEY') || 'events_test_xxx';
-    const data = `${transactionId}${status}${amountInCents}${timestamp}${secret}`;
-    const computed = crypto.createHash('sha256').update(data).digest('hex');
-    return computed.toUpperCase() === checksum.toUpperCase();
+    return paymentConfig;
   }
 
   async handleWebhook(body: any, rawChecksum: string) {
-    const event = body.event;
-    const data = body.data?.transaction;
-    const timestamp = body.timestamp?.toString();
-    const checksum = rawChecksum || body.signature?.checksum;
+    const parsed = this.paymentProvider.parseWebhook(body, rawChecksum);
 
-    if (!data || !timestamp || !checksum) {
+    if (!parsed.ok) {
       throw new BadRequestException('Payload de webhook inválido');
     }
 
-    const isValid = this.validateWebhookSignature(
-      data.id, data.status, data.amount_in_cents?.toString(), timestamp, checksum,
-    );
+    const event = parsed.event;
+
+    const isValid = this.paymentProvider.verifyWebhookSignature(event);
 
     if (!isValid) {
       this.logger.warn('Firma de webhook inválida');
       throw new BadRequestException('Firma de webhook inválida');
     }
 
-    if (event !== 'transaction.updated') return { received: true };
+    if (event.eventName !== 'transaction.updated') return { received: true };
 
-    const status = data.status;
+    const status = event.status;
+    const transactionId = event.transactionId;
+    const reference = event.reference;
+    const amountInCents = event.amountInCents;
 
     let payment: any;
     try {
-      payment = await this.paymentsRepo.findByWompiReference(data.reference);
+      payment = await this.paymentsRepo.findByWompiReference(reference);
       if (!payment) {
-        try { payment = await this.paymentsRepo.findByWompiId(data.id); } catch {}
+        try {
+          payment = await this.paymentsRepo.findByWompiId(transactionId);
+        } catch {}
       }
       if (!payment) {
-        this.logger.warn(`Pago no encontrado para ref: ${data.reference} / id: ${data.id}`);
+        this.logger.warn(`Pago no encontrado para ref: ${reference} / id: ${transactionId}`);
         return { received: true };
       }
-    } catch { return { received: true }; }
+    } catch {
+      return { received: true };
+    }
 
     if (status === 'APPROVED') {
       if (payment.status === 'APROBADO') {
@@ -137,34 +139,57 @@ export class PaymentsService {
 
       await this.paymentsRepo.update(payment.id, {
         status: 'APROBADO',
-        wompiPaymentId: data.id,
+        wompiPaymentId: transactionId,
         paidAt: new Date(),
       } as any);
 
       if (payment.type === 'ABONO') {
-        await this.bookingSync.confirmAndSync(payment.bookingId);
+        await this.bookingSync.confirmAndSync(payment.bookingId, {
+          fbc: (payment as any).metadata?.fbc,
+          fbp: (payment as any).metadata?.fbp,
+        });
       }
 
       const booking = await this.bookingsRepo.findById(payment.bookingId).catch(() => null);
       if (booking) {
-        this.metaCapi.sendEvent({
-          eventName: 'Purchase',
-          customData: {
-            currency: 'COP',
-            value: data.amount_in_cents ? data.amount_in_cents / 100 : undefined,
-            contentName: (booking as any)?.service?.name,
-            bookingId: payment.bookingId,
-          },
-        });
+        if (payment.type === 'ABONO') {
+          this.metaCapi.sendEvent({
+            eventName: 'Purchase',
+            eventId: (payment as any).metadata?.eventId || `purchase-${payment.id}`,
+            userData: {
+              em: (booking as any)?.user?.email
+                ? hashCapiValue((booking as any).user.email)
+                : undefined,
+              ph: (booking as any)?.user?.phone
+                ? hashCapiPhone((booking as any).user.phone)
+                : undefined,
+              fbc: (payment as any).metadata?.fbc || undefined,
+              fbp: (payment as any).metadata?.fbp || undefined,
+              clientIpAddress: (payment as any).metadata?.clientIpAddress || undefined,
+              clientUserAgent: (payment as any).metadata?.clientUserAgent || undefined,
+            },
+            customData: {
+              currency: 'COP',
+              value: amountInCents ? Number(amountInCents) / 100 : undefined,
+              contentName: (booking as any)?.service?.name,
+              bookingId: payment.bookingId,
+            },
+          });
+        }
 
-        const clientName = `${(booking as any)?.user?.firstName || ''} ${(booking as any)?.user?.lastName || ''}`.trim();
+        const clientName =
+          `${(booking as any)?.user?.firstName || ''} ${(booking as any)?.user?.lastName || ''}`.trim();
         const servicePrice = Number((booking as any)?.service?.price || 0);
         const depositPaid = Number(payment.amount || 0);
         const dateStr = new Date(booking.startTime).toLocaleDateString('es-CO', {
-          day: 'numeric', month: 'long', year: 'numeric',
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
         });
         const timeStr = new Date(booking.startTime).toLocaleTimeString('es-CO', {
-          hour: '2-digit', minute: '2-digit', hour12: true,
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
         });
 
         this.emailService.sendBookingReceipt({
@@ -176,7 +201,20 @@ export class PaymentsService {
           depositAmount: depositPaid,
           remainingAmount: Math.round((servicePrice - depositPaid) * 100) / 100,
           bookingId: payment.bookingId,
-          paymentReference: payment.wompiReference || data.reference || '',
+          paymentReference: payment.wompiReference || reference || '',
+        });
+
+        this.emailService.sendAdminBookingNotification({
+          clientName: clientName || 'Cliente',
+          clientEmail: (booking as any)?.user?.email || '',
+          clientPhone: (booking as any)?.user?.phone || undefined,
+          serviceName: (booking as any)?.service?.name || 'Servicio',
+          date: dateStr,
+          time: timeStr,
+          depositAmount: depositPaid,
+          remainingAmount: Math.round((servicePrice - depositPaid) * 100) / 100,
+          bookingId: payment.bookingId,
+          paymentReference: payment.wompiReference || reference || '',
         });
       }
 
@@ -184,7 +222,9 @@ export class PaymentsService {
       if (!booking && metadata?.items) {
         const existingOrder = await this.ordersRepo.findByPaymentId(payment.id);
         if (existingOrder) {
-          this.logger.log(`Orden ya existente para pago ${payment.id}, ignorando webhook duplicado`);
+          this.logger.log(
+            `Orden ya existente para pago ${payment.id}, ignorando webhook duplicado`,
+          );
           return { received: true };
         }
 
@@ -192,7 +232,9 @@ export class PaymentsService {
           try {
             const product = await this.productsRepo.findById(item.productId).catch(() => null);
             if (product && product.stock > 0) {
-              await this.productsRepo.update(item.productId, { stock: product.stock - item.quantity } as any);
+              await this.productsRepo.update(item.productId, {
+                stock: product.stock - item.quantity,
+              } as any);
             }
           } catch {}
         }
@@ -203,11 +245,17 @@ export class PaymentsService {
             userId: payment.userId,
             total: Number(payment.amount || 0),
             status: 'CONFIRMADO' as any,
-            shippingName: metadata.shippingName || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Cliente' : 'Cliente'),
+            shippingName:
+              metadata.shippingName ||
+              (user
+                ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Cliente'
+                : 'Cliente'),
             shippingEmail: metadata.shippingEmail || user?.email || '',
             shippingPhone: metadata.shippingPhone || '',
             shippingAddress: metadata.shippingAddress || 'Pendiente',
             shippingCity: metadata.shippingCity || 'Pendiente',
+            shippingState: metadata.shippingState || null,
+            shippingNit: metadata.shippingNit || null,
             shippingNotes: metadata.shippingNotes || null,
             paymentId: payment.id,
             items: metadata.items.map((i: any) => ({
@@ -230,21 +278,74 @@ export class PaymentsService {
           try {
             await this.couponsRepo.consumeCoupon(metadata.couponId, payment.userId, orderId);
           } catch (err: any) {
-            this.logger.warn(`No se pudo registrar el uso del cupón ${metadata.couponId}: ${err?.message}`);
+            this.logger.warn(
+              `No se pudo registrar el uso del cupón ${metadata.couponId}: ${err?.message}`,
+            );
           }
         }
         if (user?.email || metadata.shippingEmail) {
-          this.emailService.sendOrderReceipt({
-            clientName: metadata.shippingName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Cliente',
+          const subtotal =
+            Math.round(
+              metadata.items.reduce((s: number, i: any) => s + i.price * i.quantity, 0) * 100,
+            ) / 100;
+          const discountAmount = Math.round((subtotal - Number(payment.amount || 0)) * 100) / 100;
+          const couponDiscountPercent =
+            typeof metadata.couponDiscount === 'number'
+              ? Math.round(metadata.couponDiscount * 100)
+              : null;
+          const orderReceiptData = {
+            clientName:
+              metadata.shippingName ||
+              `${user?.firstName || ''} ${user?.lastName || ''}`.trim() ||
+              'Cliente',
             clientEmail: metadata.shippingEmail || user?.email || '',
             orderId: orderId || payment.id,
-            items: metadata.items.map((i: any) => ({ name: i.name, price: i.price, quantity: i.quantity })),
+            items: metadata.items.map((i: any) => ({
+              name: i.name,
+              price: i.price,
+              quantity: i.quantity,
+            })),
             total: Number(payment.amount || 0),
+            subtotal,
+            discountAmount: discountAmount > 0 ? discountAmount : null,
+            couponCode: metadata.couponCode || null,
+            couponDiscountPercent,
             shippingAddress: metadata.shippingAddress || 'Pendiente',
             shippingCity: metadata.shippingCity || 'Pendiente',
             paymentReference: payment.wompiReference || '',
+          };
+          this.emailService.sendOrderReceipt(orderReceiptData);
+          this.emailService.sendAdminOrderNotification({
+            ...orderReceiptData,
+            clientPhone: metadata.shippingPhone || user?.phone || undefined,
           });
         }
+
+        this.metaCapi.sendEvent({
+          eventName: 'Purchase',
+          eventId: metadata.eventId || `purchase-${payment.id}`,
+          userData: {
+            em:
+              user?.email || metadata.shippingEmail
+                ? hashCapiValue(user?.email || metadata.shippingEmail)
+                : undefined,
+            ph:
+              user?.phone || metadata.shippingPhone
+                ? hashCapiPhone(user?.phone || metadata.shippingPhone)
+                : undefined,
+            fbc: metadata.fbc || undefined,
+            fbp: metadata.fbp || undefined,
+            clientIpAddress: metadata.clientIpAddress || undefined,
+            clientUserAgent: metadata.clientUserAgent || undefined,
+          },
+          customData: {
+            currency: 'COP',
+            value: Number(payment.amount || 0),
+            contentName: 'Carrito',
+            contentCategory: 'Tienda',
+            contentIds: metadata.items.map((i: any) => i.productId),
+          },
+        });
       }
     } else if (status === 'DECLINED' || status === 'ERROR' || status === 'VOIDED') {
       await this.paymentsRepo.update(payment.id, { status: 'RECHAZADO' } as any);
@@ -274,9 +375,30 @@ export class PaymentsService {
     };
   }
 
-  async initCartPayment(userId: string, dto: { items: { productId: string; name: string; price: number; quantity: number }[]; couponCode?: string; couponId?: string; shippingName?: string; shippingEmail?: string; shippingPhone?: string; shippingAddress?: string; shippingCity?: string; shippingNotes?: string }) {
-    let subtotal = dto.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  async initCartPayment(
+    userId: string,
+    dto: {
+      items: { productId: string; name: string; price: number; quantity: number }[];
+      couponCode?: string;
+      couponId?: string;
+      shippingName?: string;
+      shippingEmail?: string;
+      shippingPhone?: string;
+      shippingAddress?: string;
+      shippingCity?: string;
+      shippingNotes?: string;
+      shippingState?: string;
+      shippingNit?: string;
+      fbc?: string;
+      fbp?: string;
+      eventId?: string;
+      clientUserAgent?: string;
+    },
+    options?: { clientIpAddress?: string },
+  ) {
+    const subtotal = dto.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
     let discount = 0;
+    let couponDiscount: number | null = null;
 
     if (dto.couponId) {
       try {
@@ -287,7 +409,8 @@ export class PaymentsService {
           (coupon.maxUses === null || coupon.usedCount < coupon.maxUses);
         const usage = await this.couponsRepo.findUsage(dto.couponId, userId);
         if (withinLimits && !usage) {
-          discount = Math.round(subtotal * Number(coupon.discount) * 100) / 100;
+          couponDiscount = Number(coupon.discount);
+          discount = Math.round(subtotal * couponDiscount * 100) / 100;
         }
       } catch {}
     }
@@ -298,18 +421,41 @@ export class PaymentsService {
     const reference = `kamerinos-cart-${userId.slice(0, 8)}-${Date.now().toString(36)}`;
     const amountInCents = Math.round(total * 100);
     const currency = 'COP';
-    const publicKey = this.config.get<string>('WOMPI_PUBLIC_KEY') || 'pub_test_xxx';
-    const signature = this.generateIntegritySignature(reference, amountInCents, currency);
+    const paymentConfig = this.paymentProvider.createPaymentIntent({
+      reference,
+      amountInCents,
+      currency,
+    });
 
     await this.paymentsRepo.create({
       user: { connect: { id: userId } },
       amount: total,
       type: 'SALDO',
       wompiReference: reference,
-      metadata: { items: JSON.parse(JSON.stringify(dto.items)), couponId: dto.couponId || null, couponCode: dto.couponCode || null, shippingName: dto.shippingName || null, shippingEmail: dto.shippingEmail || null, shippingPhone: dto.shippingPhone || null, shippingAddress: dto.shippingAddress || null, shippingCity: dto.shippingCity || null, shippingNotes: dto.shippingNotes || null },
+      metadata: {
+        items: JSON.parse(JSON.stringify(dto.items)),
+        couponId: dto.couponId || null,
+        couponCode: dto.couponCode || null,
+        subtotal: Math.round(subtotal * 100) / 100,
+        discount: Math.round(discount * 100) / 100,
+        couponDiscount,
+        fbc: dto.fbc || null,
+        fbp: dto.fbp || null,
+        eventId: dto.eventId || null,
+        clientIpAddress: options?.clientIpAddress || null,
+        clientUserAgent: dto.clientUserAgent || null,
+        shippingName: dto.shippingName || null,
+        shippingEmail: dto.shippingEmail || null,
+        shippingPhone: dto.shippingPhone || null,
+        shippingAddress: dto.shippingAddress || null,
+        shippingCity: dto.shippingCity || null,
+        shippingNotes: dto.shippingNotes || null,
+        shippingState: dto.shippingState || null,
+        shippingNit: dto.shippingNit || null,
+      },
     } as any);
 
-    return { publicKey, reference, amountInCents, currency, signature };
+    return paymentConfig;
   }
 
   async findAllTransactions(filters?: PaymentTransactionFilters) {
@@ -319,7 +465,9 @@ export class PaymentsService {
   async manualPayment(bookingId: string, paymentMethod: string) {
     const booking = await this.bookingsRepo.findById(bookingId);
     if (booking.status !== 'CONFIRMADA' && booking.status !== 'PENDIENTE_PAGO') {
-      throw new BadRequestException('Solo citas pendientes o confirmadas pueden recibir pago manual');
+      throw new BadRequestException(
+        'Solo citas pendientes o confirmadas pueden recibir pago manual',
+      );
     }
 
     const servicePrice = Number((booking.service as any).price);
@@ -345,7 +493,11 @@ export class PaymentsService {
       await this.bookingSync.confirmAndSync(bookingId);
     }
 
-    return { success: true, amount: remaining, totalPaid: Math.round((totalPaid + remaining) * 100) / 100 };
+    return {
+      success: true,
+      amount: remaining,
+      totalPaid: Math.round((totalPaid + remaining) * 100) / 100,
+    };
   }
 
   async getRevenue(month: string) {

@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { PaymentsService } from '../payments.service';
 import { IPaymentsRepository } from '../../../repositories/interfaces/payments.repository';
@@ -10,6 +9,7 @@ import { IOrdersRepository } from '../../../repositories/interfaces/orders.repos
 import { MetaCapiService } from '../../meta/meta-capi.service';
 import { EmailService } from '../../../common/email/email.service';
 import { BookingSyncService } from '../../bookings/booking-sync.service';
+import { IPaymentProvider, NormalizedPaymentEvent } from '../providers/payment-provider';
 
 describe('PaymentsService', () => {
   let service: PaymentsService;
@@ -18,6 +18,7 @@ describe('PaymentsService', () => {
   let couponsRepo: DeepMockProxy<ICouponsRepository>;
   let productsRepo: DeepMockProxy<IProductsRepository>;
   let ordersRepo: DeepMockProxy<IOrdersRepository>;
+  let paymentProvider: DeepMockProxy<IPaymentProvider>;
   let metaCapi: DeepMockProxy<MetaCapiService>;
   let emailService: DeepMockProxy<EmailService>;
   let bookingSync: DeepMockProxy<BookingSyncService>;
@@ -55,15 +56,38 @@ describe('PaymentsService', () => {
     updatedAt: new Date(),
   };
 
+  const mockEvent: NormalizedPaymentEvent = {
+    eventName: 'transaction.updated',
+    transactionId: 'txn-1',
+    status: 'APPROVED',
+    reference: 'ref-1',
+    amountInCents: '50000',
+    timestamp: '1754912000',
+    checksum: 'checksum-abc',
+  };
+
   beforeEach(async () => {
     paymentsRepo = mockDeep<IPaymentsRepository>();
     bookingsRepo = mockDeep<IBookingsRepository>();
     couponsRepo = mockDeep<ICouponsRepository>();
     productsRepo = mockDeep<IProductsRepository>();
     ordersRepo = mockDeep<IOrdersRepository>();
+    paymentProvider = mockDeep<IPaymentProvider>();
     metaCapi = mockDeep<MetaCapiService>();
     emailService = mockDeep<EmailService>();
     bookingSync = mockDeep<BookingSyncService>();
+
+    paymentProvider.createPaymentIntent.mockImplementation(
+      ({ reference, amountInCents, currency }) => ({
+        publicKey: 'pub_test_test123',
+        reference,
+        amountInCents,
+        currency,
+        signature: 'a'.repeat(64),
+      }),
+    );
+    paymentProvider.parseWebhook.mockReturnValue({ ok: true, event: mockEvent });
+    paymentProvider.verifyWebhookSignature.mockReturnValue(true);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -73,28 +97,13 @@ describe('PaymentsService', () => {
         { provide: ICouponsRepository, useValue: couponsRepo },
         { provide: IProductsRepository, useValue: productsRepo },
         { provide: IOrdersRepository, useValue: ordersRepo },
+        { provide: IPaymentProvider, useValue: paymentProvider },
         { provide: MetaCapiService, useValue: metaCapi },
         { provide: EmailService, useValue: emailService },
         { provide: BookingSyncService, useValue: bookingSync },
-        {
-          provide: ConfigService,
-          useValue: new ConfigService({
-            WOMPI_PUBLIC_KEY: 'pub_test_test123',
-            WOMPI_INTEGRITY_SECRET: 'integ_test_test123',
-            WOMPI_EVENTS_KEY: 'events_test_test123',
-          }),
-        },
       ],
     }).compile();
     service = module.get<PaymentsService>(PaymentsService);
-  });
-
-  describe('generateIntegritySignature', () => {
-    it('should generate a SHA256 hash from reference + amount + currency + secret', () => {
-      const sig = service.generateIntegritySignature('ref-1', 50000, 'COP');
-      expect(sig).toHaveLength(64);
-      expect(sig).toMatch(/^[a-f0-9]+$/);
-    });
   });
 
   describe('initPayment — ABONO', () => {
@@ -114,6 +123,7 @@ describe('PaymentsService', () => {
       expect(result.signature).toHaveLength(64);
       expect(result.amountInCents).toBe(3000000);
       expect(paymentsRepo.create).toHaveBeenCalled();
+      expect(paymentProvider.createPaymentIntent).toHaveBeenCalled();
     });
 
     it('should default to ABONO when type not specified', async () => {
@@ -123,6 +133,38 @@ describe('PaymentsService', () => {
       const result = await service.initPayment('booking-1');
 
       expect(result.amountInCents).toBe(3000000);
+    });
+
+    it('should charge full price when payFull is true', async () => {
+      bookingsRepo.findById.mockResolvedValue(mockBooking as any);
+      paymentsRepo.create.mockResolvedValue({ id: 'pay-1' } as any);
+
+      const result = await service.initPayment('booking-1', 'ABONO', { payFull: true });
+
+      expect(result.amountInCents).toBe(10000000);
+      expect(paymentsRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 100000,
+          metadata: expect.objectContaining({ payFull: true }),
+        }),
+      );
+    });
+
+    it('should store fbc/fbp/eventId in payment metadata', async () => {
+      bookingsRepo.findById.mockResolvedValue(mockBooking as any);
+      paymentsRepo.create.mockResolvedValue({ id: 'pay-1' } as any);
+
+      await service.initPayment('booking-1', 'ABONO', {
+        fbc: 'fb.1.abc',
+        fbp: 'fb.2.def',
+        eventId: 'evt-9',
+      });
+
+      expect(paymentsRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ fbc: 'fb.1.abc', fbp: 'fb.2.def', eventId: 'evt-9' }),
+        }),
+      );
     });
   });
 
@@ -138,7 +180,9 @@ describe('PaymentsService', () => {
         { ...mockApprovedPayment, amount: 100000 },
       ]);
 
-      await expect(service.initPayment('booking-1', 'SALDO')).rejects.toThrow('completamente pagada');
+      await expect(service.initPayment('booking-1', 'SALDO')).rejects.toThrow(
+        'completamente pagada',
+      );
     });
 
     it('should return widget config for remaining balance', async () => {
@@ -153,50 +197,30 @@ describe('PaymentsService', () => {
     });
   });
 
-  describe('validateWebhookSignature', () => {
-    it('should return true for a correctly computed signature', () => {
-      const secret = 'events_test_test123';
-      const crypto = require('crypto');
-      const timestamp = '1754912000';
-      const data = `txn-1APPROVED50000${timestamp}${secret}`;
-      const checksum = crypto.createHash('sha256').update(data).digest('hex');
-
-      const valid = service.validateWebhookSignature('txn-1', 'APPROVED', '50000', timestamp, checksum);
-      expect(valid).toBe(true);
-    });
-
-    it('should return false for a wrong signature', () => {
-      const valid = service.validateWebhookSignature('txn-1', 'APPROVED', '50000', '9999', 'badchecksum');
-      expect(valid).toBe(false);
-    });
-  });
-
   describe('handleWebhook', () => {
     it('should throw if payload is invalid', async () => {
+      paymentProvider.parseWebhook.mockReturnValue({ ok: false, reason: 'invalid_payload' });
       await expect(service.handleWebhook({}, 'checksum')).rejects.toThrow('inválido');
     });
 
-    it('should return received for non-transaction events', async () => {
-      const crypto = require('crypto');
-      const secret = 'events_test_test123';
-      const timestamp = 1754912000;
-      const data = `tx1APPROVED50000${timestamp}${secret}`;
-      const checksum = crypto.createHash('sha256').update(data).digest('hex');
-
-      const result = await service.handleWebhook(
-        { event: 'other.event', data: { transaction: { id: 'tx1', status: 'APPROVED', amount_in_cents: 50000 } }, timestamp },
-        checksum,
+    it('should throw if webhook signature is invalid', async () => {
+      paymentProvider.verifyWebhookSignature.mockReturnValue(false);
+      await expect(service.handleWebhook({}, 'checksum')).rejects.toThrow(
+        'Firma de webhook inválida',
       );
+    });
+
+    it('should return received for non-transaction events', async () => {
+      paymentProvider.parseWebhook.mockReturnValue({
+        ok: true,
+        event: { ...mockEvent, eventName: 'other.event' },
+      });
+
+      const result = await service.handleWebhook({}, 'checksum');
       expect(result).toEqual({ received: true });
     });
 
     it('should approve ABONO payment and confirm booking', async () => {
-      const crypto = require('crypto');
-      const secret = 'events_test_test123';
-      const timestamp = 1754912000;
-      const data = `txn-1APPROVED50000${timestamp}${secret}`;
-      const checksum = crypto.createHash('sha256').update(data).digest('hex');
-
       paymentsRepo.findByWompiId.mockResolvedValue({
         ...mockApprovedPayment,
         type: 'ABONO',
@@ -206,27 +230,22 @@ describe('PaymentsService', () => {
       bookingsRepo.findById.mockResolvedValue(mockBooking as any);
       bookingsRepo.update.mockResolvedValue(mockConfirmedBooking as any);
 
-      const result = await service.handleWebhook(
-        {
-          event: 'transaction.updated',
-          data: { transaction: { id: 'txn-1', status: 'APPROVED', amount_in_cents: 50000 } },
-          timestamp,
-        },
-        checksum,
-      );
+      const result = await service.handleWebhook({}, 'checksum');
 
       expect(result).toEqual({ received: true });
       expect(paymentsRepo.update).toHaveBeenCalled();
-      expect(bookingSync.confirmAndSync).toHaveBeenCalledWith('booking-1');
+      expect(bookingSync.confirmAndSync).toHaveBeenCalledWith(
+        'booking-1',
+        expect.objectContaining({ fbc: undefined }),
+      );
+      expect(metaCapi.sendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ eventName: 'Purchase' }),
+      );
+      expect(emailService.sendBookingReceipt).toHaveBeenCalled();
+      expect(emailService.sendAdminBookingNotification).toHaveBeenCalled();
     });
 
     it('should approve SALDO payment without changing booking status', async () => {
-      const crypto = require('crypto');
-      const secret = 'events_test_test123';
-      const timestamp = 1754912000;
-      const data = `txn-2APPROVED70000${timestamp}${secret}`;
-      const checksum = crypto.createHash('sha256').update(data).digest('hex');
-
       paymentsRepo.findByWompiId.mockResolvedValue({
         ...mockApprovedPayment,
         id: 'pay-2',
@@ -237,41 +256,22 @@ describe('PaymentsService', () => {
       paymentsRepo.update.mockResolvedValue(mockApprovedPayment);
       bookingsRepo.findById.mockResolvedValue(mockConfirmedBooking as any);
 
-      const result = await service.handleWebhook(
-        {
-          event: 'transaction.updated',
-          data: { transaction: { id: 'txn-2', status: 'APPROVED', amount_in_cents: 70000 } },
-          timestamp,
-        },
-        checksum,
-      );
+      const result = await service.handleWebhook({}, 'checksum');
 
       expect(result).toEqual({ received: true });
       expect(paymentsRepo.update).toHaveBeenCalled();
       expect(bookingsRepo.update).not.toHaveBeenCalled();
+      expect(metaCapi.sendEvent).not.toHaveBeenCalled();
     });
 
     it('should ignore duplicate APPROVED webhooks', async () => {
-      const crypto = require('crypto');
-      const secret = 'events_test_test123';
-      const timestamp = 1754912000;
-      const data = `txn-1APPROVED50000${timestamp}${secret}`;
-      const checksum = crypto.createHash('sha256').update(data).digest('hex');
-
       paymentsRepo.findByWompiId.mockResolvedValue({
         ...mockApprovedPayment,
         type: 'ABONO',
         status: 'APROBADO',
       });
 
-      const result = await service.handleWebhook(
-        {
-          event: 'transaction.updated',
-          data: { transaction: { id: 'txn-1', status: 'APPROVED', amount_in_cents: 50000 } },
-          timestamp,
-        },
-        checksum,
-      );
+      const result = await service.handleWebhook({}, 'checksum');
 
       expect(result).toEqual({ received: true });
       expect(paymentsRepo.update).not.toHaveBeenCalled();
@@ -279,47 +279,100 @@ describe('PaymentsService', () => {
     });
 
     it('should reject declined payments', async () => {
-      const crypto = require('crypto');
-      const secret = 'events_test_test123';
-      const timestamp = 1754912000;
-      const data = `txn-3DECLINED50000${timestamp}${secret}`;
-      const checksum = crypto.createHash('sha256').update(data).digest('hex');
-
+      paymentProvider.parseWebhook.mockReturnValue({
+        ok: true,
+        event: { ...mockEvent, status: 'DECLINED', transactionId: 'txn-3' },
+      });
       paymentsRepo.findByWompiId.mockResolvedValue(mockApprovedPayment as any);
       paymentsRepo.update.mockResolvedValue(mockApprovedPayment);
 
-      const result = await service.handleWebhook(
-        {
-          event: 'transaction.updated',
-          data: { transaction: { id: 'txn-3', status: 'DECLINED', amount_in_cents: 50000 } },
-          timestamp,
-        },
-        checksum,
-      );
+      const result = await service.handleWebhook({}, 'checksum');
 
       expect(result).toEqual({ received: true });
       expect(paymentsRepo.update).toHaveBeenCalledWith('pay-1', { status: 'RECHAZADO' } as any);
     });
 
     it('should handle unknown wompi payment gracefully', async () => {
-      const crypto = require('crypto');
-      const secret = 'events_test_test123';
-      const timestamp = 1754912000;
-      const data = `unknownAPPROVED50000${timestamp}${secret}`;
-      const checksum = crypto.createHash('sha256').update(data).digest('hex');
-
       paymentsRepo.findByWompiId.mockRejectedValue(new Error('Not found'));
 
-      const result = await service.handleWebhook(
-        {
-          event: 'transaction.updated',
-          data: { transaction: { id: 'unknown', status: 'APPROVED', amount_in_cents: 50000 } },
-          timestamp,
-        },
-        checksum,
-      );
+      const result = await service.handleWebhook({}, 'checksum');
 
       expect(result).toEqual({ received: true });
+    });
+
+    it('should create order and send receipt with coupon info for cart payment', async () => {
+      const cartPayment = {
+        id: 'pay-cart',
+        userId: 'user-1',
+        bookingId: null,
+        amount: 90000,
+        type: 'SALDO',
+        status: 'PENDIENTE',
+        wompiReference: 'ref-cart',
+        wompiPaymentId: null,
+        paidAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          items: [{ productId: 'prod-1', name: 'Product A', price: 50000, quantity: 2 }],
+          couponId: 'coupon-1',
+          couponCode: 'DESC10',
+          subtotal: 100000,
+          discount: 10000,
+          couponDiscount: 0.1,
+          shippingName: 'Maria Gomez',
+          shippingEmail: 'maria@example.com',
+          shippingPhone: '3000000000',
+          shippingAddress: 'Calle 1',
+          shippingCity: 'Bogotá',
+        },
+        user: { firstName: 'Maria', lastName: 'Gomez', email: 'maria@example.com' },
+      };
+      paymentsRepo.findByWompiId.mockResolvedValue(cartPayment as any);
+      paymentsRepo.update.mockResolvedValue(cartPayment as any);
+      productsRepo.findById.mockResolvedValue({ id: 'prod-1', stock: 10 } as any);
+      ordersRepo.findByPaymentId.mockResolvedValue(null as any);
+      ordersRepo.create.mockResolvedValue({ id: 'order-cart-1' } as any);
+      couponsRepo.consumeCoupon.mockResolvedValue({} as any);
+      bookingsRepo.findById.mockResolvedValue(null as any);
+
+      const result = await service.handleWebhook({}, 'checksum');
+
+      expect(result).toEqual({ received: true });
+      expect(ordersRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-1', total: 90000, paymentId: 'pay-cart' }),
+      );
+      expect(couponsRepo.consumeCoupon).toHaveBeenCalledWith('coupon-1', 'user-1', 'order-cart-1');
+      expect(emailService.sendOrderReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 'order-cart-1',
+          subtotal: 100000,
+          discountAmount: 10000,
+          couponCode: 'DESC10',
+          couponDiscountPercent: 10,
+        }),
+      );
+      expect(emailService.sendAdminOrderNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ couponCode: 'DESC10', couponDiscountPercent: 10 }),
+      );
+      expect(metaCapi.sendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventName: 'Purchase',
+          eventId: 'purchase-pay-cart',
+          userData: expect.objectContaining({
+            fbc: undefined,
+            fbp: undefined,
+            clientIpAddress: undefined,
+            clientUserAgent: undefined,
+          }),
+          customData: expect.objectContaining({
+            value: 90000,
+            contentName: 'Carrito',
+            contentCategory: 'Tienda',
+            contentIds: ['prod-1'],
+          }),
+        }),
+      );
     });
   });
 
@@ -355,26 +408,43 @@ describe('PaymentsService', () => {
       expect(result.signature).toHaveLength(64);
       expect(result.amountInCents).toBe(13000000);
       expect(paymentsRepo.create).toHaveBeenCalled();
+      expect(paymentProvider.createPaymentIntent).toHaveBeenCalled();
+      const metadata = paymentsRepo.create.mock.calls[0][0].metadata as any;
+      expect(metadata.subtotal).toBe(130000);
+      expect(metadata.discount).toBe(0);
+      expect(metadata.couponDiscount).toBeNull();
     });
 
     it('should apply coupon discount when valid coupon provided', async () => {
       couponsRepo.findById.mockResolvedValue({
-        id: 'coupon-1', code: 'DESC10', discount: 0.1, isActive: true, maxUses: null, usedCount: 0, perUserLimit: 1,
+        id: 'coupon-1',
+        code: 'DESC10',
+        discount: 0.1,
+        isActive: true,
+        maxUses: null,
+        usedCount: 0,
+        perUserLimit: 1,
         expiresAt: new Date('2027-01-01'),
       } as any);
       paymentsRepo.create.mockResolvedValue({ id: 'pay-cart-2' } as any);
 
       const result = await service.initCartPayment('user-1', {
-        ...cartDto, couponId: 'coupon-1',
+        ...cartDto,
+        couponId: 'coupon-1',
       });
 
       expect(result.amountInCents).toBe(11700000);
       expect(couponsRepo.findById).toHaveBeenCalledWith('coupon-1');
+      const metadata = paymentsRepo.create.mock.calls[0][0].metadata as any;
+      expect(metadata.subtotal).toBe(130000);
+      expect(metadata.discount).toBe(13000);
+      expect(metadata.couponDiscount).toBe(0.1);
     });
 
     it('should throw if total is <= 0', async () => {
-      await expect(service.initCartPayment('user-1', { items: [] }))
-        .rejects.toThrow('total debe ser mayor a 0');
+      await expect(service.initCartPayment('user-1', { items: [] })).rejects.toThrow(
+        'total debe ser mayor a 0',
+      );
     });
 
     it('should ignore invalid coupon gracefully', async () => {
@@ -382,7 +452,8 @@ describe('PaymentsService', () => {
       paymentsRepo.create.mockResolvedValue({ id: 'pay-cart-3' } as any);
 
       const result = await service.initCartPayment('user-1', {
-        ...cartDto, couponId: 'bad-coupon',
+        ...cartDto,
+        couponId: 'bad-coupon',
       });
 
       expect(result.amountInCents).toBe(13000000);

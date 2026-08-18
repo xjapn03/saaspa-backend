@@ -1,6 +1,7 @@
 import {
-  Controller, Get, Post, Param, Body, Headers, HttpCode, HttpStatus, Query,
+  Controller, Get, Post, Param, Body, Headers, HttpCode, HttpStatus, Query, Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
@@ -20,16 +21,25 @@ export class PaymentsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Iniciar pago — retorna config para widget Wompi. type=ABONO (default) o SALDO' })
   @ApiResponse({ status: 201, description: 'Configuración de pago generada' })
-  init(@Body() dto: InitPaymentDto) {
-    return this.paymentsService.initPayment(dto.bookingId, (dto.type as 'ABONO' | 'SALDO') || 'ABONO');
+  init(@Body() dto: InitPaymentDto, @Req() req?: Request) {
+    return this.paymentsService.initPayment(dto.bookingId, (dto.type as 'ABONO' | 'SALDO') || 'ABONO', {
+      payFull: !!dto.payFull,
+      fbc: dto.fbc,
+      fbp: dto.fbp,
+      eventId: dto.eventId,
+      clientIpAddress: getClientIp(req),
+      clientUserAgent: dto.clientUserAgent,
+    });
   }
 
   @Post('init-cart')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Iniciar pago del carrito de compras' })
   @ApiResponse({ status: 201, description: 'Configuración de pago generada' })
-  initCart(@CurrentUser('id') userId: string, @Body() dto: InitCartPaymentDto) {
-    return this.paymentsService.initCartPayment(userId, dto);
+  initCart(@CurrentUser('id') userId: string, @Body() dto: InitCartPaymentDto, @Req() req?: Request) {
+    return this.paymentsService.initCartPayment(userId, dto, {
+      clientIpAddress: getClientIp(req),
+    });
   }
 
   @Get('transactions')
@@ -91,4 +101,11 @@ export class PaymentsController {
   ) {
     return this.paymentsService.handleWebhook(body, checksum);
   }
+}
+
+function getClientIp(req?: Request): string | undefined {
+  if (!req) return undefined;
+  const xff = req.headers['x-forwarded-for'];
+  const fromXff = Array.isArray(xff) ? xff[0] : xff?.split(',')[0].trim();
+  return fromXff || req.socket?.remoteAddress || undefined;
 }

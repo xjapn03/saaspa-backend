@@ -1,9 +1,23 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as crypto from 'crypto';
+
+export function hashCapiValue(value: string): string {
+  return crypto.createHash('sha256').update(value.trim().toLowerCase()).digest('hex');
+}
+
+export function hashCapiPhone(phone: string): string | undefined {
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return undefined;
+  const normalized = digits.startsWith('57') ? digits : `57${digits}`;
+  return hashCapiValue(normalized);
+}
 
 export interface MetaCapiEvent {
   eventName: string;
   eventTime?: number;
+  eventId?: string;
+  actionSource?: string;
   userData?: {
     clientIpAddress?: string;
     clientUserAgent?: string;
@@ -18,6 +32,7 @@ export interface MetaCapiEvent {
     contentName?: string;
     contentCategory?: string;
     bookingId?: string;
+    contentIds?: string[];
   };
 }
 
@@ -26,7 +41,7 @@ export class MetaCapiService {
   private readonly logger = new Logger(MetaCapiService.name);
   private readonly pixelId: string;
   private readonly accessToken: string;
-  private readonly apiVersion = 'v18.0';
+  private readonly apiVersion = 'v21.0';
 
   constructor(private config: ConfigService) {
     this.pixelId = config.get<string>('META_CAPI_PIXEL_ID') || '';
@@ -52,7 +67,8 @@ export class MetaCapiService {
           {
             event_name: event.eventName,
             event_time: event.eventTime || Math.floor(Date.now() / 1000),
-            action_source: 'website',
+            event_id: event.eventId,
+            action_source: event.actionSource || 'website',
             user_data: event.userData || {},
             custom_data: event.customData || {},
           },

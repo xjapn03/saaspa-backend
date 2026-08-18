@@ -16,7 +16,7 @@ describe('ServicesController', () => {
     duration: 75,
     isActive: true,
     categoryId: null,
-    imageUrl: null,
+    imageUrl: null, compareAtPrice: null, isFeatured: false, mainImage: null, carouselImages: null, 
     createdAt: new Date('2024-01-01'),
     updatedAt: new Date('2024-01-01'),
   };

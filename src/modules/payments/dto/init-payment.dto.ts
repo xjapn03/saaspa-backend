@@ -12,4 +12,28 @@ export class InitPaymentDto {
   @IsString()
   @IsIn(['ABONO', 'SALDO'])
   type?: string;
+
+  @ApiPropertyOptional({ description: 'Flag para pagar el total (100%) en vez del abono' })
+  @IsOptional()
+  payFull?: boolean;
+
+  @ApiPropertyOptional({ description: 'Meta click id (_fbc) para atribución CAPI' })
+  @IsOptional()
+  @IsString()
+  fbc?: string;
+
+  @ApiPropertyOptional({ description: 'Meta browser id (_fbp) para atribución CAPI' })
+  @IsOptional()
+  @IsString()
+  fbp?: string;
+
+  @ApiPropertyOptional({ description: 'event_id para deduplicación Pixel/CAPI' })
+  @IsOptional()
+  @IsString()
+  eventId?: string;
+
+  @ApiPropertyOptional({ description: 'User-Agent del navegador para deduplicación CAPI' })
+  @IsOptional()
+  @IsString()
+  clientUserAgent?: string;
 }

@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { ConfigService } from '@nestjs/config';
@@ -91,10 +91,62 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
+    if (!user.emailVerified) {
+      throw new UnauthorizedException('Debes verificar tu correo antes de iniciar sesión.');
+    }
+
     const tokens = this.tokenService.generateTokens(user.id, user.email, user.role);
     await this.usersRepo.setRefreshToken(user.id, tokens.refreshToken);
 
     return { user: this.sanitizeUser(user), ...tokens };
+  }
+
+  async resendVerification(email: string) {
+    const user = await this.usersRepo.findByEmail(email);
+    if (!user) {
+      this.logger.warn(`Intento de reenviar verificación para email inexistente: ${email}`);
+      return { message: 'Si el correo existe en nuestro sistema, recibirás un nuevo enlace de verificación.' };
+    }
+
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    await this.prisma.verificationToken.upsert({
+      where: { userId: user.id },
+      update: { token: verificationToken, expiresAt: new Date(Date.now() + 60 * 60 * 1000) },
+      create: { userId: user.id, token: verificationToken, expiresAt: new Date(Date.now() + 60 * 60 * 1000) },
+    });
+
+    const frontendBase = this.config.get<string>('CORS_ORIGIN')?.split(',')[0] || 'http://localhost:3000';
+    const verifyUrl = `${frontendBase}/verificar-email/${verificationToken}`;
+    const userName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : '';
+    this.emailService.sendWelcomeEmail({
+      clientName: userName || 'Cliente',
+      clientEmail: user.email,
+      verifyUrl,
+    });
+
+    return { message: 'Enviamos un nuevo enlace de verificación a tu correo.' };
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.usersRepo.findByIdWithCredentials(userId);
+    if (!user) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) {
+      throw new BadRequestException('La contraseña actual es incorrecta.');
+    }
+
+    if (newPassword.length < 6) {
+      throw new BadRequestException('La nueva contraseña debe tener al menos 6 caracteres.');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.usersRepo.update(userId, { passwordHash } as any);
+    await this.usersRepo.setRefreshToken(userId, '');
+
+    return { message: 'Contraseña actualizada correctamente. Inicia sesión de nuevo.' };
   }
 
   async refresh(refreshToken: string) {
@@ -181,6 +233,54 @@ export class AuthService {
     await this.prisma.resetToken.delete({ where: { id: resetToken.id } });
 
     return { message: 'Contraseña actualizada correctamente. Ya puedes iniciar sesión.' };
+  }
+
+  async requestEmailChange(userId: string, newEmail: string) {
+    const existing = await this.usersRepo.findByEmail(newEmail);
+    if (existing) {
+      throw new ConflictException('Ese correo ya está en uso');
+    }
+
+    const user = await this.usersRepo.findById(userId);
+    if (!user) throw new UnauthorizedException('Usuario no encontrado');
+
+    const code = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
+    const codeHash = await bcrypt.hash(code, 10);
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    await this.prisma.emailChangeCode.upsert({
+      where: { userId },
+      update: { newEmail, codeHash, expiresAt },
+      create: { userId, newEmail, codeHash, expiresAt },
+    });
+
+    const userName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : '';
+    this.emailService.sendEmailChangeCode(newEmail, userName, code);
+
+    return { message: `Enviamos un código de verificación a ${newEmail}.` };
+  }
+
+  async confirmEmailChange(userId: string, code: string) {
+    const record = await this.prisma.emailChangeCode.findUnique({ where: { userId } });
+    if (!record) {
+      throw new UnauthorizedException('No hay una solicitud de cambio de correo activa.');
+    }
+
+    if (record.expiresAt < new Date()) {
+      await this.prisma.emailChangeCode.delete({ where: { userId } });
+      throw new UnauthorizedException('El código ha expirado. Solicita uno nuevo.');
+    }
+
+    const valid = await bcrypt.compare(code, record.codeHash);
+    if (!valid) {
+      throw new UnauthorizedException('Código incorrecto.');
+    }
+
+    await this.usersRepo.update(userId, { email: record.newEmail } as any);
+    await this.usersRepo.setRefreshToken(userId, '');
+    await this.prisma.emailChangeCode.delete({ where: { userId } });
+
+    return { message: 'Correo actualizado correctamente. Inicia sesión de nuevo con tu nuevo correo.' };
   }
 
   private sanitizeUser(user: any) {

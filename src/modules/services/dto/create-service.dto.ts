@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsInt, IsBoolean, Min } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsInt, IsBoolean, IsArray, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateServiceDto {
@@ -21,6 +21,12 @@ export class CreateServiceDto {
   @Min(0)
   price: number;
 
+  @ApiPropertyOptional({ example: 220000, description: 'Precio anterior para mostrar tachado' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  compareAtPrice?: number;
+
   @ApiProperty({ example: 75, description: 'Duración en minutos' })
   @IsInt()
   @Min(1)
@@ -36,8 +42,24 @@ export class CreateServiceDto {
   @IsString()
   imageUrl?: string;
 
+  @ApiPropertyOptional({ example: '/uploads/services/masaje/main.webp' })
+  @IsOptional()
+  @IsString()
+  mainImage?: string;
+
+  @ApiPropertyOptional({ type: [String], example: ['/uploads/services/masaje/gallery-1.webp'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  carouselImages?: string[];
+
   @ApiPropertyOptional({ example: true })
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ example: true, description: 'Mostrar en destacados del home' })
+  @IsOptional()
+  @IsBoolean()
+  isFeatured?: boolean;
 }
