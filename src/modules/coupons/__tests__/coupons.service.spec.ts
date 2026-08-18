@@ -114,7 +114,7 @@ describe('CouponsService', () => {
   describe('findUsages', () => {
     it('should return usages for a coupon', async () => {
       repo.findUsages.mockResolvedValue([
-        { id: 'u1', couponId: 'coupon-1', userId: 'user-1', orderId: null, usedAt: new Date(), user: { firstName: 'María', lastName: 'Gómez', email: 'maria@test.com' } },
+        { id: 'u1', couponId: 'coupon-1', userId: 'user-1', orderId: null, usedAt: new Date(), user: { firstName: 'María', lastName: 'Gómez', email: 'maria@test.com', phone: '3001234567' } },
       ] as any);
 
       const result = await service.findUsages('coupon-1');

@@ -17,6 +17,8 @@ describe('OrdersController', () => {
     shippingPhone: '3001234567',
     shippingAddress: 'Calle 1',
     shippingCity: 'Bogotá',
+    shippingState: 'Cundinamarca',
+    shippingNit: '123456789',
     shippingNotes: null,
     paymentId: 'pay-1',
     createdAt: new Date(),

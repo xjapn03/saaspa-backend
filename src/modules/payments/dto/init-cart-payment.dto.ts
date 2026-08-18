@@ -65,4 +65,14 @@ export class InitCartPaymentDto {
   @IsOptional()
   @IsString()
   shippingNotes?: string;
+
+  @ApiPropertyOptional({ example: 'Cundinamarca' })
+  @IsOptional()
+  @IsString()
+  shippingState?: string;
+
+  @ApiPropertyOptional({ example: '123456789' })
+  @IsOptional()
+  @IsString()
+  shippingNit?: string;
 }

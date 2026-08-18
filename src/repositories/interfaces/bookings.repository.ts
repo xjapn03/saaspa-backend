@@ -13,7 +13,7 @@ export interface IBookingSafe {
   notes: string | null;
   createdAt: Date;
   updatedAt: Date;
-  user?: { firstName: string; lastName: string; email: string };
+  user?: { firstName: string; lastName: string; email: string; phone: string };
   service?: { name: string; duration: number; price: number };
 }
 

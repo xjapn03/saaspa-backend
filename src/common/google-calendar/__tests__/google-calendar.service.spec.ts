@@ -12,7 +12,7 @@ describe('GoogleCalendarService', () => {
     id: 'booking-1',
     startTime: new Date('2026-08-15T10:00:00-05:00'),
     endTime: new Date('2026-08-15T11:00:00-05:00'),
-    user: { firstName: 'Maria', lastName: 'Gomez', email: 'maria@test.com' },
+    user: { firstName: 'Maria', lastName: 'Gomez', email: 'maria@test.com', phone: '3001234567' },
     service: { name: 'Facial' },
   };
 
