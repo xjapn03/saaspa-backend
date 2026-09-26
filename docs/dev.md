@@ -133,12 +133,10 @@ Tabla `chat_conversation_states` (migración `20260926180000_add_chat_conversati
 (default `kamerinos`), `conversationId` único, `channel`, `identityKind`, `userId`, `sessionKeyHash`,
 `handoffActive`, `handoffReason`, `lastTurnId`, `messageCount`, `lastMessageAt`.
 
-> **Nota sobre `npm run test:e2e`:** requiere la base `kamerinos_db_tests` y, en este equipo, la
-> contraseña de `.env.test` puede estar desactualizada; exporta `DATABASE_URL` con la credencial de tu
-> `.env` cambiando el nombre de la base a `kamerinos_db_tests` antes de ejecutarlo. Todos los specs
-> aplican el prefijo global `api` igual que `main.ts`. Los specs `auth`/`users` dependen además del admin
-> sembrado, cuyo password real es `admin123$` (`prisma/seed.ts`) mientras specs y README usan `admin123`:
-> hasta alinear uno de los dos, 14 de sus 25 tests fallan en el login del admin.
+> **Nota sobre `npm run test:e2e`:** requiere la base `kamerinos_db_tests` con las migraciones y el seed
+> aplicados (`npx prisma migrate deploy && npx prisma db seed`, exportando `DATABASE_URL` con la credencial
+> de tu `.env` y el nombre de esa base). Todos los specs aplican el prefijo global `api` igual que `main.ts`.
+> Los specs `auth`/`users` dependen del admin sembrado (`admin123`, la credencial documentada).
 
 ## Módulos (orden de implementación)
 

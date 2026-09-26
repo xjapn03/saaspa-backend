@@ -39,7 +39,8 @@ const OLD_CATEGORY_SLUGS = [
 ];
 
 async function main() {
-  const passwordHash = await bcrypt.hash('admin123$', 10);
+  // Credencial documentada en README.md y docs/dev.md, y usada por los E2E.
+  const passwordHash = await bcrypt.hash('admin123', 10);
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@sandrapinzonsaludybelleza.com.co' },
