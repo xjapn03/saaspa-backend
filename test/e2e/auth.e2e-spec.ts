@@ -5,10 +5,18 @@ import { ConfigService } from '@nestjs/config';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/database/prisma.service';
+import { ACCESS_COOKIE, REFRESH_COOKIE } from '../../src/common/auth/cookies';
 
 describe('Auth (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+
+  /** Reads a cookie value from a response (tokens are httpOnly cookies now). */
+  const cookieValue = (response: request.Response, name: string): string => {
+    const cookies = (response.headers['set-cookie'] as unknown as string[]) || [];
+    const cookie = cookies.find((value) => value.startsWith(`${name}=`));
+    return cookie ? cookie.split(';')[0].slice(name.length + 1) : '';
+  };
 
   beforeAll(async () => {
     // Aplica migraciones a la BD de tests (kamerinos_db_tests, ver setup.ts)
@@ -96,7 +104,7 @@ describe('Auth (e2e)', () => {
   });
 
   describe('POST /api/auth/login', () => {
-    it('should login admin (seed) and return tokens (200)', async () => {
+    it('should login admin (seed) and set the session cookies (200)', async () => {
       // Arrange
       const body = {
         email: 'admin@sandrapinzonsaludybelleza.com.co',
@@ -108,8 +116,8 @@ describe('Auth (e2e)', () => {
 
       // Assert
       expect(response.status).toBe(200);
-      expect(response.body.accessToken).toBeDefined();
-      expect(response.body.refreshToken).toBeDefined();
+      expect(cookieValue(response, ACCESS_COOKIE)).toBeTruthy();
+      expect(cookieValue(response, REFRESH_COOKIE)).toBeTruthy();
       expect(response.body.user.email).toBe('admin@sandrapinzonsaludybelleza.com.co');
       expect(response.body.user.role).toBe('ADMIN');
     });
@@ -149,7 +157,7 @@ describe('Auth (e2e)', () => {
       const loginRes = await request(app.getHttpServer())
         .post('/api/auth/login')
         .send({ email: 'admin@sandrapinzonsaludybelleza.com.co', password: 'admin123' });
-      const refreshToken = loginRes.body.refreshToken;
+      const refreshToken = cookieValue(loginRes, REFRESH_COOKIE);
 
       // Act
       const response = await request(app.getHttpServer())
@@ -160,7 +168,11 @@ describe('Auth (e2e)', () => {
       expect(response.status).toBe(200);
       expect(response.body.accessToken).toBeDefined();
       expect(response.body.refreshToken).toBeDefined();
-      expect(response.body.accessToken).not.toBe(loginRes.body.accessToken);
+      // The session JWT payload has no jti, so two tokens signed inside the same
+      // second are identical; the contract of the endpoint is that it sets fresh
+      // session cookies again.
+      expect(cookieValue(response, ACCESS_COOKIE)).toBeTruthy();
+      expect(cookieValue(response, REFRESH_COOKIE)).toBeTruthy();
     });
 
     it('should return 401 with invalid refresh token', async () => {
@@ -191,8 +203,8 @@ describe('Auth (e2e)', () => {
       const loginRes = await request(app.getHttpServer())
         .post('/api/auth/login')
         .send({ email: 'admin@sandrapinzonsaludybelleza.com.co', password: 'admin123' });
-      const accessToken = loginRes.body.accessToken;
-      const refreshToken = loginRes.body.refreshToken;
+      const accessToken = cookieValue(loginRes, ACCESS_COOKIE);
+      const refreshToken = cookieValue(loginRes, REFRESH_COOKIE);
 
       // Act
       const logoutRes = await request(app.getHttpServer())
@@ -209,7 +221,7 @@ describe('Auth (e2e)', () => {
       const loginRes = await request(app.getHttpServer())
         .post('/api/auth/login')
         .send({ email: 'admin@sandrapinzonsaludybelleza.com.co', password: 'admin123' });
-      const accessToken = loginRes.body.accessToken;
+      const accessToken = cookieValue(loginRes, ACCESS_COOKIE);
 
       await request(app.getHttpServer())
         .post('/api/auth/logout')
@@ -230,8 +242,8 @@ describe('Auth (e2e)', () => {
       const loginRes = await request(app.getHttpServer())
         .post('/api/auth/login')
         .send({ email: 'admin@sandrapinzonsaludybelleza.com.co', password: 'admin123' });
-      const accessToken = loginRes.body.accessToken;
-      const refreshToken = loginRes.body.refreshToken;
+      const accessToken = cookieValue(loginRes, ACCESS_COOKIE);
+      const refreshToken = cookieValue(loginRes, REFRESH_COOKIE);
 
       await request(app.getHttpServer())
         .post('/api/auth/logout')
