@@ -94,6 +94,25 @@ usuario), `@SkipThrottle()` y `@UseGuards(InternalAuthGuard)`. El guard exige, e
 La identidad se lee **del token** con `@TurnContext()` (`@TurnContext('userId')`, …), nunca de la query ni
 de argumentos generados por el modelo. Código en `src/modules/internal/`.
 
+### Endpoints internos de lectura (Fase 1)
+
+Contrato: `saaspa-IA/docs/contracts/internal-api.openapi.yaml`. Envuelven los servicios reales
+(`ServicesService`, `BookingsService`), así que no hay lógica duplicada.
+
+| Endpoint | Equivale a | Notas |
+|---|---|---|
+| `GET /api/internal/v1/services?page&limit&featured` | `GET /api/services/public` | Paginado, `isActive=true`, orden por nombre; `limit` 1..100 (default 20) |
+| `GET /api/internal/v1/services/{id\|slug}` | `GET /api/services/public/:slug` | Acepta UUID o slug; no filtra `isActive` |
+| `GET /api/internal/v1/availability?serviceId&date` | `GET /api/bookings/slots` | `serviceId` acepta UUID o slug; devuelve `{ serviceId, date, timezone, slots:[{start,end}] }` con **offset explícito** (`-05:00`) |
+
+Detalles de forma:
+- El repositorio expone la relación como `categoryRel`; el contrato interno la expone como `category`.
+  El mapeo vive en `internal-services.controller.ts` y solo devuelve los campos del contrato.
+- `availability` calcula el offset con `Intl`/ICU (`src/common/time/timezone.util.ts`), por lo que el
+  resultado **no** depende del `tzdata` del contenedor; la zona sale de `TENANT_TIMEZONE`.
+- `BookingsService.getAvailabilityWindow()` es la fuente única del cálculo de franjas: `getAvailability()`
+  (endpoint público) es ahora un mapeo sobre él, así que ambos no pueden divergir.
+
 ## Módulos (orden de implementación)
 
 | # | Módulo      | Estado       | Endpoints                                  |
@@ -332,7 +351,7 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (324 tests, 44 suites) — no requiere BD
+npm test              # Unit tests (370 tests, 49 suites) — no requiere BD
 npm run test:cov      # Cobertura
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 ```
@@ -382,7 +401,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (44 suites, 324 tests)
+### Inventario de suites (49 suites, 370 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
@@ -390,5 +409,6 @@ El flujo de E2E:
 | Controllers | auth, users, services, bookings, payments, coupons, categories, products, cart, health, upload | ~50 |
 | Repositories | users, bookings, products, cart, payments, categories, services, coupons | ~55 |
 | Guards | jwt-auth, roles | ~9 |
+| Internal (IA) | turn-token, internal-auth, internal controllers, guards metadata | ~44 |
 | Redis | redis, token-blacklist | ~8 |
 | E2E | auth, users | ~19 |

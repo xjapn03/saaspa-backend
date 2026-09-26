@@ -235,3 +235,9 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   `IA_BOT_API_KEY`, `INTERNAL_API_KEY`, `TURN_TOKEN_PRIVATE_KEY`, `TURN_TOKEN_KID` y `TENANT_ID`, con
   clave efímera generada en CI; `.env.example`/`.env.test`/README actualizados — verify verde
   (46 suites, 348 tests).
+- 2026-09-26 — feature/internal-api-v1 — endpoints internos de lectura `GET /api/internal/v1/services`
+  (paginado), `/services/{id|slug}` (UUID o slug, mapeo `categoryRel` -> `category`) y
+  `/availability?serviceId&date` con offset explícito vía `Intl`/ICU y `TENANT_TIMEZONE`;
+  `BookingsService.getAvailabilityWindow()` como fuente única del cálculo de franjas (el endpoint
+  público pasa a mapear sobre él); `ServicesModule`/`BookingsModule` exportan sus servicios; 3 suites
+  nuevas — verify verde (49 suites, 370 tests).
