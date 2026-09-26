@@ -6,6 +6,9 @@ agendamiento con pagos fraccionados (Wompi), e-commerce con carrito de compras,
 sincronización con Google Calendar, emails transaccionales (SendGrid) y
 atribución de conversiones (Meta CAPI).
 
+> **Antes de trabajar en este repositorio, lee [`AGENTS.md`](AGENTS.md)**: reglas de git y PR, comandos de
+> verificación, manejo de secretos y acoplamientos con `saaspa-IA`.
+
 ## Stack
 
 | Componente   | Tecnología                        |
@@ -107,7 +110,7 @@ Ver `.env.example` para la lista completa. Claves principales:
 | `SENDGRID_API_KEY`      | API key de SendGrid (recuperación de contraseña, opcional) |
 | `ADMIN_NOTIFY_EMAIL`    | Copia interna de citas/pedidos para el personal (default `kamerinosg@gmail.com`) |
 | `META_*`                | Credenciales WhatsApp Cloud API y CAPI |
-| `IA_BOT_URL`            | URL del microservicio Python IA Bot  |
+| `IA_BOT_URL`            | URL del servicio de IA (Java + Spring AI)  |
 
 ### Archivos por entorno
 
@@ -123,7 +126,7 @@ Ver `.env.example` para la lista completa. Claves principales:
 ## Repositorios Relacionados
 
 - **saaspa-frontend** — Frontend Next.js (SSR, checkout, dashboard)
-- **saaspa-IA** — Bot WhatsApp IA (Python, pendiente de crear)
+- **saaspa-IA** — Motor de IA (Java + Spring Boot + Spring AI): agentes conversacionales (CLIENTAS y ADMIN)
 
 ## Licencia
 

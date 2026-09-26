@@ -32,6 +32,54 @@ npx prisma db seed                       # Poblar datos iniciales
 npx prisma generate                      # Regenerar cliente
 ```
 
+## Turn token ES256 (servicio de IA `saaspa-IA`)
+
+Este backend es el **único emisor** del turn token: firma en ES256 (P-256) la identidad del turno y
+`saaspa-IA` lo verifica con la clave pública. El contrato y los claims están en el **ADR 0006** de
+`saaspa-IA` y en la sección 6 de `AGENTS.md`.
+
+### Variables
+
+| Variable | Descripción |
+|---|---|
+| `TURN_TOKEN_PRIVATE_KEY` | Clave privada PKCS#8 PEM en **base64 de una sola línea** (sobrevive a Docker Compose). |
+| `TURN_TOKEN_KID` | Identificador de la clave que viaja en el header del JWT (`kid`). |
+| `TURN_TOKEN_ISSUER` / `TURN_TOKEN_AUDIENCE` | `saaspa-backend` / `saaspa-ia` (defaults). |
+| `TURN_TOKEN_TTL_SECONDS` | Vida del token (default `300`). |
+| `INTERNAL_API_KEY` | Secreto de la dirección `saaspa-IA` → NestJS (`X-Internal-Api-Key`). |
+| `IA_BOT_API_KEY` | Secreto de la dirección NestJS → `saaspa-IA` (no confundir con el anterior). |
+| `TENANT_ID` | Debe coincidir **exactamente** con `IA_TENANT_DEFAULT` de `saaspa-IA`. |
+| `TENANT_TIMEZONE` | Debe coincidir con `saaspa.tenant.timezone` de `saaspa-IA` (default `America/Bogota`). |
+
+### Generar el par de claves (una sola vez por entorno)
+
+El material se crea **fuera del repositorio** y **nunca** se commitea, ni se pega en un PR, ni se loguea.
+Solo `TURN_TOKEN_PRIVATE_KEY` (el base64) entra en el `.env` local o en el secreto del despliegue; la
+clave pública se entrega a `saaspa-IA` en `TURN_TOKEN_KEY_CURRENT_PUBLIC_KEY`.
+
+```bash
+mkdir -p ~/.config/kamerinos && cd ~/.config/kamerinos && chmod 700 .
+
+# 1) Par ES256 (P-256) en PKCS#8 PEM
+openssl ecparam -genkey -name prime256v1 -noout | openssl pkcs8 -topk8 -nocrypt -out turn.key.pem
+
+# 2) Valor de una línea para TURN_TOKEN_PRIVATE_KEY (base64 del PEM)
+base64 -w0 turn.key.pem > turn.key.b64
+
+# 3) Clave pública de la MISMA privada, para saaspa-IA (base64 del SPKI PEM)
+openssl pkey -in turn.key.pem -pubout -out turn.key.pub.pem
+base64 -w0 turn.key.pub.pem
+
+# 4) Borrar el material temporal en claro
+chmod 600 turn.key.pem turn.key.b64 && rm -f turn.key.pem && shred -u turn.key.b64 2>/dev/null || true
+```
+
+- `TURN_TOKEN_PRIVATE_KEY` ← contenido de `turn.key.b64`
+- `TURN_TOKEN_KID` ← un identificador propio (p. ej. `kamerinos-2026-09`); al rotar se publica el nuevo
+  `kid` en `TURN_TOKEN_KEY_CURRENT_PUBLIC_KEY` y el anterior en `TURN_TOKEN_KEY_PREVIOUS_PUBLIC_KEY`
+  de `saaspa-IA`, sin cortar el servicio.
+- En **CI** no se usa una clave real: el workflow genera una efímera en el propio job (no se commitea).
+
 ## Módulos (orden de implementación)
 
 | # | Módulo      | Estado       | Endpoints                                  |
