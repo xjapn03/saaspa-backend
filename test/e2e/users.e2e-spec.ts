@@ -5,10 +5,18 @@ import { ConfigService } from '@nestjs/config';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/database/prisma.service';
+import { ACCESS_COOKIE } from '../../src/common/auth/cookies';
 
 describe('Users (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+
+  /** Reads a cookie value from a response (tokens are httpOnly cookies now). */
+  const cookieValue = (response: request.Response, name: string): string => {
+    const cookies = (response.headers['set-cookie'] as unknown as string[]) || [];
+    const cookie = cookies.find((value) => value.startsWith(`${name}=`));
+    return cookie ? cookie.split(';')[0].slice(name.length + 1) : '';
+  };
 
   let adminToken: string;
   let clientToken: string;
@@ -40,7 +48,7 @@ describe('Users (e2e)', () => {
     const adminLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
       .send({ email: 'admin@sandrapinzonsaludybelleza.com.co', password: 'admin123' });
-    adminToken = adminLogin.body.accessToken;
+    adminToken = cookieValue(adminLogin, ACCESS_COOKIE);
 
     await request(app.getHttpServer()).post('/api/auth/register').send({
       email: 'cliente@test.com',
@@ -51,7 +59,7 @@ describe('Users (e2e)', () => {
     const clientLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
       .send({ email: 'cliente@test.com', password: 'password123' });
-    clientToken = clientLogin.body.accessToken;
+    clientToken = cookieValue(clientLogin, ACCESS_COOKIE);
   });
 
   afterAll(async () => {
