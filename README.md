@@ -111,6 +111,12 @@ Ver `.env.example` para la lista completa. Claves principales:
 | `ADMIN_NOTIFY_EMAIL`    | Copia interna de citas/pedidos para el personal (default `kamerinosg@gmail.com`) |
 | `META_*`                | Credenciales WhatsApp Cloud API y CAPI |
 | `IA_BOT_URL`            | URL del servicio de IA (Java + Spring AI)  |
+| `IA_BOT_API_KEY`        | Secreto NestJS -> saaspa-IA (`X-Internal-Api-Key`) |
+| `INTERNAL_API_KEY`      | Secreto saaspa-IA -> NestJS (`X-Internal-Api-Key`) |
+| `TURN_TOKEN_PRIVATE_KEY`| Clave privada ES256 (PKCS#8 PEM en base64); ver `docs/dev.md` |
+| `TURN_TOKEN_KID`        | Identificador de la clave en el header del turn token (`kid`) |
+| `TENANT_ID`             | Debe coincidir con `IA_TENANT_DEFAULT` de saaspa-IA |
+| `TENANT_TIMEZONE`       | Debe coincidir con `saaspa.tenant.timezone` de saaspa-IA |
 
 ### Archivos por entorno
 

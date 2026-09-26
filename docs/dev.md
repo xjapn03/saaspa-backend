@@ -80,6 +80,20 @@ chmod 600 turn.key.pem turn.key.b64 && rm -f turn.key.pem && shred -u turn.key.b
   de `saaspa-IA`, sin cortar el servicio.
 - En **CI** no se usa una clave real: el workflow genera una efímera en el propio job (no se commitea).
 
+### Guard de servicio en `/api/internal/v1/*`
+
+Las rutas internas que consume `saaspa-IA` se declaran con `@Public()` (para saltar el guard de sesión de
+usuario), `@SkipThrottle()` y `@UseGuards(InternalAuthGuard)`. El guard exige, en este orden:
+
+1. `X-Internal-Api-Key` con el valor de `INTERNAL_API_KEY` (comparación en tiempo constante; fallo cerrado
+   si la variable está vacía).
+2. `Authorization: Bearer <turn token>` válido: `kid` conocido, `alg` ES256 (rechaza el JWT de sesión
+   HS256), `aud`/`iss` correctos y claims obligatorios presentes.
+3. `tenantId` del token igual a `TENANT_ID` (si no, 403).
+
+La identidad se lee **del token** con `@TurnContext()` (`@TurnContext('userId')`, …), nunca de la query ni
+de argumentos generados por el modelo. Código en `src/modules/internal/`.
+
 ## Módulos (orden de implementación)
 
 | # | Módulo      | Estado       | Endpoints                                  |
