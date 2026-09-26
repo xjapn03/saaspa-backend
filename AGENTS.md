@@ -215,7 +215,7 @@ Pendientes (van a otro repo; **no** se implementan aquí):
 | Fase | Alcance | Estado |
 |---|---|---|
 | 0 | Alineación de contratos con `saaspa-IA` | Completada |
-| 1 | Turn token ES256 + guard · `/api/internal/v1/*` de lectura (services, services/{id\|slug}, availability) · `POST /api/chat` con handoff por conversación y anti-abuso | En curso |
+| 1 | Turn token ES256 + guard · `/api/internal/v1/*` de lectura (services, services/{id\|slug}, availability) · `POST /api/chat` con handoff por conversación y anti-abuso | Completada en el backend (aceptación E2E contra `saaspa-IA` real pendiente de despliegue) |
 | 2 | Escrituras por chat (`Idempotency-Key`, deep-link Wompi, `me/bookings`) | Pendiente |
 | 3 | Agente ADMIN + reportes internos | Pendiente |
 | 4 | Canal WhatsApp con identidad (`waId` resuelto por este backend y firmado en el token) | Pendiente |
@@ -241,3 +241,10 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   `BookingsService.getAvailabilityWindow()` como fuente única del cálculo de franjas (el endpoint
   público pasa a mapear sobre él); `ServicesModule`/`BookingsModule` exportan sus servicios; 3 suites
   nuevas — verify verde (49 suites, 370 tests).
+- 2026-09-26 — feature/web-chat-endpoint — `POST /api/chat` público (canal web anónimo y logueado):
+  resuelve tenant/canal/agente/identidad, emite el turn token, llama a `saaspa-IA` con timeout y mapeo de
+  `ProblemDetail`; **handoff persistido por conversación** (A-10a, tabla `chat_conversation_states` con
+  `tenantId` default `kamerinos`) que impide al bot retomar la conversación; anti-abuso (20 req/min por IP,
+  tope de 30 mensajes por sesión anónima, mensaje ≤1000 → 413) y `conversationId` de 128 bits atado a la
+  sesión anónima (cookie httpOnly + `sha256`); E2E del chat con la IA simulada y E2E de la API interna
+  (20 tests, `fetch` mockeado, BD real) — verify verde (53 suites, 403 tests).

@@ -5,6 +5,8 @@ import { IServicesRepository } from './interfaces/services.repository';
 import { ServicesRepository } from './services.repository';
 import { IBookingsRepository } from './interfaces/bookings.repository';
 import { BookingsRepository } from './bookings.repository';
+import { IChatConversationStateRepository } from './interfaces/chat-conversation-state.repository';
+import { ChatConversationStateRepository } from './chat-conversation-state.repository';
 import { IPaymentsRepository } from './interfaces/payments.repository';
 import { PaymentsRepository } from './payments.repository';
 import { ICategoriesRepository } from './interfaces/categories.repository';
@@ -30,7 +32,8 @@ import { OrdersRepository } from './orders.repository';
     { provide: IProductsRepository, useClass: ProductsRepository },
     { provide: ICartRepository, useClass: CartRepository },
     { provide: IOrdersRepository, useClass: OrdersRepository },
+    { provide: IChatConversationStateRepository, useClass: ChatConversationStateRepository },
   ],
-  exports: [IUsersRepository, IServicesRepository, IBookingsRepository, IPaymentsRepository, ICouponsRepository, ICategoriesRepository, IProductsRepository, ICartRepository, IOrdersRepository],
+  exports: [IUsersRepository, IServicesRepository, IBookingsRepository, IPaymentsRepository, ICouponsRepository, ICategoriesRepository, IProductsRepository, ICartRepository, IOrdersRepository, IChatConversationStateRepository],
 })
 export class RepositoriesModule {}

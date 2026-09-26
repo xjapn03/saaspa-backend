@@ -239,6 +239,29 @@ model ConversationState {
   @@map("conversation_states")
 }
 
+/// Estado del chat web por conversación (decisión A-10a): incluye el handoff para
+/// que el bot no retome una conversación ya derivada a una persona. `tenantId`
+/// queda desde ya para el multi-tenant futuro.
+model ChatConversationState {
+  id             String    @id @default(uuid())
+  tenantId       String    @default("kamerinos")
+  conversationId String    @unique
+  channel        String
+  identityKind   String
+  userId         String?
+  sessionKeyHash String
+  handoffActive  Boolean   @default(false)
+  handoffReason  String?
+  lastTurnId     String?
+  messageCount   Int       @default(0)
+  lastMessageAt  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([tenantId])
+  @@map("chat_conversation_states")
+}
+
 model ResetToken {
   id        String   @id @default(uuid())
   email     String

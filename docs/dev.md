@@ -113,6 +113,32 @@ Detalles de forma:
 - `BookingsService.getAvailabilityWindow()` es la fuente única del cálculo de franjas: `getAvailability()`
   (endpoint público) es ahora un mapeo sobre él, así que ambos no pueden divergir.
 
+### Chat web (`POST /api/chat`) — Fase 1
+
+Punto de entrada único del canal web (widget anónimo y clienta logueada). El frontend **nunca** habla con
+`saaspa-IA`: este backend resuelve tenant, canal, agente e identidad, emite el turn token y llama a
+`POST {IA_BOT_URL}/api/v1/chat`.
+
+| Aspecto | Implementación |
+|---|---|
+| Cuerpo | solo `message.text` (≤1000) y `conversationId` opcional; el `ValidationPipe` global rechaza campos desconocidos (400) |
+| Identidad | cookie de sesión (`kamerinos_access_token`, HS256) → canal `WEB_LOGGED`; ausente o caducada → anónimo y canal `WEB_WIDGET` (el canal `DASHBOARD` llega en la Fase 3) |
+| `conversationId` | ausente → aleatorio de **128 bits** (32 hex) y se devuelve en la respuesta |
+| Sesión anónima | cookie httpOnly `kamerinos_chat_session` (128 bits); el estado guarda `sha256(sessionKey)`, así que un `conversationId` de otra sesión responde **403** |
+| Handoff (A-10a) | `ChatConversationState.handoffActive`; mientras esté activo el backend responde el mensaje canónico **sin** llamar a la IA |
+| Anti-abuso | 20 req/min por IP (`@Throttle`), tope de 30 mensajes por sesión anónima en ventana de 1 h (**429**) y mensaje de más de 1000 caracteres (**413**) |
+| Errores de la IA | `ProblemDetail` mapeado: 400 → 400, 501 → 501, timeout → **504**, resto → **502** |
+
+Tabla `chat_conversation_states` (migración `20260926180000_add_chat_conversation_state`): `tenantId`
+(default `kamerinos`), `conversationId` único, `channel`, `identityKind`, `userId`, `sessionKeyHash`,
+`handoffActive`, `handoffReason`, `lastTurnId`, `messageCount`, `lastMessageAt`.
+
+> **Nota sobre `npm run test:e2e`:** requiere la base `kamerinos_db_tests` y, en este equipo, la
+> contraseña de `.env.test` puede estar desactualizada; exporta `DATABASE_URL` con la credencial de tu
+> `.env` cambiando el nombre de la base a `kamerinos_db_tests` antes de ejecutarlo. Además, los specs E2E
+> antiguos (`auth`, `users`) no aplican el prefijo global `api` (lo pone `main.ts`), por lo que hoy
+> responden 404; los specs nuevos sí lo aplican.
+
 ## Módulos (orden de implementación)
 
 | # | Módulo      | Estado       | Endpoints                                  |
@@ -136,6 +162,7 @@ Detalles de forma:
 | 16| Orders      | **Completo** | `GET /` (admin, con filtros: search/status/dateFrom/dateTo), `GET /my` (cliente), `PATCH /:id/status` (admin) — auto-creados desde webhook de pago de carrito + emails de estado |
 | 17| Whatsapp    | **Completo** | `GET/POST /api/whatsapp/webhook` — verificación (GET: hub.mode + hub.verify_token → 200 + challenge / 403) + recepción (POST → 200) + recepcionista con menú interactivo (ConversationState). IA conversacional pendiente en `saaspa-IA` |
 | 18| Audit       | **Completo** | `GET /audit-logs` (admin) — registro de mutaciones vía interceptor global |
+| 19| Chat        | **Fase 1 completa** | `POST /api/chat` (público) — resuelve canal/identidad, emite el turn token, llama a `saaspa-IA`, mantiene el estado del handoff por conversación (A-10a) y aplica anti-abuso. Ver la sección "Chat web" |
 
 > **Paginación:** Todos los endpoints `GET /` list retornan `PaginatedResult<T>` con `{ data, total, page, limit, totalPages }`. Default limit: 20. Los repositorios usan `Promise.all([findMany({ skip, take }), count()])` en paralelo.
 
@@ -351,7 +378,7 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (370 tests, 49 suites) — no requiere BD
+npm test              # Unit tests (403 tests, 53 suites) — no requiere BD
 npm run test:cov      # Cobertura
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 ```
@@ -401,7 +428,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (49 suites, 370 tests)
+### Inventario de suites (53 suites, 403 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
@@ -410,5 +437,6 @@ El flujo de E2E:
 | Repositories | users, bookings, products, cart, payments, categories, services, coupons | ~55 |
 | Guards | jwt-auth, roles | ~9 |
 | Internal (IA) | turn-token, internal-auth, internal controllers, guards metadata | ~44 |
+| Chat (IA) | chat service/controller, ia-bot client, chat state repository | ~34 |
 | Redis | redis, token-blacklist | ~8 |
 | E2E | auth, users | ~19 |
