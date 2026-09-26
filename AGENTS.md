@@ -200,9 +200,15 @@ Los cambios de contrato se mencionan en "Risks and notes" del PR y se avisan a l
 
 Pendientes (van a otro repo; **no** se implementan aquí):
 
-- **`kamerinos-infra`:** inyectar `IA_BOT_API_KEY`, `INTERNAL_API_KEY`, `TURN_TOKEN_PRIVATE_KEY`,
-  `TURN_TOKEN_KID` y `TENANT_ID` en el servicio `backend`; crear el contenedor `ia-bot` en la red interna;
-  confirmar que `TZ: America/Bogota` es efectiva en la imagen `node:20-alpine` (no instala `tzdata`).
+- **`kamerinos-infra`:** inyectar en el servicio `backend` las variables de la integración con `saaspa-IA`:
+  `IA_BOT_API_KEY`, `INTERNAL_API_KEY`, `TURN_TOKEN_PRIVATE_KEY`, `TURN_TOKEN_KID`, `TENANT_ID` y
+  `TENANT_TIMEZONE`; y además `TURN_TOKEN_ISSUER`, `TURN_TOKEN_AUDIENCE` y `TURN_TOKEN_TTL_SECONDS` con sus
+  valores explícitos (`saaspa-backend`, `saaspa-ia`, `300`) en lugar de dejarlos en el default silencioso
+  del código. El bloque de chat necesita también `IA_BOT_URL` (la URL interna del contenedor `ia-bot`, nunca
+  `localhost`) e `IA_BOT_TIMEOUT_MS`; sin `IA_BOT_URL` el backend cae a `http://localhost:8000` y cada turno
+  responde **502**. Falta crear el contenedor `ia-bot` en la red interna y confirmar que `TZ: America/Bogota`
+  es efectiva en la imagen `node:20-alpine` (no instala `tzdata`); la disponibilidad ya no depende de
+  `tzdata` porque la zona se calcula con `Intl`/ICU, pero los logs y los procesos de Node sí.
 - **`saaspa-IA`:** documentar el acoplamiento `TENANT_ID` ↔ `IA_TENANT_DEFAULT` (ver sección 6) en su
   `AGENTS.md`.
 - **`saaspa-frontend`:** el widget de chat envía `credentials: 'include'` y reenvía `conversationId`
@@ -215,7 +221,7 @@ Pendientes (van a otro repo; **no** se implementan aquí):
 | Fase | Alcance | Estado |
 |---|---|---|
 | 0 | Alineación de contratos con `saaspa-IA` | Completada |
-| 1 | Turn token ES256 + guard · `/api/internal/v1/*` de lectura (services, services/{id\|slug}, availability) · `POST /api/chat` con handoff por conversación y anti-abuso | Completada en el backend (aceptación E2E contra `saaspa-IA` real pendiente de despliegue) |
+| 1 | Turn token ES256 + guard · `/api/internal/v1/*` de lectura (services, services/{id\|slug}, availability) · `POST /api/chat` con handoff por conversación y anti-abuso | Completada y **aceptada con un E2E real contra `saaspa-IA` en ejecución** (no simulado); el despliegue en producción sigue pendiente |
 | 2 | Escrituras por chat (`Idempotency-Key`, deep-link Wompi, `me/bookings`) | Pendiente |
 | 3 | Agente ADMIN + reportes internos | Pendiente |
 | 4 | Canal WhatsApp con identidad (`waId` resuelto por este backend y firmado en el token) | Pendiente |
@@ -254,3 +260,9 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   `AuthService.register`) y responde 400 si no es parseable; 4 tests unitarios nuevos que **fallan sin el
   fix** más la aserción E2E del valor persistido; las suites E2E `auth`/`users` quedan **25/25** — verify
   verde (53 suites, 407 tests).
+- 2026-09-26 — docs/post-merge-sync — tras el merge del PR #73 (`develop` = `9fc8b12`) se alinea la
+  documentación con el código real: la sección 9 pasa a listar las variables que `kamerinos-infra` debe
+  inyectar (`TENANT_TIMEZONE`, `TURN_TOKEN_ISSUER`/`AUDIENCE`/`TTL_SECONDS` explícitos y `IA_BOT_URL`/
+  `IA_BOT_TIMEOUT_MS` del bloque de chat), la Fase 1 refleja la aceptación E2E contra `saaspa-IA` real en
+  ejecución y `docs/dev.md` documenta `IA_BOT_URL` e `IA_BOT_TIMEOUT_MS` — solo documentación; verify verde
+  (53 suites, 407 tests).

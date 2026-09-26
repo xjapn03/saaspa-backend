@@ -47,6 +47,8 @@ Este backend es el **único emisor** del turn token: firma en ES256 (P-256) la i
 | `TURN_TOKEN_ISSUER` / `TURN_TOKEN_AUDIENCE` | `saaspa-backend` / `saaspa-ia` (defaults). |
 | `TURN_TOKEN_TTL_SECONDS` | Vida del token (default `300`). |
 | `INTERNAL_API_KEY` | Secreto de la dirección `saaspa-IA` → NestJS (`X-Internal-Api-Key`). |
+| `IA_BOT_URL` | URL interna del servicio de IA; en Compose apunta al contenedor `ia-bot` (no `localhost`). Sin ella el código cae a `http://localhost:8000` y cada turno responde **502**. |
+| `IA_BOT_TIMEOUT_MS` | Timeout de `POST /api/v1/chat` en ms (default `20000`); al superarlo se responde **504**. |
 | `IA_BOT_API_KEY` | Secreto de la dirección NestJS → `saaspa-IA` (no confundir con el anterior). |
 | `TENANT_ID` | Debe coincidir **exactamente** con `IA_TENANT_DEFAULT` de `saaspa-IA`. |
 | `TENANT_TIMEZONE` | Debe coincidir con `saaspa.tenant.timezone` de `saaspa-IA` (default `America/Bogota`). |
