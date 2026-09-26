@@ -33,6 +33,18 @@ export class BookingsService {
   }
 
   async getAvailability(serviceId: string, date: string): Promise<string[]> {
+    const window = await this.getAvailabilityWindow(serviceId, date);
+    return window.slots.map((slot) => slot.start.toISOString());
+  }
+
+  /**
+   * Same computation as getAvailability, but each slot also carries its end, so
+   * the internal API can return instants with an explicit UTC offset.
+   */
+  async getAvailabilityWindow(
+    serviceId: string,
+    date: string,
+  ): Promise<{ serviceId: string; date: string; slots: { start: Date; end: Date }[] }> {
     const service = await this.servicesRepo.findById(serviceId);
     const duration = service.duration;
 
@@ -53,7 +65,7 @@ export class BookingsService {
 
     const allOccupied = [...occupied, ...lockedSlots];
 
-    const slots: string[] = [];
+    const slots: { start: Date; end: Date }[] = [];
     const [yyyy, mm, dd] = date.split('-').map(Number);
     const day = new Date(yyyy, mm - 1, dd, 0, 0, 0);
     const slotStart = new Date(day);
@@ -72,13 +84,13 @@ export class BookingsService {
       });
 
       if (!conflicts) {
-        slots.push(current.toISOString());
+        slots.push({ start: new Date(current), end: proposedEnd });
       }
 
       current = new Date(current.getTime() + SLOT_INTERVAL * 60000);
     }
 
-    return slots;
+    return { serviceId: service.id, date, slots };
   }
 
   async create(userId: string, dto: CreateBookingDto) {
