@@ -312,5 +312,29 @@ describe('BookingsService', () => {
       const lockedSlot = slots.find((s) => s.includes('09:00:00'));
       expect(lockedSlot).toBeUndefined();
     });
+
+    it('getAvailabilityWindow returns each slot with its end instant', async () => {
+      servicesRepo.findById.mockResolvedValue(mockService as any);
+      bookingsRepo.findOccupied.mockResolvedValue([]);
+      redis.keys.mockResolvedValue([]);
+
+      const window = await service.getAvailabilityWindow('svc-1', '2026-08-15');
+
+      expect(window.serviceId).toBe('svc-1');
+      expect(window.date).toBe('2026-08-15');
+      expect(window.slots.length).toBeGreaterThan(0);
+      expect(window.slots[0].end.getTime() - window.slots[0].start.getTime()).toBe(60 * 60000);
+    });
+
+    it('getAvailability and getAvailabilityWindow agree on the slot instants', async () => {
+      servicesRepo.findById.mockResolvedValue(mockService as any);
+      bookingsRepo.findOccupied.mockResolvedValue([]);
+      redis.keys.mockResolvedValue([]);
+
+      const slots = await service.getAvailability('svc-1', '2026-08-15');
+      const window = await service.getAvailabilityWindow('svc-1', '2026-08-15');
+
+      expect(window.slots.map((slot) => slot.start.toISOString())).toEqual(slots);
+    });
   });
 });
