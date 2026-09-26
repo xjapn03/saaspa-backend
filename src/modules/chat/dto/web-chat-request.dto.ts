@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsOptional, IsString, IsNotEmpty, MaxLength, ValidateNested } from 'class-validator';
+import {
+  IsDefined,
+  IsOptional,
+  IsString,
+  IsNotEmpty,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class WebChatMessageDto {
@@ -22,6 +29,7 @@ export class WebChatRequestDto {
   conversationId?: string;
 
   @ApiProperty({ type: WebChatMessageDto })
+  @IsDefined()
   @ValidateNested()
   @Type(() => WebChatMessageDto)
   message: WebChatMessageDto;

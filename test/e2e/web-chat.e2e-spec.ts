@@ -214,6 +214,20 @@ describe('Web chat (e2e)', () => {
     expect(response.status).toBe(400);
   });
 
+  it('rejects a body without a message with 400', async () => {
+    const response = await chat({});
+
+    expect(response.status).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects a message that is not an object with 400', async () => {
+    const response = await chat({ message: 'Hola' });
+
+    expect(response.status).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('rejects unknown body properties with 400', async () => {
     const response = await chat({ message: { text: 'Hola' }, tenantId: 'otro', agent: 'ADMIN' });
 
