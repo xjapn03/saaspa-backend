@@ -31,6 +31,7 @@ npx prisma migrate deploy                # Aplicar migraciones en prod
 npx prisma db seed                       # Poblar datos iniciales
 npx prisma generate                      # Regenerar cliente
 ```
+
 ## Turn token ES256 (servicio de IA `saaspa-IA`)
 
 Este backend es el **único emisor** del turn token: firma en ES256 (P-256) la identidad del turno y
@@ -78,8 +79,6 @@ chmod 600 turn.key.pem turn.key.b64 && rm -f turn.key.pem && shred -u turn.key.b
   `kid` en `TURN_TOKEN_KEY_CURRENT_PUBLIC_KEY` y el anterior en `TURN_TOKEN_KEY_PREVIOUS_PUBLIC_KEY`
   de `saaspa-IA`, sin cortar el servicio.
 - En **CI** no se usa una clave real: el workflow genera una efímera en el propio job (no se commitea).
-
-
 
 ## Módulos (orden de implementación)
 
