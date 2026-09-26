@@ -16,6 +16,13 @@ import * as Joi from 'joi';
         REDIS_URL: Joi.string().required(),
         JWT_SECRET: Joi.string().required(),
         CORS_ORIGIN: Joi.string().default('http://localhost:3000'),
+        // Service-to-service auth with saaspa-IA. Required on purpose: the app
+        // must fail closed if any of these is missing.
+        IA_BOT_API_KEY: Joi.string().required(),
+        INTERNAL_API_KEY: Joi.string().required(),
+        TURN_TOKEN_PRIVATE_KEY: Joi.string().required(),
+        TURN_TOKEN_KID: Joi.string().required(),
+        TENANT_ID: Joi.string().required(),
       }),
     }),
   ],

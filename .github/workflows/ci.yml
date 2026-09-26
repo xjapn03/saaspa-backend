@@ -45,6 +45,10 @@ jobs:
       WOMPI_EVENTS_KEY: events_test_test123
       WOMPI_INTEGRITY_SECRET: integ_test_test123
       RUN_SEED: "false"
+      IA_BOT_API_KEY: test-ia-bot-key
+      INTERNAL_API_KEY: test-internal-key
+      TENANT_ID: kamerinos
+      TURN_TOKEN_KID: test-kid
 
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +68,14 @@ jobs:
       - run: npx prisma generate
 
       - run: npx prisma migrate deploy
+
+      # The turn token private key is never committed: a throwaway P-256 key is
+      # generated for this job so the unit tests can sign and verify real tokens.
+      - name: Generate ephemeral ES256 key for the turn token
+        run: |
+          KEY=$(openssl ecparam -genkey -name prime256v1 -noout \
+                | openssl pkcs8 -topk8 -nocrypt | base64 -w0)
+          echo "TURN_TOKEN_PRIVATE_KEY=$KEY" >> "$GITHUB_ENV"
 
       - run: npx tsc --noEmit
 

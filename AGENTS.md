@@ -229,3 +229,9 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
 - 2026-09-26 — docs/agents-md — `AGENTS.md` y plantilla de PR creados; corrección del stack de IA en el
   README (Java + Spring AI en lugar de Python); comando de generación del par ES256 documentado en
   `docs/dev.md`. Sin cambios de código.
+- 2026-09-26 — feature/chat-turn-token — emisión y verificación del turn token ES256 (`TurnTokenService`,
+  clave privada solo por entorno, pública derivada) + `InternalAuthGuard` (clave de servicio en tiempo
+  constante, rechazo de HS256, `kid`/`aud`/`iss`, tenant) + `@TurnContext`; Joi estricto para
+  `IA_BOT_API_KEY`, `INTERNAL_API_KEY`, `TURN_TOKEN_PRIVATE_KEY`, `TURN_TOKEN_KID` y `TENANT_ID`, con
+  clave efímera generada en CI; `.env.example`/`.env.test`/README actualizados — verify verde
+  (46 suites, 348 tests).
