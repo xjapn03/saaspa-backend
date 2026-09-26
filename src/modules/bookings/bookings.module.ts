@@ -7,5 +7,6 @@ import { BookingsController } from './bookings.controller';
   imports: [PaymentsModule],
   controllers: [BookingsController],
   providers: [BookingsService],
+  exports: [BookingsService],
 })
 export class BookingsModule {}
