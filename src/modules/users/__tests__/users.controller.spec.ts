@@ -3,6 +3,7 @@ import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { UsersController } from '../users.controller';
 import { UsersService } from '../users.service';
 import { UpdateUserDto } from '../dto/update-user.dto';
+import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { Role } from '@prisma/client';
 
 describe('UsersController', () => {
@@ -61,9 +62,11 @@ describe('UsersController', () => {
   });
 
   describe('updateProfile', () => {
-    it('should update own profile and return updated data', async () => {
-      // Arrange
-      const dto: UpdateUserDto = { birthday: '1990-05-15', description: 'Updated' };
+    it('forwards the DTO untouched and returns the updated user', async () => {
+      // Arrange: the string -> Date conversion of `birthday` happens in
+      // UsersService.update (covered by users.service.spec.ts with the real
+      // conversion). The controller must not touch the DTO.
+      const dto: UpdateProfileDto = { birthday: '1990-05-15', description: 'Updated' };
       usersService.update.mockResolvedValue({
         ...mockSafeUser,
         birthday: new Date('1990-05-15'),
@@ -76,6 +79,7 @@ describe('UsersController', () => {
       // Assert
       expect(result.description).toBe('Updated');
       expect(usersService.update).toHaveBeenCalledWith('user-1', dto);
+      expect(dto.birthday).toBe('1990-05-15');
     });
   });
 

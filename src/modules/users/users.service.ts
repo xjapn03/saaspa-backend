@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { IUsersRepository } from '../../repositories/interfaces/users.repository';
 import type { UserFilters } from '../../repositories/interfaces/users.repository';
 import * as bcrypt from 'bcryptjs';
@@ -34,8 +34,25 @@ export class UsersService {
     } as any);
   }
 
+  /**
+   * Both PATCH /users/me and PATCH /users/:id land here.
+   *
+   * The profile DTOs accept `birthday` as a date string (@IsDateString), but the
+   * column is a DateTime and Prisma rejects a plain string, which used to surface
+   * as a 500. It is converted here, exactly like AuthService.register does.
+   */
   async update(id: string, data: Parameters<IUsersRepository['update']>[1]) {
-    return this.usersRepo.update(id, data);
+    const normalized = { ...data };
+
+    if (typeof normalized.birthday === 'string') {
+      const birthday = new Date(normalized.birthday);
+      if (Number.isNaN(birthday.getTime())) {
+        throw new BadRequestException('birthday debe ser una fecha válida (YYYY-MM-DD)');
+      }
+      normalized.birthday = birthday;
+    }
+
+    return this.usersRepo.update(id, normalized);
   }
 
   async remove(id: string) {
