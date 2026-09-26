@@ -6,6 +6,9 @@ agendamiento con pagos fraccionados (Wompi), e-commerce con carrito de compras,
 sincronización con Google Calendar, emails transaccionales (SendGrid) y
 atribución de conversiones (Meta CAPI).
 
+> **Antes de trabajar en este repositorio, lee [`AGENTS.md`](AGENTS.md)**: reglas de git y PR, comandos de
+> verificación, manejo de secretos y acoplamientos con `saaspa-IA`.
+
 ## Stack
 
 | Componente   | Tecnología                        |
