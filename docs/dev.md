@@ -135,9 +135,10 @@ Tabla `chat_conversation_states` (migración `20260926180000_add_chat_conversati
 
 > **Nota sobre `npm run test:e2e`:** requiere la base `kamerinos_db_tests` y, en este equipo, la
 > contraseña de `.env.test` puede estar desactualizada; exporta `DATABASE_URL` con la credencial de tu
-> `.env` cambiando el nombre de la base a `kamerinos_db_tests` antes de ejecutarlo. Además, los specs E2E
-> antiguos (`auth`, `users`) no aplican el prefijo global `api` (lo pone `main.ts`), por lo que hoy
-> responden 404; los specs nuevos sí lo aplican.
+> `.env` cambiando el nombre de la base a `kamerinos_db_tests` antes de ejecutarlo. Todos los specs
+> aplican el prefijo global `api` igual que `main.ts`. Los specs `auth`/`users` dependen además del admin
+> sembrado, cuyo password real es `admin123$` (`prisma/seed.ts`) mientras specs y README usan `admin123`:
+> hasta alinear uno de los dos, 14 de sus 25 tests fallan en el login del admin.
 
 ## Módulos (orden de implementación)
 
