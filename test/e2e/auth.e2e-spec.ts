@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/database/prisma.service';
@@ -18,6 +19,8 @@ describe('Auth (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    // main.ts applies the global prefix; it has to be reproduced here.
+    app.setGlobalPrefix(app.get(ConfigService).get<string>('API_PREFIX') || 'api');
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
