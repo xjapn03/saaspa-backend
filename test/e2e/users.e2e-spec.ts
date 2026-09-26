@@ -124,6 +124,8 @@ describe('Users (e2e)', () => {
       expect(response.status).toBe(200);
       expect(response.body.description).toBe('Actualizado desde E2E');
       expect(response.body.phone).toBe('3009998888');
+      // A date-only birthday string must be stored, not rejected by Prisma with a 500.
+      expect(response.body.birthday).toBe('1990-01-01T00:00:00.000Z');
     });
 
     it('should return 400 with invalid fields', async () => {

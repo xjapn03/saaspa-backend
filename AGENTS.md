@@ -248,3 +248,9 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   tope de 30 mensajes por sesión anónima, mensaje ≤1000 → 413) y `conversationId` de 128 bits atado a la
   sesión anónima (cookie httpOnly + `sha256`); E2E del chat con la IA simulada y E2E de la API interna
   (20 tests, `fetch` mockeado, BD real) — verify verde (53 suites, 403 tests).
+- 2026-09-26 — fix/user-birthday-date — `PATCH /api/users/me` y `PATCH /api/users/:id` devolvían **500**
+  cuando el body traía `birthday` como fecha (`@IsDateString`, ejemplo `1990-05-15`), porque el string
+  llegaba tal cual a una columna `DateTime`; `UsersService.update` ahora lo convierte a `Date` (igual que
+  `AuthService.register`) y responde 400 si no es parseable; 4 tests unitarios nuevos que **fallan sin el
+  fix** más la aserción E2E del valor persistido; las suites E2E `auth`/`users` quedan **25/25** — verify
+  verde (53 suites, 407 tests).

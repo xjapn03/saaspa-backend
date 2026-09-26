@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { UsersService } from '../users.service';
@@ -84,6 +85,49 @@ describe('UsersService', () => {
       // Assert
       expect(result.firstName).toBe('Updated');
       expect(repo.update).toHaveBeenCalledWith('user-1', { firstName: 'Updated' });
+    });
+
+    it('converts a date-only birthday string to a Date before persisting', async () => {
+      // Arrange
+      repo.update.mockResolvedValue({ ...mockSafeUser, birthday: new Date('1990-05-15') });
+
+      // Act
+      await service.update('user-1', { birthday: '1990-05-15' });
+
+      // Assert
+      const [, data] = repo.update.mock.calls[0];
+      expect(data.birthday).toBeInstanceOf(Date);
+      expect((data.birthday as Date).toISOString()).toBe('1990-05-15T00:00:00.000Z');
+    });
+
+    it('converts a full ISO birthday string to a Date', async () => {
+      // Arrange
+      repo.update.mockResolvedValue({ ...mockSafeUser, birthday: new Date('1990-05-15T10:30:00.000Z') });
+
+      // Act
+      await service.update('user-1', { birthday: '1990-05-15T10:30:00.000Z' });
+
+      // Assert
+      const [, data] = repo.update.mock.calls[0];
+      expect(data.birthday).toBeInstanceOf(Date);
+      expect((data.birthday as Date).toISOString()).toBe('1990-05-15T10:30:00.000Z');
+    });
+
+    it('rejects an unparsable birthday with 400 without touching the repository', async () => {
+      // Act + Assert
+      await expect(service.update('user-1', { birthday: 'no-es-fecha' })).rejects.toThrow(BadRequestException);
+      expect(repo.update).not.toHaveBeenCalled();
+    });
+
+    it('keeps the other fields and does not touch a null or missing birthday', async () => {
+      // Arrange
+      repo.update.mockResolvedValue({ ...mockSafeUser });
+
+      // Act
+      await service.update('user-1', { firstName: 'Updated', birthday: null });
+
+      // Assert
+      expect(repo.update).toHaveBeenCalledWith('user-1', { firstName: 'Updated', birthday: null });
     });
   });
 
