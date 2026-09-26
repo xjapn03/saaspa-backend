@@ -56,6 +56,10 @@ describe('Users (e2e)', () => {
       lastName: 'Test',
       password: 'password123',
     });
+
+    // Login requires a verified email; this spec covers the users endpoints, so the
+    // fixture is verified directly instead of walking the email flow.
+    await prisma.user.update({ where: { email: 'cliente@test.com' }, data: { emailVerified: true } });
     const clientLogin = await request(app.getHttpServer())
       .post('/api/auth/login')
       .send({ email: 'cliente@test.com', password: 'password123' });
@@ -146,9 +150,9 @@ describe('Users (e2e)', () => {
 
       // Assert
       expect(response.status).toBe(200);
-      expect(Array.isArray(response.body)).toBe(true);
-      expect(response.body.length).toBeGreaterThanOrEqual(2);
-      response.body.forEach((user: any) => {
+      expect(Array.isArray(response.body.data)).toBe(true);
+      expect(response.body.data.length).toBeGreaterThanOrEqual(2);
+      response.body.data.forEach((user: any) => {
         expect(user.isActive).toBe(true);
         expect(user.passwordHash).toBeUndefined();
       });
@@ -171,7 +175,7 @@ describe('Users (e2e)', () => {
       const listRes = await request(app.getHttpServer())
         .get('/api/users')
         .set('Authorization', `Bearer ${adminToken}`);
-      const clientUser = listRes.body.find((u: any) => u.email === 'cliente@test.com');
+      const clientUser = listRes.body.data.find((u: any) => u.email === 'cliente@test.com');
 
       // Act
       const response = await request(app.getHttpServer())
@@ -200,7 +204,7 @@ describe('Users (e2e)', () => {
       const listRes = await request(app.getHttpServer())
         .get('/api/users')
         .set('Authorization', `Bearer ${adminToken}`);
-      const clientUser = listRes.body.find((u: any) => u.email === 'cliente@test.com');
+      const clientUser = listRes.body.data.find((u: any) => u.email === 'cliente@test.com');
 
       // Act
       const response = await request(app.getHttpServer())
@@ -231,7 +235,7 @@ describe('Users (e2e)', () => {
       const listRes = await request(app.getHttpServer())
         .get('/api/users')
         .set('Authorization', `Bearer ${adminToken}`);
-      const clientUser = listRes.body.find((u: any) => u.email === 'cliente@test.com');
+      const clientUser = listRes.body.data.find((u: any) => u.email === 'cliente@test.com');
 
       // Act
       const delResponse = await request(app.getHttpServer())
@@ -245,7 +249,7 @@ describe('Users (e2e)', () => {
       const afterListRes = await request(app.getHttpServer())
         .get('/api/users')
         .set('Authorization', `Bearer ${adminToken}`);
-      const deletedUser = afterListRes.body.find((u: any) => u.id === clientUser.id);
+      const deletedUser = afterListRes.body.data.find((u: any) => u.id === clientUser.id);
       expect(deletedUser).toBeUndefined();
     });
 
