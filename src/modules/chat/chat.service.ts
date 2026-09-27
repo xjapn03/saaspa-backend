@@ -4,6 +4,7 @@ import {
   HttpStatus,
   Injectable,
   Logger,
+  NotFoundException,
   PayloadTooLargeException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -11,6 +12,7 @@ import { Request, Response } from 'express';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { ACCESS_COOKIE } from '../../common/auth/cookies';
 import { DEFAULT_TIMEZONE, toOffsetIso } from '../../common/time/timezone.util';
+import { EmailService, HandoffNotificationData } from '../../common/email/email.service';
 import {
   ChatChannel,
   ChatIdentityKind,
@@ -28,6 +30,7 @@ import {
   CHAT_LOCALE,
   CHAT_SESSION_COOKIE,
   HANDOFF_ACTIVE_MESSAGE,
+  MANUAL_REOPEN_REASON,
   MAX_MESSAGE_LENGTH,
 } from './chat.constants';
 import {
@@ -45,6 +48,20 @@ export interface WebChatReply {
   reply: { text: string; links?: { label: string; url: string }[] };
   handoff?: { requested: boolean; reason?: string | null };
   usage?: { model?: string; tokensIn: number; tokensOut: number };
+}
+
+/** Reversal of the handoff by a person of the salon (ADR 0013 point 6). */
+export type ChatHandoffAction = 'close' | 'reopen';
+
+/** Answer of the handoff admin endpoint: no session hash, no turn counters. */
+export interface ChatHandoffView {
+  conversationId: string;
+  handoffActive: boolean;
+  handoffReason: string | null;
+  handoffMessage: string | null;
+  handoffAt: Date | null;
+  handoffClosedAt: Date | null;
+  updatedAt: Date;
 }
 
 interface ResolvedIdentity {
@@ -75,6 +92,7 @@ export class ChatService {
     private turnTokenService: TurnTokenService,
     private iaBotClient: IaBotClient,
     private states: IChatConversationStateRepository,
+    private email: EmailService,
   ) {}
 
   async handle(dto: WebChatRequestDto, request: Request, response: Response): Promise<WebChatReply> {
@@ -146,6 +164,8 @@ export class ChatService {
 
     const handoffRequested = iaResponse.handoff?.requested === true;
     const handoffReason = iaResponse.handoff?.reason ?? null;
+    // One instant for both the row and the alert, so the salon can match them.
+    const handoffAt = new Date();
 
     await this.persistTurn({
       state,
@@ -157,7 +177,22 @@ export class ChatService {
       messageCount: messagesInWindow + 1,
       handoffRequested,
       handoffReason,
+      messageText: dto.message.text,
+      handoffAt,
     });
+
+    if (handoffRequested) {
+      // J-05 / ADR 0013: a person has to know, and the reason alone is not enough
+      // to take the conversation over.
+      await this.notifyHandoff({
+        conversationId,
+        reason: handoffReason,
+        message: dto.message.text,
+        at: handoffAt,
+        turnId,
+        userId: identity.userId,
+      });
+    }
 
     // Without PII: only the turn, the channel and the conversation are logged.
     this.logger.log(
@@ -178,6 +213,43 @@ export class ChatService {
         tokensOut: iaResponse.usage?.tokensOut ?? 0,
       },
     };
+  }
+
+  /**
+   * Closes or reopens the handoff of a conversation (ADR 0013 point 2): a person
+   * of the salon can undo the latch without touching the database by hand.
+   *
+   * `close` means the clienta is already attended: the handoff ends and the bot
+   * answers again. `reopen` hands the conversation back to a person. Who did it
+   * and when are recorded by the global AuditInterceptor.
+   */
+  async setHandoff(conversationId: string, action: ChatHandoffAction) {
+    const state = await this.states.findByConversationId(conversationId);
+    if (!state) {
+      throw new NotFoundException('Conversación no encontrada');
+    }
+
+    const now = new Date();
+    const updated =
+      action === 'reopen'
+        ? await this.states.setHandoff(conversationId, {
+            handoffActive: true,
+            handoffReason: MANUAL_REOPEN_REASON,
+            handoffMessage: null,
+            handoffAt: now,
+            handoffClosedAt: null,
+          })
+        : await this.states.setHandoff(conversationId, {
+            handoffActive: false,
+            // Closing something that was already closed must not rewrite history.
+            handoffClosedAt: state.handoffActive ? now : state.handoffClosedAt,
+          });
+
+    this.logger.log(
+      `handoff ${action} conversacion=${conversationId} motivo=${updated.handoffReason ?? '-'}`,
+    );
+
+    return this.toHandoffView(updated);
   }
 
   /**
@@ -279,9 +351,17 @@ export class ChatService {
     messageCount: number;
     handoffRequested: boolean;
     handoffReason: string | null;
+    messageText: string;
+    handoffAt: Date;
   }): Promise<void> {
     const handoff = input.handoffRequested
-      ? { handoffActive: true, handoffReason: input.handoffReason }
+      ? {
+          handoffActive: true,
+          handoffReason: input.handoffReason,
+          // The trigger is kept so a person can recover the conversation (J-05).
+          handoffMessage: input.messageText,
+          handoffAt: input.handoffAt,
+        }
       : {};
 
     if (input.state) {
@@ -306,5 +386,31 @@ export class ChatService {
       lastMessageAt: new Date(),
       ...handoff,
     });
+  }
+
+  /**
+   * Alerts the salon by email (J-05 / ADR 0013). A failing mail must never break
+   * the turn: the clienta already has her answer.
+   */
+  private async notifyHandoff(data: HandoffNotificationData): Promise<void> {
+    try {
+      await this.email.sendHandoffNotification(data);
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo avisar al salón del handoff de ${data.conversationId}: ${(error as Error)?.message}`,
+      );
+    }
+  }
+
+  private toHandoffView(state: IChatConversationState): ChatHandoffView {
+    return {
+      conversationId: state.conversationId,
+      handoffActive: state.handoffActive,
+      handoffReason: state.handoffReason,
+      handoffMessage: state.handoffMessage,
+      handoffAt: state.handoffAt,
+      handoffClosedAt: state.handoffClosedAt,
+      updatedAt: state.updatedAt,
+    };
   }
 }

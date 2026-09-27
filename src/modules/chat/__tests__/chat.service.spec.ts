@@ -1,9 +1,15 @@
-import { BadGatewayException, HttpException, PayloadTooLargeException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  HttpException,
+  NotFoundException,
+  PayloadTooLargeException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DeepMockProxy, mockDeep } from 'jest-mock-extended';
 import { createHash } from 'crypto';
 import { Request, Response } from 'express';
+import { EmailService } from '../../../common/email/email.service';
 import {
   IChatConversationState,
   IChatConversationStateRepository,
@@ -17,6 +23,7 @@ import {
   ANONYMOUS_MESSAGE_CAP,
   ANONYMOUS_MESSAGE_WINDOW_MS,
   HANDOFF_ACTIVE_MESSAGE,
+  MANUAL_REOPEN_REASON,
 } from '../chat.constants';
 import { deriveSessionKey, signAnonymousSessionId } from '../chat-session';
 
@@ -34,6 +41,7 @@ describe('ChatService', () => {
   let turnTokens: DeepMockProxy<TurnTokenService>;
   let iaBot: DeepMockProxy<IaBotClient>;
   let states: DeepMockProxy<IChatConversationStateRepository>;
+  let email: DeepMockProxy<EmailService>;
 
   const ANON_ID = 'a'.repeat(32);
   const iaReply = {
@@ -52,6 +60,9 @@ describe('ChatService', () => {
     sessionKeyHash: hashOf(`anon:${ANON_ID}`),
     handoffActive: false,
     handoffReason: null,
+    handoffMessage: null,
+    handoffAt: null,
+    handoffClosedAt: null,
     lastTurnId: 'previous-turn',
     messageCount: 1,
     lastMessageAt: new Date(),
@@ -69,6 +80,7 @@ describe('ChatService', () => {
     turnTokens = mockDeep<TurnTokenService>();
     iaBot = mockDeep<IaBotClient>();
     states = mockDeep<IChatConversationStateRepository>();
+    email = mockDeep<EmailService>();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -87,6 +99,7 @@ describe('ChatService', () => {
         { provide: TurnTokenService, useValue: turnTokens },
         { provide: IaBotClient, useValue: iaBot },
         { provide: IChatConversationStateRepository, useValue: states },
+        { provide: EmailService, useValue: email },
       ],
     }).compile();
 
@@ -309,9 +322,75 @@ describe('ChatService', () => {
       );
 
       expect(states.create).toHaveBeenCalledWith(
-        expect.objectContaining({ handoffActive: true, handoffReason: 'EXPLICIT_REQUEST' }),
+        expect.objectContaining({
+          handoffActive: true,
+          handoffReason: 'EXPLICIT_REQUEST',
+          // J-05: the trigger is recoverable, not just the boolean.
+          handoffMessage: 'Quiero hablar con una persona',
+          handoffAt: expect.any(Date),
+        }),
       );
       expect(reply.handoff).toEqual({ requested: true, reason: 'EXPLICIT_REQUEST' });
+    });
+
+    it('alerts the salon by email with the reason, the conversation and the message', async () => {
+      iaBot.chat.mockResolvedValue({
+        ...iaReply,
+        handoff: { requested: true, reason: 'HEALTH_TOPIC' },
+      } as never);
+
+      const reply = await service.handle(
+        { message: { text: 'Tengo una alergia fuerte' } },
+        request({ kamerinos_chat_session: issuedCookie(ANON_ID) }),
+        response(),
+      );
+
+      expect(email.sendHandoffNotification).toHaveBeenCalledTimes(1);
+      expect(email.sendHandoffNotification).toHaveBeenCalledWith({
+        conversationId: reply.conversationId,
+        reason: 'HEALTH_TOPIC',
+        message: 'Tengo una alergia fuerte',
+        at: expect.any(Date),
+        turnId: reply.turnId,
+        userId: undefined,
+      });
+    });
+
+    it('does not alert the salon on a turn without handoff', async () => {
+      await service.handle({ message: { text: 'Cuánto cuesta el facial?' } }, request(), response());
+
+      expect(email.sendHandoffNotification).not.toHaveBeenCalled();
+    });
+
+    it('answers the turn even when the alert cannot be sent', async () => {
+      iaBot.chat.mockResolvedValue({
+        ...iaReply,
+        handoff: { requested: true, reason: 'EXPLICIT_REQUEST' },
+      } as never);
+      email.sendHandoffNotification.mockRejectedValue(new Error('sendgrid down'));
+
+      const reply = await service.handle(
+        { message: { text: 'Quiero hablar con una persona' } },
+        request(),
+        response(),
+      );
+
+      expect(reply.reply.text).toBe(iaReply.reply.text);
+      expect(states.create).toHaveBeenCalled();
+    });
+
+    it('does not alert again while the handoff is already active', async () => {
+      states.findByConversationId.mockResolvedValue(
+        stateFor({ handoffActive: true, handoffReason: 'HEALTH_TOPIC' }),
+      );
+
+      await service.handle(
+        { conversationId: ANON_ID, message: { text: 'Hola?' } },
+        request({ kamerinos_chat_session: issuedCookie(ANON_ID) }),
+        response(),
+      );
+
+      expect(email.sendHandoffNotification).not.toHaveBeenCalled();
     });
 
     it('does not touch the handoff columns on a normal turn', async () => {
@@ -438,6 +517,82 @@ describe('ChatService', () => {
 
       expect(states.create).not.toHaveBeenCalled();
       expect(states.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handoff reversal (ADR 0013)', () => {
+    it('closes an active handoff, so the bot answers that conversation again', async () => {
+      states.findByConversationId.mockResolvedValue(
+        stateFor({ handoffActive: true, handoffReason: 'HEALTH_TOPIC' }),
+      );
+      states.setHandoff.mockResolvedValue(stateFor({ handoffActive: false }));
+
+      const result = await service.setHandoff(ANON_ID, 'close');
+
+      expect(states.setHandoff).toHaveBeenCalledWith(ANON_ID, {
+        handoffActive: false,
+        handoffClosedAt: expect.any(Date),
+      });
+      expect(result.handoffActive).toBe(false);
+    });
+
+    it('does not rewrite the closing instant when it was already closed', async () => {
+      const closedAt = new Date('2026-09-27T10:00:00.000Z');
+      states.findByConversationId.mockResolvedValue(
+        stateFor({ handoffActive: false, handoffClosedAt: closedAt }),
+      );
+      states.setHandoff.mockResolvedValue(stateFor({ handoffActive: false, handoffClosedAt: closedAt }));
+
+      await service.setHandoff(ANON_ID, 'close');
+
+      expect(states.setHandoff).toHaveBeenCalledWith(ANON_ID, {
+        handoffActive: false,
+        handoffClosedAt: closedAt,
+      });
+    });
+
+    it('reopens the handoff and records the reason', async () => {
+      states.findByConversationId.mockResolvedValue(stateFor({ handoffActive: false }));
+      states.setHandoff.mockResolvedValue(
+        stateFor({ handoffActive: true, handoffReason: MANUAL_REOPEN_REASON }),
+      );
+
+      const result = await service.setHandoff(ANON_ID, 'reopen');
+
+      expect(states.setHandoff).toHaveBeenCalledWith(ANON_ID, {
+        handoffActive: true,
+        handoffReason: MANUAL_REOPEN_REASON,
+        handoffMessage: null,
+        handoffAt: expect.any(Date),
+        handoffClosedAt: null,
+      });
+      expect(result.handoffActive).toBe(true);
+      expect(result.handoffReason).toBe('MANUAL_REOPEN');
+    });
+
+    it('rejects an unknown conversation with 404', async () => {
+      states.findByConversationId.mockResolvedValue(null);
+
+      await expect(service.setHandoff('desconocida', 'close')).rejects.toThrow(NotFoundException);
+      expect(states.setHandoff).not.toHaveBeenCalled();
+    });
+
+    it('answers the handoff view without the session hash', async () => {
+      states.findByConversationId.mockResolvedValue(stateFor({ handoffActive: true }));
+      states.setHandoff.mockResolvedValue(stateFor({ handoffActive: false }));
+
+      const result = await service.setHandoff(ANON_ID, 'close');
+
+      expect(result).not.toHaveProperty('sessionKeyHash');
+      expect(Object.keys(result).sort()).toEqual([
+        'conversationId',
+        'handoffActive',
+        'handoffAt',
+        'handoffClosedAt',
+        'handoffMessage',
+        'handoffReason',
+        'updatedAt',
+      ]);
     });
   });
 });

@@ -7,6 +7,36 @@ import { AuditService } from './audit.service';
 const MUTATION_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
 const SKIP_PREFIXES = ['/audit-logs'];
 
+/**
+ * Path segments that are sub-actions of an entity, never its id. An action that
+ * is not in this list would be recorded as an entityId.
+ */
+const ACTION_SEGMENTS = [
+  'confirm',
+  'cancel',
+  'complete',
+  'reopen',
+  'reschedule',
+  'handoff',
+  'sync-calendar',
+  'request',
+  'validate',
+  'manual',
+  'init',
+  'init-cart',
+  'merge',
+  'status',
+  'balance',
+  'usages',
+  'tree',
+  'webhook',
+  'public',
+  'admin',
+  'me',
+  'items',
+  'use',
+];
+
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
   constructor(private audit: AuditService) {}
@@ -56,10 +86,13 @@ export class AuditInterceptor implements NestInterceptor {
     if (segments[0] === 'api') segments.shift();
 
     const entity = segments[0] || 'unknown';
-    // routes with a second segment that is not a sub-action are treated as entityId
-    const second = segments[1];
-    const isAction = second && ['confirm', 'cancel', 'complete', 'reopen', 'reschedule', 'validate', 'manual', 'init', 'init-cart', 'merge', 'status', 'balance', 'usages', 'tree', 'webhook', 'public', 'admin', 'me', 'items', 'use'].includes(second);
-    const entityId = second && !isAction ? second : undefined;
+    // The id is the last segment that is not a sub-action, so a route with a
+    // collection in between still records the resource it acted on:
+    //   bookings/<id>/cancel            -> entityId <id>
+    //   chat/conversations/<id>/handoff -> entityId <id>
+    //   bookings/admin/sync-calendar    -> no id
+    const rest = segments.slice(1).filter((segment) => !ACTION_SEGMENTS.includes(segment));
+    const entityId = rest.length > 0 ? rest[rest.length - 1] : undefined;
 
     return { entity, entityId };
   }

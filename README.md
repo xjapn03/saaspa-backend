@@ -85,7 +85,7 @@ Webhooks:
 ## Tests
 
 ```bash
-npm test                 # Unit tests (492 tests, 60 suites) — maxWorkers=2 optimizado
+npm test                 # Unit tests (512 tests, 61 suites) — maxWorkers=2 optimizado
 npm run test:cov         # Cobertura
 npm run test:e2e         # End-to-end (requiere PostgreSQL corriendo)
 ```
@@ -109,6 +109,7 @@ Ver `.env.example` para la lista completa. Claves principales:
 | `GOOGLE_PRIVATE_KEY`    | Clave privada de la service account  |
 | `SENDGRID_API_KEY`      | API key de SendGrid (recuperación de contraseña, opcional) |
 | `ADMIN_NOTIFY_EMAIL`    | Copia interna de citas/pedidos para el personal (default `kamerinosg@gmail.com`) |
+| `SALON_NOTIFICATION_EMAIL` | Bandeja de los avisos de handoff del chat (default: `ADMIN_NOTIFY_EMAIL`) |
 | `META_*`                | Credenciales WhatsApp Cloud API y CAPI |
 | `IA_BOT_URL`            | URL del servicio de IA (Java + Spring AI) — **obligatoria en producción** |
 | `IA_BOT_API_KEY`        | Secreto NestJS -> saaspa-IA (`X-Internal-Api-Key`) |

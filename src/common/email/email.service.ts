@@ -59,6 +59,20 @@ export interface OrderStatusData {
   total: number;
 }
 
+/**
+ * Internal alert of a chat conversation that needs a person (J-05 / ADR 0013).
+ * It carries what a person needs to take over: the reason, the conversation and
+ * the message that triggered it.
+ */
+export interface HandoffNotificationData {
+  conversationId: string;
+  reason: string | null;
+  message: string | null;
+  at: Date;
+  turnId?: string | null;
+  userId?: string | null;
+}
+
 const BRAND = '#a0522d';
 const INK = '#3d2e28';
 const MUTED = '#8b7a6b';
@@ -70,6 +84,8 @@ export class EmailService {
   private readonly from = { email: 'info@sandrapinzonsaludybelleza.com.co', name: 'Kamerinos SPA' };
   private readonly replyTo: string;
   private readonly adminNotifyEmail: string;
+  /** Inbox that receives the chat handoff alerts; falls back to the staff inbox. */
+  private readonly salonNotificationEmail: string;
   private readonly frontendUrl: string;
   private readonly isEnabled: boolean;
 
@@ -78,6 +94,8 @@ export class EmailService {
     this.isEnabled = !!apiKey;
     this.replyTo = this.config.get<string>('SENDGRID_REPLY_TO') || 'kamerinosg@gmail.com';
     this.adminNotifyEmail = this.config.get<string>('ADMIN_NOTIFY_EMAIL') || 'kamerinosg@gmail.com';
+    this.salonNotificationEmail =
+      this.config.get<string>('SALON_NOTIFICATION_EMAIL') || this.adminNotifyEmail;
     this.frontendUrl = this.config.get<string>('FRONTEND_URL') || this.config.get<string>('CORS_ORIGIN')?.split(',')[0] || 'https://kamerinos.sandrapinzonsaludybelleza.com.co';
     if (apiKey) {
       sgMail.setApiKey(apiKey);
@@ -351,6 +369,60 @@ export class EmailService {
       </table>
     `;
     await this.send(this.adminNotifyEmail, `Pedido #${data.orderId} → ${data.status} — Kamerinos SPA`, this.renderLayout(inner), 'admin-order-status', data.orderId);
+  }
+
+  /**
+   * Alerts the salon that a conversation needs a person (J-05 / ADR 0013). The
+   * message comes from the client and the reason from saaspa-IA, so both are
+   * escaped before they reach the HTML.
+   */
+  async sendHandoffNotification(data: HandoffNotificationData): Promise<void> {
+    const conversation = this.escapeHtml(data.conversationId);
+    const inner = `
+      <h1 style="color: ${BRAND}; font-size: 20px; margin: 0 0 8px;">Una clienta necesita atención humana</h1>
+      <p style="font-size: 14px; color: ${MUTED}; margin: 0 0 16px;">Notificación interna del chat — Kamerinos SPA</p>
+      <hr style="border: none; border-top: 1px solid ${BORDER}; margin: 16px 0;" />
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <tr><td style="padding: 6px 0; color: ${MUTED}; width: 150px;">Motivo</td><td><strong>${this.escapeHtml(data.reason) || '—'}</strong></td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Conversación</td><td>${conversation}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Cuándo</td><td>${this.formatInstant(data.at)}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Turno</td><td>${this.escapeHtml(data.turnId) || '—'}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Clienta</td><td>${data.userId ? `registrada (${this.escapeHtml(data.userId)})` : 'anónima (widget)'}</td></tr>
+      </table>
+      <p style="font-size: 14px; color: ${INK}; margin: 20px 0 8px;"><strong>Mensaje que activó el handoff</strong></p>
+      <blockquote style="margin: 0; padding: 12px 16px; border-left: 3px solid ${BRAND}; background: #faf6f2; font-size: 14px; color: ${INK};">${this.escapeHtml(data.message) || '(sin texto)'}</blockquote>
+      <p style="font-size: 14px; color: ${INK}; margin: 24px 0 8px;"><strong>Cómo cerrarlo</strong></p>
+      <p style="font-size: 13px; color: ${MUTED}; margin: 0;">
+        Mientras el handoff siga activo el bot no responde en esta conversación. Cuando la clienta ya esté atendida,
+        ciérralo desde el dashboard con <code>PATCH /api/chat/conversations/${conversation}/handoff</code> y
+        <code>{"action":"close"}</code>: el bot vuelve a responder. Si hay que devolverla a una persona, usa
+        <code>{"action":"reopen"}</code>.
+      </p>
+    `;
+
+    await this.send(
+      this.salonNotificationEmail,
+      'Una clienta necesita atención humana — Kamerinos SPA',
+      this.renderLayout(inner),
+      'chat-handoff',
+      data.conversationId,
+    );
+  }
+
+  /** Escapes text that comes from outside (client message, reason, ids). */
+  private escapeHtml(value: string | null | undefined): string {
+    if (!value) return '';
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  private formatInstant(date: Date): string {
+    const timeZone = this.config.get<string>('TENANT_TIMEZONE') || 'America/Bogota';
+    return date.toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short', timeZone });
   }
 
   private async send(to: string, subject: string, html: string, template: string, id: string): Promise<void> {
