@@ -25,4 +25,19 @@ export const CHAT_LOCALE = 'es-CO';
 
 export const ANONYMOUS_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-export const DEFAULT_IA_BOT_TIMEOUT_MS = 20000;
+/**
+ * Timeout of the call to `POST /api/v1/chat` in saaspa-IA (hallazgo J-04, la
+ * escalera de plazos). The backend must wait **longer** than the turn deadline
+ * the assistant applies to the same turn: if the backend cuts first it answers
+ * 504 while saaspa-IA keeps working, spending tokens, calling the internal API
+ * after a reply nobody is waiting for and leaving a turn in its memory that the
+ * clienta never saw. The agreed ladder is:
+ *
+ *   backend 25 s  >  saaspa-IA turn-deadline 20 s  >  saaspa-IA read-timeout 8-10 s por intento
+ *
+ * The relation is asserted by `__tests__/timeout-ladder.spec.ts`, so lowering the
+ * backend timeout below the assistant deadline fails the suite. Both numbers are
+ * a joint decision with saaspa-IA (its `application.yml` and the shared note in
+ * `docs/contracts/` of that repo): move them together.
+ */
+export const DEFAULT_IA_BOT_TIMEOUT_MS = 25000;
