@@ -85,7 +85,7 @@ Webhooks:
 ## Tests
 
 ```bash
-npm test                 # Unit tests (403 tests, 53 suites) — maxWorkers=2 optimizado
+npm test                 # Unit tests (418 tests, 54 suites) — maxWorkers=2 optimizado
 npm run test:cov         # Cobertura
 npm run test:e2e         # End-to-end (requiere PostgreSQL corriendo)
 ```
@@ -110,14 +110,20 @@ Ver `.env.example` para la lista completa. Claves principales:
 | `SENDGRID_API_KEY`      | API key de SendGrid (recuperación de contraseña, opcional) |
 | `ADMIN_NOTIFY_EMAIL`    | Copia interna de citas/pedidos para el personal (default `kamerinosg@gmail.com`) |
 | `META_*`                | Credenciales WhatsApp Cloud API y CAPI |
-| `IA_BOT_URL`            | URL del servicio de IA (Java + Spring AI)  |
+| `IA_BOT_URL`            | URL del servicio de IA (Java + Spring AI) — **obligatoria en producción** |
 | `IA_BOT_API_KEY`        | Secreto NestJS -> saaspa-IA (`X-Internal-Api-Key`) |
-| `IA_BOT_TIMEOUT_MS`     | Timeout de la llamada al chat de la IA (default 20000) |
+| `IA_BOT_TIMEOUT_MS`     | Timeout de la llamada al chat de la IA (default 20000) — **obligatoria en producción** |
 | `INTERNAL_API_KEY`      | Secreto saaspa-IA -> NestJS (`X-Internal-Api-Key`) |
 | `TURN_TOKEN_PRIVATE_KEY`| Clave privada ES256 (PKCS#8 PEM en base64); ver `docs/dev.md` |
 | `TURN_TOKEN_KID`        | Identificador de la clave en el header del turn token (`kid`) |
 | `TENANT_ID`             | Debe coincidir con `IA_TENANT_DEFAULT` de saaspa-IA |
-| `TENANT_TIMEZONE`       | Debe coincidir con `saaspa.tenant.timezone` de saaspa-IA |
+| `TENANT_TIMEZONE`       | Debe coincidir con `saaspa.tenant.timezone` de saaspa-IA — **obligatoria en producción** |
+
+> Con `NODE_ENV=production` el arranque **falla** (`Config validation error: ...`) si falta alguna de
+> estas variables: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `IA_BOT_API_KEY`, `INTERNAL_API_KEY`,
+> `TURN_TOKEN_PRIVATE_KEY`, `TURN_TOKEN_KID`, `TENANT_ID`, `IA_BOT_URL`, `IA_BOT_TIMEOUT_MS` o
+> `TENANT_TIMEZONE` (esquema Joi en `src/config/env.validation.ts`). En `development`/`test` las tres
+> últimas usan sus defaults (`http://localhost:8000`, `20000`, `America/Bogota`).
 
 ### Archivos por entorno
 

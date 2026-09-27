@@ -47,11 +47,20 @@ Este backend es el **único emisor** del turn token: firma en ES256 (P-256) la i
 | `TURN_TOKEN_ISSUER` / `TURN_TOKEN_AUDIENCE` | `saaspa-backend` / `saaspa-ia` (defaults). |
 | `TURN_TOKEN_TTL_SECONDS` | Vida del token (default `300`). |
 | `INTERNAL_API_KEY` | Secreto de la dirección `saaspa-IA` → NestJS (`X-Internal-Api-Key`). |
-| `IA_BOT_URL` | URL interna del servicio de IA; en Compose apunta al contenedor `ia-bot` (no `localhost`). Sin ella el código cae a `http://localhost:8000` y cada turno responde **502**. |
-| `IA_BOT_TIMEOUT_MS` | Timeout de `POST /api/v1/chat` en ms (default `20000`); al superarlo se responde **504**. |
+| `IA_BOT_URL` | URL interna del servicio de IA; en Compose apunta al contenedor `ia-bot` (no `localhost`). Sin ella el código cae a `http://localhost:8000` y cada turno responde **502**. En `NODE_ENV=production` es **obligatoria**. |
+| `IA_BOT_TIMEOUT_MS` | Timeout de `POST /api/v1/chat` en ms (default `20000`); al superarlo se responde **504**. En `NODE_ENV=production` es **obligatoria**. |
 | `IA_BOT_API_KEY` | Secreto de la dirección NestJS → `saaspa-IA` (no confundir con el anterior). |
 | `TENANT_ID` | Debe coincidir **exactamente** con `IA_TENANT_DEFAULT` de `saaspa-IA`. |
-| `TENANT_TIMEZONE` | Debe coincidir con `saaspa.tenant.timezone` de `saaspa-IA` (default `America/Bogota`). |
+| `TENANT_TIMEZONE` | Debe coincidir con `saaspa.tenant.timezone` de `saaspa-IA` (default `America/Bogota`). En `NODE_ENV=production` es **obligatoria**. |
+| `NODE_ENV` | `development` \| `production` \| `test` (default `development`). |
+
+Con `NODE_ENV=production` el esquema Joi (`src/config/env.validation.ts`) **aborta el arranque** con
+`Config validation error: ...` si falta `IA_BOT_URL`, `IA_BOT_TIMEOUT_MS` o `TENANT_TIMEZONE`, igual que ya
+ocurre con `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `IA_BOT_API_KEY`, `INTERNAL_API_KEY`,
+`TURN_TOKEN_PRIVATE_KEY`, `TURN_TOKEN_KID` y `TENANT_ID`. La decisión es deliberada: sin esto, un contenedor
+mal configurado arrancaba apuntando a `localhost`, con un timeout inventado o con una zona horaria adivinada.
+Fuera de producción las tres conservan su default (tabla de arriba) para no romper el flujo local. Cubierto
+por `src/config/__tests__/env.validation.spec.ts`.
 
 ### Generar el par de claves (una sola vez por entorno)
 
@@ -379,7 +388,7 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (403 tests, 53 suites) — no requiere BD
+npm test              # Unit tests (418 tests, 54 suites) — no requiere BD
 npm run test:cov      # Cobertura
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 ```
@@ -429,7 +438,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (53 suites, 403 tests)
+### Inventario de suites (54 suites, 418 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
@@ -440,4 +449,5 @@ El flujo de E2E:
 | Internal (IA) | turn-token, internal-auth, internal controllers, guards metadata | ~44 |
 | Chat (IA) | chat service/controller, ia-bot client, chat state repository | ~34 |
 | Redis | redis, token-blacklist | ~8 |
+| Config | `envValidationSchema` (Joi, fallo cerrado en producción) | 11 |
 | E2E | auth, users | ~19 |
