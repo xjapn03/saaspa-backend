@@ -11,10 +11,20 @@ export interface IBookingSafe {
   googleEventId: string | null;
   calendarSync?: string;
   notes: string | null;
+  idempotencyKey?: string | null;
   createdAt: Date;
   updatedAt: Date;
   user?: { firstName: string; lastName: string; email: string; phone: string };
   service?: { name: string; duration: number; price: number };
+}
+
+/**
+ * Result of an idempotent creation: `replayed` is true when the key was already
+ * used, so `booking` is the resource created by the first call.
+ */
+export interface IdempotentBooking {
+  booking: Booking;
+  replayed: boolean;
 }
 
 export interface BookingFilters {
@@ -62,6 +72,15 @@ export abstract class IBookingsRepository {
     pendingPaymentDeadline: Date,
   ): Promise<{ startTime: Date; endTime: Date }[]>;
   abstract create(data: Prisma.BookingCreateInput): Promise<Booking>;
+  /**
+   * Creates the booking carrying the idempotency key; when the key is already
+   * taken it returns the booking created by the first call (ADR 0008/0012).
+   */
+  abstract createWithIdempotencyKey(
+    data: Prisma.BookingCreateInput,
+    idempotencyKey: string,
+  ): Promise<IdempotentBooking>;
+  abstract findByIdempotencyKey(idempotencyKey: string): Promise<IBookingSafe | null>;
   abstract update(id: string, data: Prisma.BookingUpdateInput): Promise<IBookingSafe>;
   abstract findPendingCalendarSync(): Promise<IBookingSafe[]>;
   /** Pending payments that still count against the user's cap. */

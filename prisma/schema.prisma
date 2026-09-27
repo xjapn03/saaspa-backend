@@ -161,6 +161,10 @@ model Booking {
   googleEventId String?
   calendarSync  CalendarSyncStatus @default(SYNCED)
   notes         String?
+  /// `Idempotency-Key` of the request that created the booking (ADR 0008/0012).
+  /// Unique so a retry with the same key gets this same booking instead of a new
+  /// one; NULL for the clients that do not send the header.
+  idempotencyKey String? @unique
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 

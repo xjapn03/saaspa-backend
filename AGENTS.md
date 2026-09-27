@@ -122,6 +122,10 @@ Cada tarea se considera hecha cuando:
 - **La sesión anónima del chat la emite el servidor:** la cookie `kamerinos_chat_session` solo transporta
   `<id de 128 bits>.<hmac>`, firmado con una clave derivada de `JWT_SECRET`; un valor fabricado, truncado o
   manipulado se rechaza y el servidor emite uno nuevo. La cookie nunca es identidad por sí misma.
+- **El sujeto de una escritura interna sale del turn token, no de la petición:** `@TurnContext()` +
+  `requireTurnUser()` (**403** si el turno no trae `userId`), con una prueba arquitectónica que falla si un
+  handler interno toma identidad del cuerpo, la query, la ruta o una cabecera; `POST /bookings` honra la
+  `Idempotency-Key` (ADR 0008/0012) en una columna única, así que un reintento devuelve la misma cita.
 
 ---
 
@@ -299,6 +303,16 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   consume); 22 tests unitarios nuevos y un E2E HTTP con BD real (la franja se libera, la cita queda
   `EXPIRADA` y el tope responde 409); documentado en `README.md`, `.env.example` y `docs/dev.md` — verify
   verde (57 suites, 456 tests).
+- 2026-09-26 — feature/write-identity-and-idempotency — ADR 0012 aceptada (puntos 1, 2 y 6): el mecanismo de
+  identidad queda listo y probado sin endpoint nuevo (`requireTurnUser` responde **403** si el turno no trae
+  `userId`; `@TurnContext` cubierto con el payload, un claim suelto y el caso «el guard no corrió»); una prueba
+  arquitectónica descubre los controladores de `src/modules/internal/` y falla si un handler toma identidad del
+  cuerpo, la query, la ruta o una cabecera (o si recibe cuerpo sin leer el turno), autocomprobándose con
+  handlers de mentira para que no pueda pasar en vacío; y `POST /bookings` (y su variante admin) pasa a honrar
+  la cabecera `Idempotency-Key` (ADR 0008) guardándola en `bookings.idempotencyKey` con índice único: un
+  reintento devuelve la misma cita, la repetición se resuelve antes del tope de pendientes y del lock, una clave
+  de otro usuario responde **409** y una clave mal formada **400**; tests: 17 nuevos de identidad interna, 15 de
+  idempotencia (repositorio, servicio y controlador) y un E2E HTTP nuevo — verify verde (59 suites, 488 tests).
 - 2026-09-26 — docs/post-merge-sync — tras el merge del PR #73 (`develop` = `9fc8b12`) se alinea la
   documentación con el código real: la sección 9 pasa a listar las variables que `kamerinos-infra` debe
   inyectar (`TENANT_TIMEZONE`, `TURN_TOKEN_ISSUER`/`AUDIENCE`/`TTL_SECONDS` explícitos y `IA_BOT_URL`/

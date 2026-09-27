@@ -126,6 +126,32 @@ Detalles de forma:
 - `BookingsService.getAvailabilityWindow()` es la fuente única del cálculo de franjas: `getAvailability()`
   (endpoint público) es ahora un mapeo sobre él, así que ambos no pueden divergir.
 
+### Escrituras de Fase 2 (ADR 0012): sujeto desde el turn token e idempotencia
+
+- **El sujeto sale del token.** Todo endpoint interno de escritura resuelve `userId` con `@TurnContext()` /
+  `@TurnContext('userId')` (el guard deja el payload verificado en `request.turn`) y el rol con
+  `@TurnContext('role')`. Nunca del cuerpo, la query ni argumentos generados por el modelo (regla R1 de
+  `saaspa-IA`). Un turno sin `userId` (canal anónimo) **no escribe**: `requireTurnUser(turn)` responde **403**
+  (`src/modules/internal/turn-identity.ts`).
+- **Mecanismo listo, sin endpoint todavía.** Cuando llegue el primer endpoint de escritura basta con
+  `create(@TurnContext() turn: TurnTokenPayload, @Body() dto: …) { const subject = requireTurnUser(turn); … }`.
+  El decorador y el helper están cubiertos por `turn-identity.spec.ts` (payload completo, un claim suelto,
+  403 sin identidad y 403 si el guard no corrió).
+- **Prueba que lo impide aguas arriba** (`internal-identity-contract.spec.ts`): descubre los controladores de
+  `src/modules/internal/` desde el sistema de archivos (uno nuevo entra solo) y falla si un handler toma un
+  nombre identitario (`userId`, `clientId`, `phone`, `role`, `tenantId`, `sessionKeyHash`, …) del cuerpo, la
+  query, la ruta o una cabecera; si el esquema del cuerpo declara un campo identitario; o si un handler que
+  recibe cuerpo no lee el turno. La prueba se autocomprueba con handlers de mentira que sí incumplen, para que
+  no pueda pasar en vacío.
+- **Idempotencia (ADR 0008 + ADR 0012 punto 4).** `POST /api/bookings` (y su variante admin) acepta la
+  cabecera `Idempotency-Key`, que construye el llamador a partir de `jti` + operación: se guarda en
+  `bookings.idempotencyKey` (columna única) y **un reintento con la misma clave devuelve la misma cita** sin
+  crear otra. Detalles: la repetición se resuelve *antes* del tope de pendientes y del lock de Redis (un
+  reintento no puede ser rechazado por el estado que creó la primera llamada); si la clave existe pero es de
+  otro usuario → **409** (no se filtra una cita ajena); formato admitido `[A-Za-z0-9._:@-]{1,200}` → **400** si
+  no encaja; sin cabecera no hay idempotencia, así que los canales que no la envían siguen igual. La atomicidad
+  la da el índice único: si dos llamadas empatan, la que pierde devuelve la cita de la que ganó.
+
 ### Chat web (`POST /api/chat`) — Fase 1
 
 Punto de entrada único del canal web (widget anónimo y clienta logueada). El frontend **nunca** habla con
@@ -441,7 +467,7 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (456 tests, 57 suites) — no requiere BD
+npm test              # Unit tests (488 tests, 59 suites) — no requiere BD
 npm run test:cov      # Cobertura
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 ```
@@ -491,7 +517,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (57 suites, 456 tests)
+### Inventario de suites (59 suites, 488 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
@@ -505,5 +531,6 @@ El flujo de E2E:
 | HTTP | `applyProxyTrust` (\`trust proxy\` = 1 salto, hallazgo J-03) | 1 |
 | Chat session | emisión, firma y validación del id de sesión anónimo | 11 |
 | Scheduler | barrido de expiración de `PENDIENTE_PAGO` | 4 |
+| Internal identity | contrato arquitectónico + `@TurnContext`/`requireTurnUser` (ADR 0012) | 17 |
 | Config | `envValidationSchema` (Joi, fallo cerrado en producción) | 11 |
 | E2E | auth, users | ~19 |

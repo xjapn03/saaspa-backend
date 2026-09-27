@@ -85,7 +85,7 @@ Webhooks:
 ## Tests
 
 ```bash
-npm test                 # Unit tests (456 tests, 57 suites) — maxWorkers=2 optimizado
+npm test                 # Unit tests (488 tests, 59 suites) — maxWorkers=2 optimizado
 npm run test:cov         # Cobertura
 npm run test:e2e         # End-to-end (requiere PostgreSQL corriendo)
 ```
