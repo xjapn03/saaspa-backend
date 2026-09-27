@@ -226,6 +226,10 @@ Pendientes (van a otro repo; **no** se implementan aquí):
   `AGENTS.md`.
 - **`saaspa-frontend`:** el widget de chat envía `credentials: 'include'` y reenvía `conversationId`
   en cada turno.
+- **`saaspa-frontend`:** el estado nuevo **`PAGO_TARDE`** (H-01) es el de una cita con el pago **aprobado** y
+  **sin franja confirmada** (la ventana de pago venció o la franja ya la tomó otra cita): el dashboard debe
+  mostrarlo como «pago recibido, requiere acción» (reagendar o reembolsar), nunca como una cita confirmada.
+  Comparte el caso con el `EXPIRADA` de H-06, que tampoco tiene consumidor todavía.
 - **`kamerinos-infra`:** inyectar `SALON_NOTIFICATION_EMAIL` en el servicio `backend` (J-05 / ADR 0013): es la
   bandeja que recibe los avisos de handoff del chat. **No es un secreto**, así que puede ir en el compose o en
   el `.env` del despliegue sin fricción; si no se define, los avisos caen en `ADMIN_NOTIFY_EMAIL`
@@ -342,3 +346,17 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   `IA_BOT_TIMEOUT_MS` del bloque de chat), la Fase 1 refleja la aceptación E2E contra `saaspa-IA` real en
   ejecución y `docs/dev.md` documenta `IA_BOT_URL` e `IA_BOT_TIMEOUT_MS` — solo documentación; verify verde
   (53 suites, 407 tests).
+- 2026-09-26 — fix/payment-expiry-race — hallazgo **H-01** de la revisión conjunta #2 (vivo hoy, con o sin
+  chat): la carrera entre el expiro de `PENDIENTE_PAGO` y la confirmación de pago ya no pierde dinero ni
+  duplica la franja. `BookingSyncService.confirmOnPayment` vuelve a comprobar la ventana y el solape
+  (`findOverlapping` gana un `excludeBookingId` para no contarse a sí misma) y devuelve un desenlace explícito
+  (`CONFIRMED` | `NEEDS_SLOT` | `NEEDS_REVIEW`); el webhook ya no lanza por un desenlace de negocio y decide
+  **antes** de marcar el pago; los dos últimos casos dejan la cita en el estado nuevo `PAGO_TARDE` (migración
+  `20260927180000_add_pago_tarde_booking_status`, excluido de `occupancyFilter`, se resuelve reagendando —que
+  la confirma— o cancelando), marcan el pago con `metadata.reviewRequired`/`reviewReason`, avisan a la clienta
+  y al salón (dos métodos nuevos de `EmailService`) y dejan `AuditLog`
+  (`PAYMENT_LATE_WINDOW_CLOSED`/`PAYMENT_LATE_SLOT_TAKEN`); el atajo de «webhook duplicado» solo corta con
+  `metadata.paymentOutcome` presente, `manualPayment` comparte el camino y el hold de Redis pasa de 10 min
+  fijos a **ventana + intervalo del barrido** (35 min) vía `booking.constants`; 16 tests unitarios nuevos y un
+  E2E HTTP nuevo con webhook firmado contra BD real (`test/e2e/late-payment-race.e2e-spec.ts`) — verify verde
+  (61 suites, 528 tests) y E2E completo en verde (9 suites, 59 tests).

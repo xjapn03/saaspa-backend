@@ -237,14 +237,15 @@ Una cita se crea en `PENDIENTE_PAGO`, que hasta ahora **ocupaba la franja para s
 (`findOccupied` contaba como ocupada toda cita que no fuera `CANCELADA`/`NO_ASISTIO` y no existía ningún job
 que la expirara). Ahora:
 
-- **Ventana de pago configurable** (`BOOKING_PAYMENT_TTL_MINUTES`, default **30**). El número sale de tres
-  datos: el lock de Redis ya reserva la franja 10 minutos (`LOCK_TTL`), un checkout de Wompi se completa
-  normalmente en 2-10 minutos y la agenda es una jornada de 8 horas, así que 30 minutos dan margen a una
-  clienta lenta sin que una cita impaga se coma media tarde.
+- **Ventana de pago configurable** (`BOOKING_PAYMENT_TTL_MINUTES`, default **30**). El número sale de dos
+  datos: un checkout de Wompi se completa normalmente en 2-10 minutos y la agenda es una jornada de 8 horas,
+  así que 30 minutos dan margen a una clienta lenta sin que una cita impaga se coma media tarde. El hold de
+  Redis (`resolveSlotLockTtlSeconds`) cubre **toda la ventana más un intervalo del barrido** (35 min), no los
+  10 minutos fijos que dejaban sin cubrir los últimos 20.
 - **Regla perezosa (sin depender del job)**: `findOccupied`, `findOverlapping` y `findBySlot` aplican la misma
   condición (`occupancyFilter`), así que una cita `PENDIENTE_PAGO` creada **antes** del plazo deja de ocupar su
-  franja en el instante en que vence, aunque el barrido todavía no haya corrido. `findOccupied` y
-  `findOverlapping` no pueden divergir: comparten cláusula.
+  franja en el instante en que vence, aunque el barrido todavía no haya corrido, y una `PAGO_TARDE` nunca
+  ocupa franja. `findOccupied` y `findOverlapping` no pueden divergir: comparten cláusula.
 - **Barrido periódico** (`PendingPaymentExpiryScheduler`, cada 5 minutos + una pasada al arrancar): mueve esas
   citas a **`EXPIRADA`** (`updateMany` condicionado a que sigan en `PENDIENTE_PAGO`, así que un pago que
   llegue a mitad del barrido gana), borra el evento de Google Calendar si lo tuviera y suelta el lock de Redis.
@@ -255,12 +256,21 @@ que la expirara). Ahora:
   el usuario ya tiene ese número de citas `PENDIENTE_PAGO` dentro de la ventana, para que una sola
   conversación no bloquee varias franjas antes de pagar ninguna. El camino administrativo
   (`POST /api/bookings/admin`) no lo consume: esas citas las crea el salón a propósito.
-- **Pago tardío**: `confirmAndSync` rechaza confirmar una cita `EXPIRADA`; si la webhook de Wompi llega
-  después del vencimiento, el pago queda registrado como `APROBADO` y la cita necesita decisión manual
-  (reembolso o reagenda). Es el caso «reintento tras expirar» que `saaspa-IA` cubre en su contrato.
-- Cubierto por `bookings.repository.spec.ts`, `bookings.service.spec.ts`,
-  `pending-payment-expiry.scheduler.spec.ts` (unidad) y `test/e2e/pending-payment-expiry.e2e-spec.ts` (HTTP +
-  BD real: la franja se libera, la cita queda `EXPIRADA` y el tope responde 409).
+- **Carrera pago ↔ expiración (H-01)**: el webhook de un pago que llega después del vencimiento ya **no
+  lanza** ni puede duplicar la franja. `BookingSyncService.confirmOnPayment` vuelve a comprobar la ventana y el
+  solape (excluyendo la propia cita) y devuelve un desenlace explícito: `CONFIRMED` (en ventana y libre),
+  `NEEDS_SLOT` (vencida y libre) o `NEEDS_REVIEW` (la franja ya la tomó otra cita, o la cita no era
+  confirmable). Los dos últimos dejan la cita en **`PAGO_TARDE`** (pago aprobado, sin franja — la resuelve una
+  persona: reagendar = asignar franja y confirmar, o cancelar y reembolsar), marcan el pago con
+  `metadata.reviewRequired`/`reviewReason`, avisan **a la clienta** y **al salón** por correo (J-05/ADR 0013) y
+  dejan un `AuditLog` (`PAYMENT_LATE_WINDOW_CLOSED` / `PAYMENT_LATE_SLOT_TAKEN`). El atajo de «webhook
+  duplicado» solo corta si el desenlace ya quedó registrado (`metadata.paymentOutcome`), así que un intento que
+  murió a mitad se reintenta. `manualPayment` comparte el mismo camino.
+- Cubierto por `bookings.repository.spec.ts`, `bookings.service.spec.ts`, `booking-sync.service.spec.ts`,
+  `payments.service.spec.ts`, `pending-payment-expiry.scheduler.spec.ts` y `email.service.spec.ts` (unidad)
+  más `test/e2e/pending-payment-expiry.e2e-spec.ts` y `test/e2e/late-payment-race.e2e-spec.ts` (HTTP + BD real:
+  la franja se libera, la cita queda `EXPIRADA` o `PAGO_TARDE`, el tope responde 409 y un pago tardío nunca
+  confirma una segunda cita).
 
 ---
 

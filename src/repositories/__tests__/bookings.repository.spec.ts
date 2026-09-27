@@ -102,7 +102,7 @@ describe('BookingsRepository', () => {
           where: expect.objectContaining({
             serviceId: 'svc-1',
             NOT: [
-              { status: { in: ['CANCELADA', 'NO_ASISTIO', 'EXPIRADA'] } },
+              { status: { in: ['CANCELADA', 'NO_ASISTIO', 'EXPIRADA', 'PAGO_TARDE'] } },
               { status: 'PENDIENTE_PAGO', createdAt: { lt: deadline } },
             ],
           }),
@@ -123,7 +123,7 @@ describe('BookingsRepository', () => {
             startTime: { lt: mockRow.endTime },
             endTime: { gt: mockRow.startTime },
             NOT: [
-              { status: { in: ['CANCELADA', 'NO_ASISTIO', 'EXPIRADA'] } },
+              { status: { in: ['CANCELADA', 'NO_ASISTIO', 'EXPIRADA', 'PAGO_TARDE'] } },
               { status: 'PENDIENTE_PAGO', createdAt: { lt: deadline } },
             ],
           }),
@@ -147,6 +147,28 @@ describe('BookingsRepository', () => {
     });
   });
 
+  describe('findOverlapping — excludeBookingId (H-01)', () => {
+    it('excludes the booking being acted on from its own overlap check', async () => {
+      prisma.booking.findFirst.mockResolvedValue(null);
+      const deadline = new Date('2026-08-15T09:00:00.000Z');
+
+      await repo.findOverlapping(mockRow.startTime, mockRow.endTime, deadline, 'booking-1');
+
+      const call = prisma.booking.findFirst.mock.calls[0][0] as any;
+      expect(call.where.id).toEqual({ not: 'booking-1' });
+    });
+
+    it('does not add the id filter when no booking is excluded', async () => {
+      prisma.booking.findFirst.mockResolvedValue(null);
+      const deadline = new Date('2026-08-15T09:00:00.000Z');
+
+      await repo.findOverlapping(mockRow.startTime, mockRow.endTime, deadline);
+
+      const call = prisma.booking.findFirst.mock.calls[0][0] as any;
+      expect(call.where.id).toBeUndefined();
+    });
+  });
+
   describe('findOccupied', () => {
     it('should return occupied time ranges for a date across all services', async () => {
       prisma.booking.findMany.mockResolvedValue([
@@ -161,7 +183,7 @@ describe('BookingsRepository', () => {
           where: expect.objectContaining({
             startTime: { gte: expect.any(Date), lte: expect.any(Date) },
             NOT: [
-              { status: { in: ['CANCELADA', 'NO_ASISTIO', 'EXPIRADA'] } },
+              { status: { in: ['CANCELADA', 'NO_ASISTIO', 'EXPIRADA', 'PAGO_TARDE'] } },
               { status: 'PENDIENTE_PAGO', createdAt: { lt: deadline } },
             ],
           }),
@@ -225,6 +247,25 @@ describe('BookingsRepository', () => {
       prisma.booking.updateMany.mockResolvedValue({ count: 0 } as any);
 
       await expect(repo.markExpired('booking-1')).resolves.toBe(false);
+    });
+  });
+
+  describe('flagPaidWithoutSlot', () => {
+    it('parks a pending or already-expired booking as PAGO_TARDE', async () => {
+      prisma.booking.updateMany.mockResolvedValue({ count: 1 } as any);
+
+      await expect(repo.flagPaidWithoutSlot('booking-1')).resolves.toBe(true);
+
+      expect(prisma.booking.updateMany).toHaveBeenCalledWith({
+        where: { id: 'booking-1', status: { in: ['PENDIENTE_PAGO', 'EXPIRADA'] } },
+        data: { status: 'PAGO_TARDE' },
+      });
+    });
+
+    it('reports false when the booking was confirmed first', async () => {
+      prisma.booking.updateMany.mockResolvedValue({ count: 0 } as any);
+
+      await expect(repo.flagPaidWithoutSlot('booking-1')).resolves.toBe(false);
     });
   });
 

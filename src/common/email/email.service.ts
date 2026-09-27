@@ -73,6 +73,25 @@ export interface HandoffNotificationData {
   userId?: string | null;
 }
 
+/**
+ * A payment that arrived after the payment window closed (H-01). The money is
+ * in but the booking has no confirmed slot, so a person of the salon has to
+ * assign one or refund. `reason` says which of the two situations happened.
+ */
+export interface LatePaymentData {
+  clientName: string;
+  clientEmail: string;
+  clientPhone?: string | null;
+  serviceName: string;
+  amount: number;
+  paymentReference: string;
+  bookingId: string;
+  /** `NEEDS_SLOT`: window closed, slot free. `NEEDS_REVIEW`: slot already taken. */
+  reason: 'NEEDS_SLOT' | 'NEEDS_REVIEW';
+  /** The slot the client had asked for; formatted by this service. */
+  startTime: Date;
+}
+
 const BRAND = '#a0522d';
 const INK = '#3d2e28';
 const MUTED = '#8b7a6b';
@@ -406,6 +425,69 @@ export class EmailService {
       this.renderLayout(inner),
       'chat-handoff',
       data.conversationId,
+    );
+  }
+
+  /**
+   * Tells the client that a late payment was received (H-01). It deliberately
+   * does not promise a confirmed slot: her money is safe and a person of the
+   * salon will contact her.
+   */
+  async sendLatePaymentClientNotice(data: LatePaymentData): Promise<void> {
+    const inner = `
+      <h1 style="color: ${BRAND}; font-size: 20px; margin: 0 0 8px;">Recibimos tu pago</h1>
+      <p style="font-size: 15px; line-height: 1.6;">Hola <strong>${this.escapeHtml(data.clientName)}</strong>, tu pago llegó correctamente y ya está registrado a tu nombre.</p>
+      <hr style="border: none; border-top: 1px solid ${BORDER}; margin: 20px 0;" />
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <tr><td style="padding: 6px 0; color: ${MUTED}; width: 150px;">Servicio</td><td>${this.escapeHtml(data.serviceName)}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Franja solicitada</td><td>${this.formatInstant(data.startTime)}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Monto</td><td>${this.formatPrice(data.amount)}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Referencia</td><td>${this.escapeHtml(data.paymentReference)}</td></tr>
+      </table>
+      <p style="font-size: 14px; line-height: 1.6; margin: 20px 0 0;">Esa franja se liberó antes de que confirmáramos tu cita, así que <strong>una persona del salón te contactará</strong> para asignarte un horario o gestionar la devolución. No necesitas hacer nada más.</p>
+    `;
+    await this.send(
+      data.clientEmail,
+      'Recibimos tu pago — Kamerinos SPA',
+      this.renderLayout(inner),
+      'late-payment-client',
+      data.bookingId,
+    );
+  }
+
+  /**
+   * Internal alert so the salon resolves a late payment: assign a slot or refund
+   * (H-01). Without this, a payment that arrived after the window would sit in
+   * silence.
+   */
+  async sendAdminLatePaymentNotification(data: LatePaymentData): Promise<void> {
+    const situation =
+      data.reason === 'NEEDS_REVIEW'
+        ? 'La cita no se pudo confirmar (la franja ya la tomó otra cita, o la cita ya no estaba activa): hay que reubicar a la clienta o reembolsar.'
+        : 'La franja se liberó al vencer la ventana de pago: hay que asignarle un horario nuevo o reembolsar.';
+    const inner = `
+      <h1 style="color: ${BRAND}; font-size: 20px; margin: 0 0 8px;">Pago recibido fuera de la ventana</h1>
+      <p style="font-size: 14px; color: ${MUTED}; margin: 0 0 16px;">Notificación interna — Kamerinos SPA</p>
+      <hr style="border: none; border-top: 1px solid ${BORDER}; margin: 16px 0;" />
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <tr><td style="padding: 6px 0; color: ${MUTED}; width: 150px;">Situación</td><td><strong>${situation}</strong></td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Clienta</td><td>${this.escapeHtml(data.clientName)}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Email</td><td>${this.escapeHtml(data.clientEmail) || '—'}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Teléfono</td><td>${this.escapeHtml(data.clientPhone) || '—'}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Servicio</td><td>${this.escapeHtml(data.serviceName)}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Franja pedida</td><td>${this.formatInstant(data.startTime)}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Monto</td><td>${this.formatPrice(data.amount)}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Referencia</td><td>${this.escapeHtml(data.paymentReference)}</td></tr>
+        <tr><td style="padding: 6px 0; color: ${MUTED};">Cita</td><td>${data.bookingId}</td></tr>
+      </table>
+      <p style="font-size: 13px; color: ${MUTED}; margin: 20px 0 0;">La cita quedó como <code>PAGO_TARDE</code>: el pago está aprobado y no ocupa franja. Reagéndala desde el dashboard para colocarla, o cancélala y gestiona la devolución con Wompi.</p>
+    `;
+    await this.send(
+      this.salonNotificationEmail,
+      'Pago recibido fuera de la ventana — Kamerinos SPA',
+      this.renderLayout(inner),
+      'late-payment-admin',
+      data.bookingId,
     );
   }
 

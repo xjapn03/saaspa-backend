@@ -8,8 +8,9 @@ import { ICouponsRepository } from '../../repositories/interfaces/coupons.reposi
 import { IProductsRepository } from '../../repositories/interfaces/products.repository';
 import { IOrdersRepository } from '../../repositories/interfaces/orders.repository';
 import { MetaCapiService, hashCapiValue, hashCapiPhone } from '../meta/meta-capi.service';
-import { EmailService } from '../../common/email/email.service';
-import { BookingSyncService } from '../bookings/booking-sync.service';
+import { EmailService, LatePaymentData } from '../../common/email/email.service';
+import { AuditService } from '../../common/audit/audit.service';
+import { BookingSyncService, PaymentConfirmationOutcome } from '../bookings/booking-sync.service';
 import { IPaymentProvider } from './providers/payment-provider';
 
 @Injectable()
@@ -26,6 +27,7 @@ export class PaymentsService {
     private metaCapi: MetaCapiService,
     private emailService: EmailService,
     private bookingSync: BookingSyncService,
+    private audit: AuditService,
   ) {}
 
   async initPayment(
@@ -132,22 +134,55 @@ export class PaymentsService {
     }
 
     if (status === 'APPROVED') {
-      if (payment.status === 'APROBADO') {
+      const paymentMetadata = (payment as any).metadata || {};
+      const isAbono = payment.type === 'ABONO';
+
+      // The ABONO path records how the booking was resolved (`paymentOutcome`),
+      // so a retried webhook can tell "already handled" from "the first attempt
+      // died halfway" (H-01). SALDO and cart keep the old duplicate shortcut.
+      const alreadyHandled =
+        payment.status === 'APROBADO' && (!isAbono || paymentMetadata.paymentOutcome !== undefined);
+      if (alreadyHandled) {
         this.logger.log(`Webhook duplicado para pago ${payment.id}, ignorando`);
         return { received: true };
       }
+
+      // Decide the booking BEFORE writing the payment: a late payment must not be
+      // recorded as approved and then fail to find a slot (H-01).
+      let outcome: PaymentConfirmationOutcome | null = null;
+      let latePaymentBooking: any = null;
+      if (isAbono) {
+        const result = await this.bookingSync.confirmOnPayment(payment.bookingId, {
+          fbc: paymentMetadata.fbc,
+          fbp: paymentMetadata.fbp,
+        });
+        outcome = result.outcome;
+        latePaymentBooking = result.booking;
+      }
+
+      const latePaymentReason: LatePaymentData['reason'] | null =
+        outcome === 'NEEDS_SLOT' ? 'NEEDS_SLOT' : outcome === 'NEEDS_REVIEW' ? 'NEEDS_REVIEW' : null;
 
       await this.paymentsRepo.update(payment.id, {
         status: 'APROBADO',
         wompiPaymentId: transactionId,
         paidAt: new Date(),
+        metadata: {
+          ...paymentMetadata,
+          ...(isAbono
+            ? {
+                paymentOutcome: outcome,
+                ...(latePaymentReason
+                  ? { reviewRequired: true, reviewReason: latePaymentReason }
+                  : {}),
+              }
+            : {}),
+        },
       } as any);
 
-      if (payment.type === 'ABONO') {
-        await this.bookingSync.confirmAndSync(payment.bookingId, {
-          fbc: (payment as any).metadata?.fbc,
-          fbp: (payment as any).metadata?.fbp,
-        });
+      if (latePaymentReason && latePaymentBooking) {
+        await this.handleLatePayment(payment, latePaymentBooking, latePaymentReason);
+        return { received: true };
       }
 
       const booking = await this.bookingsRepo.findById(payment.bookingId).catch(() => null);
@@ -354,6 +389,45 @@ export class PaymentsService {
     return { received: true };
   }
 
+  /**
+   * A payment that arrived when the booking could not be confirmed (H-01): the
+   * money is in, the slot is not. Tells the client, alerts the salon and records
+   * an audit entry, so the case can never pass unnoticed.
+   */
+  private async handleLatePayment(
+    payment: any,
+    booking: any,
+    reason: LatePaymentData['reason'],
+  ): Promise<void> {
+    const clientName =
+      `${booking?.user?.firstName || ''} ${booking?.user?.lastName || ''}`.trim() || 'Cliente';
+    const data: LatePaymentData = {
+      clientName,
+      clientEmail: booking?.user?.email || '',
+      clientPhone: booking?.user?.phone || null,
+      serviceName: booking?.service?.name || 'Servicio',
+      amount: Number(payment.amount || 0),
+      paymentReference: payment.wompiReference || '',
+      bookingId: payment.bookingId,
+      reason,
+      startTime: new Date(booking.startTime),
+    };
+
+    this.logger.warn(
+      `Pago ${payment.id} aprobado sin franja (${reason}) para la cita ${payment.bookingId}`,
+    );
+
+    // The clienta must know her money arrived even if the slot did not.
+    this.emailService.sendLatePaymentClientNotice(data);
+    this.emailService.sendAdminLatePaymentNotification(data);
+
+    await this.audit.record({
+      action: reason === 'NEEDS_SLOT' ? 'PAYMENT_LATE_WINDOW_CLOSED' : 'PAYMENT_LATE_SLOT_TAKEN',
+      entity: 'payments',
+      entityId: payment.id,
+    });
+  }
+
   async getPaymentStatus(bookingId: string) {
     const payments = await this.paymentsRepo.findApprovedByBookingId(bookingId);
     const booking = await this.bookingsRepo.findById(bookingId).catch(() => null);
@@ -489,14 +563,19 @@ export class PaymentsService {
       paidAt: new Date(),
     } as any);
 
+    let confirmation: PaymentConfirmationOutcome = 'CONFIRMED';
     if (booking.status === 'PENDIENTE_PAGO') {
-      await this.bookingSync.confirmAndSync(bookingId);
+      // Shared with the webhook: a manual payment on a slot that is no longer
+      // free must not produce a second CONFIRMADA booking either (H-01).
+      const result = await this.bookingSync.confirmOnPayment(bookingId);
+      confirmation = result.outcome;
     }
 
     return {
       success: true,
       amount: remaining,
       totalPaid: Math.round((totalPaid + remaining) * 100) / 100,
+      confirmation,
     };
   }
 

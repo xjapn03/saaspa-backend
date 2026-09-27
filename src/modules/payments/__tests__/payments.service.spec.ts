@@ -8,6 +8,7 @@ import { IProductsRepository } from '../../../repositories/interfaces/products.r
 import { IOrdersRepository } from '../../../repositories/interfaces/orders.repository';
 import { MetaCapiService } from '../../meta/meta-capi.service';
 import { EmailService } from '../../../common/email/email.service';
+import { AuditService } from '../../../common/audit/audit.service';
 import { BookingSyncService } from '../../bookings/booking-sync.service';
 import { IPaymentProvider, NormalizedPaymentEvent } from '../providers/payment-provider';
 
@@ -22,6 +23,7 @@ describe('PaymentsService', () => {
   let metaCapi: DeepMockProxy<MetaCapiService>;
   let emailService: DeepMockProxy<EmailService>;
   let bookingSync: DeepMockProxy<BookingSyncService>;
+  let audit: DeepMockProxy<AuditService>;
 
   const mockBooking = {
     id: 'booking-1',
@@ -76,6 +78,7 @@ describe('PaymentsService', () => {
     metaCapi = mockDeep<MetaCapiService>();
     emailService = mockDeep<EmailService>();
     bookingSync = mockDeep<BookingSyncService>();
+    audit = mockDeep<AuditService>();
 
     paymentProvider.createPaymentIntent.mockImplementation(
       ({ reference, amountInCents, currency }) => ({
@@ -101,6 +104,7 @@ describe('PaymentsService', () => {
         { provide: MetaCapiService, useValue: metaCapi },
         { provide: EmailService, useValue: emailService },
         { provide: BookingSyncService, useValue: bookingSync },
+        { provide: AuditService, useValue: audit },
       ],
     }).compile();
     service = module.get<PaymentsService>(PaymentsService);
@@ -229,12 +233,19 @@ describe('PaymentsService', () => {
       paymentsRepo.update.mockResolvedValue(mockApprovedPayment);
       bookingsRepo.findById.mockResolvedValue(mockBooking as any);
       bookingsRepo.update.mockResolvedValue(mockConfirmedBooking as any);
+      bookingSync.confirmOnPayment.mockResolvedValue({
+        outcome: 'CONFIRMED',
+        booking: mockConfirmedBooking as any,
+      });
 
       const result = await service.handleWebhook({}, 'checksum');
 
       expect(result).toEqual({ received: true });
-      expect(paymentsRepo.update).toHaveBeenCalled();
-      expect(bookingSync.confirmAndSync).toHaveBeenCalledWith(
+      expect(paymentsRepo.update).toHaveBeenCalledWith(
+        'pay-1',
+        expect.objectContaining({ status: 'APROBADO' }),
+      );
+      expect(bookingSync.confirmOnPayment).toHaveBeenCalledWith(
         'booking-1',
         expect.objectContaining({ fbc: undefined }),
       );
@@ -243,6 +254,8 @@ describe('PaymentsService', () => {
       );
       expect(emailService.sendBookingReceipt).toHaveBeenCalled();
       expect(emailService.sendAdminBookingNotification).toHaveBeenCalled();
+      expect(emailService.sendLatePaymentClientNotice).not.toHaveBeenCalled();
+      expect(emailService.sendAdminLatePaymentNotification).not.toHaveBeenCalled();
     });
 
     it('should approve SALDO payment without changing booking status', async () => {
@@ -269,6 +282,7 @@ describe('PaymentsService', () => {
         ...mockApprovedPayment,
         type: 'ABONO',
         status: 'APROBADO',
+        metadata: { paymentOutcome: 'CONFIRMED' },
       });
 
       const result = await service.handleWebhook({}, 'checksum');
@@ -276,6 +290,98 @@ describe('PaymentsService', () => {
       expect(result).toEqual({ received: true });
       expect(paymentsRepo.update).not.toHaveBeenCalled();
       expect(bookingsRepo.update).not.toHaveBeenCalled();
+      expect(bookingSync.confirmOnPayment).not.toHaveBeenCalled();
+    });
+
+    it('should reprocess an APPROVED payment whose outcome was never recorded (H-01)', async () => {
+      // A crash between approving the payment and resolving the booking must not
+      // leave the booking orphaned: the retry re-runs the decision.
+      paymentsRepo.findByWompiId.mockResolvedValue({
+        ...mockApprovedPayment,
+        type: 'ABONO',
+        status: 'APROBADO',
+        metadata: {},
+      });
+      paymentsRepo.update.mockResolvedValue(mockApprovedPayment);
+      bookingsRepo.findById.mockResolvedValue(mockBooking as any);
+      bookingSync.confirmOnPayment.mockResolvedValue({
+        outcome: 'CONFIRMED',
+        booking: mockConfirmedBooking as any,
+      });
+
+      const result = await service.handleWebhook({}, 'checksum');
+
+      expect(result).toEqual({ received: true });
+      expect(bookingSync.confirmOnPayment).toHaveBeenCalled();
+    });
+
+    it('does not throw and flags the payment for review when the window already closed (H-01)', async () => {
+      paymentsRepo.findByWompiId.mockResolvedValue({
+        ...mockApprovedPayment,
+        type: 'ABONO',
+        status: 'PENDIENTE',
+      });
+      paymentsRepo.update.mockResolvedValue(mockApprovedPayment);
+      bookingSync.confirmOnPayment.mockResolvedValue({
+        outcome: 'NEEDS_SLOT',
+        booking: { ...mockBooking, status: 'PAGO_TARDE' } as any,
+      });
+
+      const result = await service.handleWebhook({}, 'checksum');
+
+      expect(result).toEqual({ received: true });
+      expect(paymentsRepo.update).toHaveBeenCalledWith(
+        'pay-1',
+        expect.objectContaining({
+          status: 'APROBADO',
+          metadata: expect.objectContaining({
+            paymentOutcome: 'NEEDS_SLOT',
+            reviewRequired: true,
+            reviewReason: 'NEEDS_SLOT',
+          }),
+        }),
+      );
+      // The clienta knows her money arrived and the salon knows a person is needed.
+      expect(emailService.sendLatePaymentClientNotice).toHaveBeenCalled();
+      expect(emailService.sendAdminLatePaymentNotification).toHaveBeenCalled();
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PAYMENT_LATE_WINDOW_CLOSED', entity: 'payments' }),
+      );
+      // No standard receipt: the booking is not confirmed.
+      expect(emailService.sendBookingReceipt).not.toHaveBeenCalled();
+    });
+
+    it('flags the payment for review instead of confirming a re-booked slot (H-01)', async () => {
+      paymentsRepo.findByWompiId.mockResolvedValue({
+        ...mockApprovedPayment,
+        type: 'ABONO',
+        status: 'PENDIENTE',
+      });
+      paymentsRepo.update.mockResolvedValue(mockApprovedPayment);
+      bookingSync.confirmOnPayment.mockResolvedValue({
+        outcome: 'NEEDS_REVIEW',
+        booking: { ...mockBooking, status: 'PAGO_TARDE' } as any,
+      });
+
+      const result = await service.handleWebhook({}, 'checksum');
+
+      expect(result).toEqual({ received: true });
+      expect(paymentsRepo.update).toHaveBeenCalledWith(
+        'pay-1',
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            paymentOutcome: 'NEEDS_REVIEW',
+            reviewReason: 'NEEDS_REVIEW',
+          }),
+        }),
+      );
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PAYMENT_LATE_SLOT_TAKEN' }),
+      );
+      expect(emailService.sendBookingReceipt).not.toHaveBeenCalled();
+      expect(metaCapi.sendEvent).not.toHaveBeenCalledWith(
+        expect.objectContaining({ eventName: 'Purchase' }),
+      );
     });
 
     it('should reject declined payments', async () => {

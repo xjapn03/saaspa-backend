@@ -240,4 +240,71 @@ describe('EmailService', () => {
       expect(html).toContain('anónima (widget)');
     });
   });
+
+  describe('late payment notification (H-01)', () => {
+    const latePayment = {
+      clientName: 'Maria Gomez',
+      clientEmail: 'maria@example.com',
+      clientPhone: '3001234567',
+      serviceName: 'Facial',
+      amount: 30000,
+      paymentReference: 'ref-late',
+      bookingId: 'booking-1',
+      reason: 'NEEDS_SLOT' as const,
+      startTime: new Date('2026-10-01T15:00:00.000Z'),
+    };
+
+    const build = async (env: Record<string, string | undefined>) => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          EmailService,
+          { provide: ConfigService, useValue: { get: (key: string) => env[key] } },
+        ],
+      }).compile();
+      return module.get<EmailService>(EmailService);
+    };
+
+    const sendCalls = (send: jest.SpyInstance) =>
+      send.mock.calls[0] as [string, string, string, string, string];
+
+    it('tells the clienta her money arrived without promising a confirmed slot', async () => {
+      const emailService = await build({});
+      const send = jest.spyOn(emailService as any, 'send').mockResolvedValue(undefined);
+
+      await emailService.sendLatePaymentClientNotice(latePayment);
+
+      const [to, subject, html, template, id] = sendCalls(send);
+      expect(to).toBe('maria@example.com');
+      expect(subject).toContain('Recibimos tu pago');
+      expect(template).toBe('late-payment-client');
+      expect(id).toBe('booking-1');
+      expect(html).toContain('una persona del salón te contactará');
+      expect(html).not.toContain('Confirmación de tu cita');
+    });
+
+    it('alerts the salon with the reason and how to resolve it', async () => {
+      const emailService = await build({ SALON_NOTIFICATION_EMAIL: 'salon@test.com' });
+      const send = jest.spyOn(emailService as any, 'send').mockResolvedValue(undefined);
+
+      await emailService.sendAdminLatePaymentNotification({
+        ...latePayment,
+        reason: 'NEEDS_REVIEW',
+      });
+
+      const [to, , html, template] = sendCalls(send);
+      expect(to).toBe('salon@test.com');
+      expect(template).toBe('late-payment-admin');
+      expect(html).toContain('otra cita');
+      expect(html).toContain('PAGO_TARDE');
+      expect(html).toContain('3001234567');
+    });
+
+    it('does not throw without an API key', async () => {
+      const emailService = await build({});
+      await expect(emailService.sendLatePaymentClientNotice(latePayment)).resolves.toBeUndefined();
+      await expect(
+        emailService.sendAdminLatePaymentNotification(latePayment),
+      ).resolves.toBeUndefined();
+    });
+  });
 });
