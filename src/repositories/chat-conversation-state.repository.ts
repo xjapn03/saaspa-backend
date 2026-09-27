@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import {
   CreateChatConversationStateInput,
+  HandoffNotificationOutcome,
   IChatConversationState,
   IChatConversationStateRepository,
   SetChatHandoffInput,
@@ -69,6 +70,27 @@ export class ChatConversationStateRepository extends IChatConversationStateRepos
         ...(data.handoffMessage === undefined ? {} : { handoffMessage: data.handoffMessage }),
         ...(data.handoffAt === undefined ? {} : { handoffAt: data.handoffAt }),
         ...(data.handoffClosedAt === undefined ? {} : { handoffClosedAt: data.handoffClosedAt }),
+      },
+    });
+    return state as unknown as IChatConversationState;
+  }
+
+  /**
+   * Records one attempt at alerting the salon of a handoff (H-03): the counter
+   * always moves, `handoffNotifiedAt` is set only on delivery and the error is
+   * kept (short) when it failed, so the next turn can tell it has to retry.
+   */
+  async recordHandoffNotification(
+    conversationId: string,
+    outcome: HandoffNotificationOutcome,
+  ): Promise<IChatConversationState> {
+    const state = await this.prisma.chatConversationState.update({
+      where: { conversationId },
+      data: {
+        handoffNotifyAttempts: { increment: 1 },
+        ...(outcome.delivered
+          ? { handoffNotifiedAt: new Date(), handoffNotifyError: null }
+          : { handoffNotifyError: (outcome.error || 'NOT_DELIVERED').slice(0, 300) }),
       },
     });
     return state as unknown as IChatConversationState;

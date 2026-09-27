@@ -307,4 +307,44 @@ describe('EmailService', () => {
       ).resolves.toBeUndefined();
     });
   });
+
+  describe('delivery outcome of the handoff alert (H-03)', () => {
+    const handoff = {
+      conversationId: 'a'.repeat(32),
+      reason: 'EXPLICIT_REQUEST',
+      message: 'Quiero hablar con una persona',
+      at: new Date('2026-09-27T12:00:00.000Z'),
+      turnId: 'turn-1',
+      userId: null,
+    };
+
+    const build = async (env: Record<string, string | undefined>) => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          EmailService,
+          { provide: ConfigService, useValue: { get: (key: string) => env[key] } },
+        ],
+      }).compile();
+      return module.get<EmailService>(EmailService);
+    };
+
+    it('reports false when the mailer is not configured', async () => {
+      const emailService = await build({});
+      await expect(emailService.sendHandoffNotification(handoff)).resolves.toBe(false);
+    });
+
+    it('reports false when the provider fails to accept the mail', async () => {
+      // A fake key makes the real SendGrid call fail: that is the fallen mail the
+      // chat has to detect so it can retry it on the next turn.
+      const emailService = await build({ SENDGRID_API_KEY: 'SG.fake-key' });
+      await expect(emailService.sendHandoffNotification(handoff)).resolves.toBe(false);
+    });
+
+    it('reports true when the provider accepts the mail', async () => {
+      const emailService = await build({ SENDGRID_API_KEY: 'SG.fake-key' });
+      jest.spyOn(emailService as any, 'send').mockResolvedValue(true);
+
+      await expect(emailService.sendHandoffNotification(handoff)).resolves.toBe(true);
+    });
+  });
 });

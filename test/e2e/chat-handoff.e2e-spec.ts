@@ -119,7 +119,7 @@ describe('Chat handoff (e2e)', () => {
   });
 
   it('notifies the salon, keeps the trigger and lets a person close the handoff so the bot answers again', async () => {
-    const notify = jest.spyOn(email, 'sendHandoffNotification').mockResolvedValue(undefined);
+    const notify = jest.spyOn(email, 'sendHandoffNotification').mockResolvedValue(true);
 
     const { response, cookie } = await startHandoff('Quiero hablar con una persona');
     const conversationId = response.body.conversationId;
@@ -180,7 +180,7 @@ describe('Chat handoff (e2e)', () => {
   });
 
   it('reopens the handoff, so the bot hands the conversation back to a person', async () => {
-    const notify = jest.spyOn(email, 'sendHandoffNotification').mockResolvedValue(undefined);
+    const notify = jest.spyOn(email, 'sendHandoffNotification').mockResolvedValue(true);
 
     const { response, cookie } = await startHandoff('Necesito hablar con alguien');
     const conversationId = response.body.conversationId;
@@ -203,6 +203,40 @@ describe('Chat handoff (e2e)', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     // A person reopened it on purpose: the salon is not alerted again.
     expect(notify).not.toHaveBeenCalled();
+
+    notify.mockRestore();
+  });
+
+  it('retries the alert on the next turn when the first delivery failed (H-03)', async () => {
+    const notify = jest
+      .spyOn(email, 'sendHandoffNotification')
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    const { response, cookie } = await startHandoff('Necesito hablar con una persona ya');
+    const conversationId = response.body.conversationId;
+
+    // 1. The first attempt failed: the alert stays pending and the failure is kept.
+    expect(notify).toHaveBeenCalledTimes(1);
+    let state = await stateOf(conversationId);
+    expect(state?.handoffNotifiedAt).toBeNull();
+    expect(state?.handoffNotifyAttempts).toBe(1);
+    expect(state?.handoffNotifyError).toBe('NOT_DELIVERED');
+
+    // 2. The next turn retries it, without calling the assistant.
+    fetchSpy.mockClear();
+    const latched = await chat({ conversationId, message: { text: '¿Hola?' } }, cookie);
+    expect(latched.body.reply.text).toBe(HANDOFF_ACTIVE_MESSAGE);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledTimes(2);
+    state = await stateOf(conversationId);
+    expect(state?.handoffNotifiedAt).toBeInstanceOf(Date);
+    expect(state?.handoffNotifyAttempts).toBe(2);
+    expect(state?.handoffNotifyError).toBeNull();
+
+    // 3. Once delivered, later turns do not retry.
+    await chat({ conversationId, message: { text: '¿Sigue ahí?' } }, cookie);
+    expect(notify).toHaveBeenCalledTimes(2);
 
     notify.mockRestore();
   });

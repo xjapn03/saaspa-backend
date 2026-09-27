@@ -360,3 +360,16 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   fijos a **ventana + intervalo del barrido** (35 min) vía `booking.constants`; 16 tests unitarios nuevos y un
   E2E HTTP nuevo con webhook firmado contra BD real (`test/e2e/late-payment-race.e2e-spec.ts`) — verify verde
   (61 suites, 528 tests) y E2E completo en verde (9 suites, 59 tests).
+- 2026-09-26 — fix/handoff-notification-delivery — hallazgo **H-03** de la revisión conjunta #2: el aviso de
+  handoff ya no se traga en silencio. `EmailService.send` y `sendHandoffNotification` devuelven un booleano
+  (entregado o no; sin `SENDGRID_API_KEY`, destinatario vacío o fallo del proveedor → `false`) y
+  `chat_conversation_states` gana `handoffNotifiedAt` (solo se fija cuando el proveedor aceptó el correo),
+  `handoffNotifyError` (motivo corto) y `handoffNotifyAttempts` (migración
+  `20260928120000_add_chat_handoff_notify_status`); `ChatService.notifyHandoff` persiste el resultado y, si
+  `handoffActive && !handoffNotifiedAt`, el **turno siguiente** reintenta el aviso con lo que la conversación
+  guardó (motivo, mensaje disparador, instante) antes de responder el mensaje canónico — sin scheduler, una vez
+  por turno, y sin reintentar cuando ya se entregó. La bandeja de lectura «conversaciones derivadas sin cerrar /
+  avisos no entregados» queda **anotada como pendiente** (mismo criterio J-02: no se construye el consumidor
+  antes de que exista quien lo necesite); 6 tests unitarios nuevos y un caso E2E nuevo (primer envío falla, el
+  siguiente turno reintenta y registra la entrega) — verify verde (61 suites, 534 tests) y E2E completo en verde
+  (9 suites, 60 tests).

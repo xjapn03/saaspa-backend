@@ -268,6 +268,16 @@ model ChatConversationState {
   handoffAt      DateTime?
   /// When a person closed it; who and when also live in the AuditLog.
   handoffClosedAt DateTime?
+  /// Delivery status of the salon alert (H-03): set only when the email was
+  /// actually accepted for delivery. While it is null the next turn of the
+  /// conversation retries it, so a fallen mail cannot leave the handoff in
+  /// silence for ever.
+  handoffNotifiedAt DateTime?
+  /// Short reason kept when the alert could not be delivered (the detailed
+  /// error stays in the logs, without PII).
+  handoffNotifyError String?
+  /// How many times the alert was attempted (observability only, no PII).
+  handoffNotifyAttempts Int   @default(0)
   lastTurnId     String?
   messageCount   Int       @default(0)
   lastMessageAt  DateTime?
