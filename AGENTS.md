@@ -216,7 +216,9 @@ Pendientes (van a otro repo; **no** se implementan aquí):
   `TENANT_TIMEZONE`; y además `TURN_TOKEN_ISSUER`, `TURN_TOKEN_AUDIENCE` y `TURN_TOKEN_TTL_SECONDS` con sus
   valores explícitos (`saaspa-backend`, `saaspa-ia`, `300`) en lugar de dejarlos en el default silencioso
   del código. El bloque de chat necesita también `IA_BOT_URL` (la URL interna del contenedor `ia-bot`, nunca
-  `localhost`) e `IA_BOT_TIMEOUT_MS`; sin `IA_BOT_URL` el backend cae a `http://localhost:8000` y cada turno
+  `localhost`) e `IA_BOT_TIMEOUT_MS` (**25000**, o cualquier valor mayor que el turn-deadline de la IA: la
+  escalera es `backend > turn-deadline de saaspa-IA > read-timeout por intento`, hallazgo J-04; si infra
+  fijara 20000 el orden vuelve a invertirse); sin `IA_BOT_URL` el backend cae a `http://localhost:8000` y cada turno
   responde **502**. Falta crear el contenedor `ia-bot` en la red interna y confirmar que `TZ: America/Bogota`
   es efectiva en la imagen `node:20-alpine` (no instala `tzdata`); la disponibilidad ya no depende de
   `tzdata` porque la zona se calcula con `Intl`/ICU, pero los logs y los procesos de Node sí.
@@ -313,6 +315,13 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   reintento devuelve la misma cita, la repetición se resuelve antes del tope de pendientes y del lock, una clave
   de otro usuario responde **409** y una clave mal formada **400**; tests: 17 nuevos de identidad interna, 15 de
   idempotencia (repositorio, servicio y controlador) y un E2E HTTP nuevo — verify verde (59 suites, 488 tests).
+- 2026-09-26 — fix/timeout-ladder — hallazgo **J-04** (escalera de timeouts invertida): `DEFAULT_IA_BOT_TIMEOUT_MS`
+  pasa de **20 s a 25 s** para que el orden sea `backend > turn-deadline de saaspa-IA > read-timeout por
+  intento` (**25 s > 20 s > 8-10 s**, el deadline del asistente bajado en paralelo en su repo); con el orden
+  anterior el backend respondía 504 mientras la IA seguía trabajando (tokens gastados y un turno en su memoria
+  que la clienta nunca vio); `chat/__tests__/timeout-ladder.spec.ts` (4 tests) vigila la relación —falla si el
+  backend baja del deadline del asistente— y fija los números acordados; `.env.example`, `README.md` y
+  `docs/dev.md` documentan la escalera — verify verde (60 suites, 492 tests).
 - 2026-09-26 — docs/post-merge-sync — tras el merge del PR #73 (`develop` = `9fc8b12`) se alinea la
   documentación con el código real: la sección 9 pasa a listar las variables que `kamerinos-infra` debe
   inyectar (`TENANT_TIMEZONE`, `TURN_TOKEN_ISSUER`/`AUDIENCE`/`TTL_SECONDS` explícitos y `IA_BOT_URL`/

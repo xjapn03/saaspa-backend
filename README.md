@@ -85,7 +85,7 @@ Webhooks:
 ## Tests
 
 ```bash
-npm test                 # Unit tests (488 tests, 59 suites) — maxWorkers=2 optimizado
+npm test                 # Unit tests (492 tests, 60 suites) — maxWorkers=2 optimizado
 npm run test:cov         # Cobertura
 npm run test:e2e         # End-to-end (requiere PostgreSQL corriendo)
 ```
@@ -112,7 +112,7 @@ Ver `.env.example` para la lista completa. Claves principales:
 | `META_*`                | Credenciales WhatsApp Cloud API y CAPI |
 | `IA_BOT_URL`            | URL del servicio de IA (Java + Spring AI) — **obligatoria en producción** |
 | `IA_BOT_API_KEY`        | Secreto NestJS -> saaspa-IA (`X-Internal-Api-Key`) |
-| `IA_BOT_TIMEOUT_MS`     | Timeout de la llamada al chat de la IA (default 20000) — **obligatoria en producción** |
+| `IA_BOT_TIMEOUT_MS`     | Timeout de la llamada al chat de la IA (default 25000) — **obligatoria en producción** |
 | `INTERNAL_API_KEY`      | Secreto saaspa-IA -> NestJS (`X-Internal-Api-Key`) |
 | `TURN_TOKEN_PRIVATE_KEY`| Clave privada ES256 (PKCS#8 PEM en base64); ver `docs/dev.md` |
 | `TURN_TOKEN_KID`        | Identificador de la clave en el header del turn token (`kid`) |
@@ -125,7 +125,7 @@ Ver `.env.example` para la lista completa. Claves principales:
 > estas variables: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `IA_BOT_API_KEY`, `INTERNAL_API_KEY`,
 > `TURN_TOKEN_PRIVATE_KEY`, `TURN_TOKEN_KID`, `TENANT_ID`, `IA_BOT_URL`, `IA_BOT_TIMEOUT_MS` o
 > `TENANT_TIMEZONE` (esquema Joi en `src/config/env.validation.ts`). En `development`/`test` las tres
-> últimas usan sus defaults (`http://localhost:8000`, `20000`, `America/Bogota`).
+> últimas usan sus defaults (`http://localhost:8000`, `25000`, `America/Bogota`).
 
 ### Archivos por entorno
 

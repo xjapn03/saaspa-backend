@@ -48,7 +48,7 @@ Este backend es el **único emisor** del turn token: firma en ES256 (P-256) la i
 | `TURN_TOKEN_TTL_SECONDS` | Vida del token (default `300`). |
 | `INTERNAL_API_KEY` | Secreto de la dirección `saaspa-IA` → NestJS (`X-Internal-Api-Key`). |
 | `IA_BOT_URL` | URL interna del servicio de IA; en Compose apunta al contenedor `ia-bot` (no `localhost`). Sin ella el código cae a `http://localhost:8000` y cada turno responde **502**. En `NODE_ENV=production` es **obligatoria**. |
-| `IA_BOT_TIMEOUT_MS` | Timeout de `POST /api/v1/chat` en ms (default `20000`); al superarlo se responde **504**. En `NODE_ENV=production` es **obligatoria**. |
+| `IA_BOT_TIMEOUT_MS` | Timeout de `POST /api/v1/chat` en ms (default `25000`); al superarlo se responde **504**. En `NODE_ENV=production` es **obligatoria**. |
 | `IA_BOT_API_KEY` | Secreto de la dirección NestJS → `saaspa-IA` (no confundir con el anterior). |
 | `TENANT_ID` | Debe coincidir **exactamente** con `IA_TENANT_DEFAULT` de `saaspa-IA`. |
 | `TENANT_TIMEZONE` | Debe coincidir con `saaspa.tenant.timezone` de `saaspa-IA` (default `America/Bogota`). En `NODE_ENV=production` es **obligatoria**. |
@@ -184,6 +184,17 @@ Anti-abuso y `trust proxy` (hallazgo J-03):
 > identidad anónima, así que quien borre la cookie obtiene una sesión nueva. El control efectivo del abuso
 > anónimo es el límite por IP del `ThrottlerGuard`; un tope por identidad fuerte (cuenta o IP+sesión) es una
 > tarea aparte.
+
+Escalera de plazos de un turno (hallazgo J-04):
+
+- Orden correcto: **backend > turn-deadline de `saaspa-IA` > read-timeout de un intento**. Números acordados
+  hoy: **25 s > 20 s > 8-10 s**. Si el backend corta primero responde 504 mientras el asistente sigue
+  trabajando (gasta tokens, puede llamar a la API interna tras una respuesta que ya nadie espera y puede dejar
+  en su memoria un turno que la clienta nunca vio).
+- `DEFAULT_IA_BOT_TIMEOUT_MS` (`chat.constants.ts`) es el techo del backend y `IA_BOT_TIMEOUT_MS` lo puede
+  sobrescribir por entorno (mismo default). La relación la vigila `chat/__tests__/timeout-ladder.spec.ts`:
+  baja el timeout del backend por debajo del deadline del asistente y la suite falla, incluido un test que fija
+  los números acordados para que moverlos sea una decisión consciente y conjunta.
 
 Tabla `chat_conversation_states` (migración `20260926180000_add_chat_conversation_state`): `tenantId`
 (default `kamerinos`), `conversationId` único, `channel`, `identityKind`, `userId`, `sessionKeyHash`,
@@ -467,7 +478,7 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (488 tests, 59 suites) — no requiere BD
+npm test              # Unit tests (492 tests, 60 suites) — no requiere BD
 npm run test:cov      # Cobertura
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 ```
@@ -517,7 +528,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (59 suites, 488 tests)
+### Inventario de suites (60 suites, 492 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
@@ -530,6 +541,7 @@ El flujo de E2E:
 | Redis | redis, token-blacklist | ~8 |
 | HTTP | `applyProxyTrust` (\`trust proxy\` = 1 salto, hallazgo J-03) | 1 |
 | Chat session | emisión, firma y validación del id de sesión anónimo | 11 |
+| Chat timeouts | escalera de plazos backend > IA (J-04) | 4 |
 | Scheduler | barrido de expiración de `PENDIENTE_PAGO` | 4 |
 | Internal identity | contrato arquitectónico + `@TurnContext`/`requireTurnUser` (ADR 0012) | 17 |
 | Config | `envValidationSchema` (Joi, fallo cerrado en producción) | 11 |
