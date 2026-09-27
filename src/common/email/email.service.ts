@@ -393,9 +393,10 @@ export class EmailService {
   /**
    * Alerts the salon that a conversation needs a person (J-05 / ADR 0013). The
    * message comes from the client and the reason from saaspa-IA, so both are
-   * escaped before they reach the HTML.
+   * escaped before they reach the HTML. Returns whether the mail was actually
+   * accepted, so the chat can record it and retry a failed alert (H-03).
    */
-  async sendHandoffNotification(data: HandoffNotificationData): Promise<void> {
+  async sendHandoffNotification(data: HandoffNotificationData): Promise<boolean> {
     const conversation = this.escapeHtml(data.conversationId);
     const inner = `
       <h1 style="color: ${BRAND}; font-size: 20px; margin: 0 0 8px;">Una clienta necesita atención humana</h1>
@@ -419,7 +420,7 @@ export class EmailService {
       </p>
     `;
 
-    await this.send(
+    return this.send(
       this.salonNotificationEmail,
       'Una clienta necesita atención humana — Kamerinos SPA',
       this.renderLayout(inner),
@@ -507,14 +508,19 @@ export class EmailService {
     return date.toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short', timeZone });
   }
 
-  private async send(to: string, subject: string, html: string, template: string, id: string): Promise<void> {
+  /**
+   * Sends one message and reports whether it was accepted for delivery. It never
+   * throws: each caller decides what a failed mail means (the handoff alert uses
+   * it to record the outcome and retry, H-03).
+   */
+  private async send(to: string, subject: string, html: string, template: string, id: string): Promise<boolean> {
     if (!to) {
       this.logger.warn(`[EMAIL] ${template}: destinatario vacío, omitiendo envío`);
-      return;
+      return false;
     }
     if (!this.isEnabled) {
       this.logger.log(`[EMAIL] ${template} to=${to} id=${id} subject="${subject}" — SENDGRID_API_KEY not configured`);
-      return;
+      return false;
     }
 
     try {
@@ -526,8 +532,10 @@ export class EmailService {
         html,
       });
       this.logger.log(`[EMAIL] ${template} sent to=${to} id=${id}`);
+      return true;
     } catch (error) {
       this.logger.error(`[EMAIL] Failed to send ${template} to=${to}: ${(error as Error).message}`);
+      return false;
     }
   }
 }

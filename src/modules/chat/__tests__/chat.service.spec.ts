@@ -63,6 +63,9 @@ describe('ChatService', () => {
     handoffMessage: null,
     handoffAt: null,
     handoffClosedAt: null,
+    handoffNotifiedAt: null,
+    handoffNotifyError: null,
+    handoffNotifyAttempts: 0,
     lastTurnId: 'previous-turn',
     messageCount: 1,
     lastMessageAt: new Date(),
@@ -379,9 +382,13 @@ describe('ChatService', () => {
       expect(states.create).toHaveBeenCalled();
     });
 
-    it('does not alert again while the handoff is already active', async () => {
+    it('does not alert again while the handoff is already active and notified', async () => {
       states.findByConversationId.mockResolvedValue(
-        stateFor({ handoffActive: true, handoffReason: 'HEALTH_TOPIC' }),
+        stateFor({
+          handoffActive: true,
+          handoffReason: 'HEALTH_TOPIC',
+          handoffNotifiedAt: new Date(),
+        }),
       );
 
       await service.handle(
@@ -391,6 +398,79 @@ describe('ChatService', () => {
       );
 
       expect(email.sendHandoffNotification).not.toHaveBeenCalled();
+      expect(states.recordHandoffNotification).not.toHaveBeenCalled();
+    });
+
+    it('records the delivery of the alert when it succeeds (H-03)', async () => {
+      iaBot.chat.mockResolvedValue({
+        ...iaReply,
+        handoff: { requested: true, reason: 'EXPLICIT_REQUEST' },
+      } as never);
+      email.sendHandoffNotification.mockResolvedValue(true);
+
+      const reply = await service.handle(
+        { message: { text: 'Quiero hablar con una persona' } },
+        request(),
+        response(),
+      );
+
+      expect(states.recordHandoffNotification).toHaveBeenCalledWith(reply.conversationId, {
+        delivered: true,
+      });
+    });
+
+    it('records the failure of the alert when it cannot be delivered (H-03)', async () => {
+      iaBot.chat.mockResolvedValue({
+        ...iaReply,
+        handoff: { requested: true, reason: 'EXPLICIT_REQUEST' },
+      } as never);
+      email.sendHandoffNotification.mockResolvedValue(false);
+
+      const reply = await service.handle(
+        { message: { text: 'Quiero hablar con una persona' } },
+        request(),
+        response(),
+      );
+
+      expect(states.recordHandoffNotification).toHaveBeenCalledWith(reply.conversationId, {
+        delivered: false,
+        error: 'NOT_DELIVERED',
+      });
+    });
+
+    it('retries a failed alert on the next turn of the conversation (H-03)', async () => {
+      email.sendHandoffNotification.mockResolvedValue(true);
+      states.findByConversationId.mockResolvedValue(
+        stateFor({
+          handoffActive: true,
+          handoffReason: 'HEALTH_TOPIC',
+          handoffMessage: 'Tengo una alergia',
+          handoffAt: new Date('2026-09-27T12:00:00.000Z'),
+          handoffNotifiedAt: null,
+          handoffNotifyError: 'NOT_DELIVERED',
+          handoffNotifyAttempts: 1,
+        }),
+      );
+
+      const reply = await service.handle(
+        { conversationId: ANON_ID, message: { text: '¿Hola?' } },
+        request({ kamerinos_chat_session: issuedCookie(ANON_ID) }),
+        response(),
+      );
+
+      // The bot still does not answer: the conversation is with a person.
+      expect(iaBot.chat).not.toHaveBeenCalled();
+      expect(reply.reply.text).toBe(HANDOFF_ACTIVE_MESSAGE);
+      // The alert is retried with what the conversation kept.
+      expect(email.sendHandoffNotification).toHaveBeenCalledWith({
+        conversationId: ANON_ID,
+        reason: 'HEALTH_TOPIC',
+        message: 'Tengo una alergia',
+        at: new Date('2026-09-27T12:00:00.000Z'),
+        turnId: 'previous-turn',
+        userId: null,
+      });
+      expect(states.recordHandoffNotification).toHaveBeenCalledWith(ANON_ID, { delivered: true });
     });
 
     it('does not touch the handoff columns on a normal turn', async () => {

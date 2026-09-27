@@ -120,6 +120,12 @@ export class ChatService {
     // A-10a: the conversation was handed off to a person, so the bot must not take
     // it back. The reply is answered here, without calling saaspa-IA.
     if (state?.handoffActive) {
+      // H-03: the alert may have failed on the turn that triggered the handoff.
+      // Retry it here, once per turn, so a fallen mail cannot leave the
+      // conversation unattended for ever (no scheduler needed).
+      if (!state.handoffNotifiedAt) {
+        await this.retryHandoffNotification(state);
+      }
       return {
         conversationId,
         turnId,
@@ -389,17 +395,53 @@ export class ChatService {
   }
 
   /**
-   * Alerts the salon by email (J-05 / ADR 0013). A failing mail must never break
-   * the turn: the clienta already has her answer.
+   * Alerts the salon by email (J-05 / ADR 0013) and records the outcome (H-03). A
+   * failing mail must never break the turn: the clienta already has her answer.
+   * The delivery status is persisted so the next turn can retry it.
    */
   private async notifyHandoff(data: HandoffNotificationData): Promise<void> {
+    let delivered = false;
+    let error: string | null = null;
+
     try {
-      await this.email.sendHandoffNotification(data);
-    } catch (error) {
+      delivered = await this.email.sendHandoffNotification(data);
+      if (!delivered) error = 'NOT_DELIVERED';
+    } catch (err) {
+      // Defensive: the mailer resolves false instead of throwing, but a broken
+      // implementation must not take the turn down either.
+      error = (err as Error)?.message || 'NOT_DELIVERED';
+      this.logger.warn(`No se pudo avisar al salón del handoff de ${data.conversationId}`);
+    }
+
+    try {
+      await this.states.recordHandoffNotification(
+        data.conversationId,
+        delivered ? { delivered: true } : { delivered: false, error },
+      );
+    } catch (err) {
       this.logger.warn(
-        `No se pudo avisar al salón del handoff de ${data.conversationId}: ${(error as Error)?.message}`,
+        `No se pudo registrar el resultado del aviso de handoff de ${data.conversationId}: ${(err as Error)?.message}`,
       );
     }
+  }
+
+  /**
+   * Retries the alert of a handoff whose delivery failed (H-03), using what the
+   * conversation kept (reason, trigger message, instant). Runs once per client
+   * turn; the persisted `handoffNotifiedAt` stops it after a successful send.
+   */
+  private async retryHandoffNotification(state: IChatConversationState): Promise<void> {
+    if (!state.handoffMessage && !state.handoffReason) return;
+
+    this.logger.log(`Reintentando el aviso de handoff de ${state.conversationId}`);
+    await this.notifyHandoff({
+      conversationId: state.conversationId,
+      reason: state.handoffReason,
+      message: state.handoffMessage,
+      at: state.handoffAt ?? new Date(),
+      turnId: state.lastTurnId,
+      userId: state.userId,
+    });
   }
 
   private toHandoffView(state: IChatConversationState): ChatHandoffView {

@@ -209,6 +209,12 @@ aviso y nada permitía desactivarlo. Ahora:
 - **El disparo queda persistido** en `chat_conversation_states`: `handoffMessage` (el texto), `handoffAt`
   (cuándo) y `handoffReason`; `handoffClosedAt` guarda cuándo se cerró, y **quién** lo cerró vive en el
   `AuditLog`.
+- **El aviso sabe si se entregó y se reintenta (H-03).** `EmailService.send` y `sendHandoffNotification`
+  devuelven un booleano, y `chat_conversation_states` guarda `handoffNotifiedAt` (solo cuando el proveedor
+  aceptó el correo), `handoffNotifyError` (motivo corto si falló) y `handoffNotifyAttempts`. Mientras
+  `handoffNotifiedAt` siga nulo, el **siguiente turno** de la conversación reintenta el aviso antes de
+  responder el mensaje canónico: un correo caído ya no deja la conversación muerta para siempre. Una vez
+  entregado no se vuelve a intentar. Sin scheduler: el reintento viaja en el turno de la clienta.
 - **Cierre y reapertura por endpoint admin** (mismo patrón que `POST /bookings/admin`):
   `PATCH /api/chat/conversations/:id/handoff` con `{ "action": "close" }` o `{ "action": "reopen" }`
   (`ADMIN`/`EMPLEADO`). El interceptor global de auditoría registra acción, entidad (`chat`), `entityId` (el
@@ -218,13 +224,19 @@ aviso y nada permitía desactivarlo. Ahora:
     porque lo pidió una persona a propósito.
 - **Sigue pendiente (J-02):** no hay endpoint del widget que consuma este estado ni vista visual de la
   conversación; este trabajo es de datos y notificación. La interfaz es tarea futura de `saaspa-frontend`.
+  **Tampoco existe todavía una bandeja de lectura** («conversaciones derivadas sin cerrar / avisos no
+  entregados»): se decidió no construir el consumidor antes de que exista quien lo necesite, igual que el
+  resto de J-02; los datos ya están en `chat_conversation_states` para cuando haga falta.
 - Cubierto por `chat/__tests__/chat.service.spec.ts`, `chat-conversation-state.repository.spec.ts`,
   `email.service.spec.ts`, `audit.interceptor.spec.ts` y el E2E `chat-handoff.e2e-spec.ts` (el handoff se activa
-  → llega el aviso → se cierra por el endpoint → el bot responde otra vez).
+  → llega el aviso → se cierra por el endpoint → el bot responde otra vez; y, si el envío falla, el turno
+  siguiente reintenta el aviso y lo registra).
 
-Tabla `chat_conversation_states` (migración `20260926180000_add_chat_conversation_state`): `tenantId`
+Tabla `chat_conversation_states` (migración `20260926180000_add_chat_conversation_state`, más
+`20260927120000_add_chat_handoff_detail` y `20260928120000_add_chat_handoff_notify_status`): `tenantId`
 (default `kamerinos`), `conversationId` único, `channel`, `identityKind`, `userId`, `sessionKeyHash`,
-`handoffActive`, `handoffReason`, `lastTurnId`, `messageCount`, `lastMessageAt`.
+`handoffActive`, `handoffReason`, `handoffMessage`, `handoffAt`, `handoffClosedAt`, `handoffNotifiedAt`,
+`handoffNotifyError`, `handoffNotifyAttempts`, `lastTurnId`, `messageCount`, `lastMessageAt`.
 
 > **Nota sobre `npm run test:e2e`:** requiere la base `kamerinos_db_tests` con las migraciones y el seed
 > aplicados (`npx prisma migrate deploy && npx prisma db seed`, exportando `DATABASE_URL` con la credencial
@@ -564,7 +576,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (61 suites, 512 tests)
+### Inventario de suites (61 suites, 534 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
@@ -578,7 +590,7 @@ El flujo de E2E:
 | HTTP | `applyProxyTrust` (\`trust proxy\` = 1 salto, hallazgo J-03) | 1 |
 | Chat session | emisión, firma y validación del id de sesión anónimo | 11 |
 | Chat timeouts | escalera de plazos backend > IA (J-04) | 4 |
-| Chat handoff | aviso al salón, cierre/reapertura y auditoría (J-05) | 11 |
+| Chat handoff | aviso al salón, entrega/reintento, cierre/reapertura y auditoría (J-05, H-03) | 14 |
 | Audit | interceptor: actor, entidad e `entityId` | 5 |
 | Scheduler | barrido de expiración de `PENDIENTE_PAGO` | 4 |
 | Internal identity | contrato arquitectónico + `@TurnContext`/`requireTurnUser` (ADR 0012) | 17 |
