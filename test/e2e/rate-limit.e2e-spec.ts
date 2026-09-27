@@ -27,11 +27,24 @@ describe('Rate limit behind the proxy (e2e)', () => {
   let fetchSpy: jest.SpyInstance;
   const createdConversations = new Set<string>();
 
-  const chat = (forgedClientAddress: string) =>
+  const chatAs = (forgedClientAddress: string, appendedAddress = '127.0.0.1') =>
     request(app.getHttpServer())
       .post('/api/chat')
-      .set('X-Forwarded-For', `${forgedClientAddress}, 127.0.0.1`)
+      .set('X-Forwarded-For', `${forgedClientAddress}, ${appendedAddress}`)
       .send({ message: { text: 'Hola' } });
+
+  const chat = (forgedClientAddress: string) => chatAs(forgedClientAddress);
+
+  /** Turn token this backend forwarded to saaspa-IA on the last turn. */
+  const forwardedTurnToken = (): string => {
+    const call = fetchSpy.mock.calls.find((args) => String(args[0]).includes('/api/v1/chat'));
+    const headers = (call?.[1] as { headers?: Record<string, string> } | undefined)?.headers ?? {};
+    return String(headers.Authorization ?? '').replace(/^Bearer\s+/i, '');
+  };
+
+  /** Payload of the forwarded turn token, without verifying the signature. */
+  const forwardedTokenPayload = (): any =>
+    JSON.parse(Buffer.from(forwardedTurnToken().split('.')[1], 'base64url').toString('utf8'));
 
   const track = (response: request.Response) => {
     if (typeof response.body?.conversationId === 'string') {
@@ -97,4 +110,26 @@ describe('Rate limit behind the proxy (e2e)', () => {
     const throttled = await chat('10.0.0.250');
     expect(throttled.status).toBe(429);
   }, 60000);
+
+  it('stamps the turn token with the appended address, never the forged prefix', async () => {
+    // A fresh appended address, so this test owns its throttler bucket.
+    const appended = '203.0.113.9';
+
+    const first = await chatAs('10.0.0.7', appended);
+    track(first);
+    expect(first.status).toBe(200);
+    expect(forwardedTokenPayload().clientIp).toBe(appended);
+
+    fetchSpy.mockClear();
+    const second = await chatAs('10.0.0.8', appended);
+    track(second);
+    expect(second.status).toBe(200);
+    const payload = forwardedTokenPayload();
+
+    // The same real client (the address the trusted hop appended) despite a
+    // different forged prefix, and never the value the client invented: that is
+    // the very address the throttler buckets on in the test above.
+    expect(payload.clientIp).toBe(appended);
+    expect(payload.clientIp).not.toBe('10.0.0.8');
+  });
 });

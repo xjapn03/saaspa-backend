@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { ACCESS_COOKIE } from '../../common/auth/cookies';
+import { resolveClientIp } from '../../common/http/client-ip';
 import { DEFAULT_TIMEZONE, toOffsetIso } from '../../common/time/timezone.util';
 import { EmailService, HandoffNotificationData } from '../../common/email/email.service';
 import {
@@ -150,6 +151,9 @@ export class ChatService {
       agent: 'CLIENTAS',
       userId: identity.userId,
       role: identity.role,
+      // The address Express resolved with the trusted proxy, the same value the
+      // Throttler buckets on: never a header the client wrote (J-03).
+      clientIp: resolveClientIp(request),
     });
 
     const iaResponse = await this.iaBotClient.chat(

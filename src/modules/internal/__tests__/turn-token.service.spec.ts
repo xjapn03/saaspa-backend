@@ -87,6 +87,17 @@ describe('TurnTokenService', () => {
       expect(payload.role).toBe('CLIENTE');
     });
 
+    it('includes the trusted client IP only when it is provided', () => {
+      const withIp = jwtService.decode(service.issue({ ...TURN, clientIp: '203.0.113.7' }), {
+        complete: true,
+      }) as any;
+      expect(withIp.payload.clientIp).toBe('203.0.113.7');
+
+      // A token emitted without an address keeps its previous shape.
+      const withoutIp = jwtService.decode(service.issue(TURN), { complete: true }) as any;
+      expect(withoutIp.payload.clientIp).toBeUndefined();
+    });
+
     it('accepts the private key as raw PEM with escaped newlines', async () => {
       const module = await buildModule({ TURN_TOKEN_PRIVATE_KEY: PRIVATE_PEM_ESCAPED });
       const altService = module.get(TurnTokenService);
@@ -122,6 +133,14 @@ describe('TurnTokenService', () => {
       expect(payload.agent).toBe('CLIENTAS');
       expect(payload.userId).toBe('user-1');
       expect(payload.role).toBe('CLIENTE');
+    });
+
+    it('keeps the client IP claim and still accepts a token without it', () => {
+      expect(service.verify(service.issue({ ...TURN, clientIp: '2001:db8::1' })).clientIp).toBe(
+        '2001:db8::1',
+      );
+      // Optional: a token emitted before this claim existed stays valid.
+      expect(service.verify(service.issue(TURN)).clientIp).toBeUndefined();
     });
 
     it('rejects an expired token', () => {

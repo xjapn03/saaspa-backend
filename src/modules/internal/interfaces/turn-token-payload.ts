@@ -21,6 +21,12 @@ export interface TurnTokenPayload {
   agent: TurnAgent;
   userId?: string;
   role?: TurnRole;
+  /**
+   * Client address as resolved by this backend's trusted proxy
+   * (`resolveClientIp`, the same value the Throttler buckets on). Optional: it
+   * lets saaspa-IA limit by origin, and a token without it stays valid.
+   */
+  clientIp?: string;
 }
 
 export interface IssueTurnTokenInput {
@@ -30,4 +36,5 @@ export interface IssueTurnTokenInput {
   agent: TurnAgent;
   userId?: string;
   role?: TurnRole;
+  clientIp?: string;
 }
