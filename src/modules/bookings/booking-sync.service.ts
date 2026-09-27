@@ -18,8 +18,10 @@ export class BookingSyncService {
   async confirmAndSync(id: string, attribution?: { fbc?: string; fbp?: string }): Promise<IBookingSafe> {
     const booking = await this.bookingsRepo.findById(id);
 
-    if (['CANCELADA', 'COMPLETADA', 'NO_ASISTIO'].includes(booking.status)) {
-      throw new BadRequestException('No se puede confirmar una cita cancelada, completada o no asistida');
+    if (['CANCELADA', 'EXPIRADA', 'COMPLETADA', 'NO_ASISTIO'].includes(booking.status)) {
+      throw new BadRequestException(
+        'No se puede confirmar una cita cancelada, expirada por falta de pago, completada o no asistida',
+      );
     }
 
     this.releaseSlotLock(booking.startTime);

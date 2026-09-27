@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, ConflictException, ForbiddenException, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
 import { IServicesRepository } from '../../repositories/interfaces/services.repository';
 import { IPaymentsRepository } from '../../repositories/interfaces/payments.repository';
@@ -6,6 +7,10 @@ import { RedisService } from '../../common/redis/redis.service';
 import { GoogleCalendarService } from '../../common/google-calendar/google-calendar.service';
 import { BookingSyncService } from './booking-sync.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
+import {
+  DEFAULT_MAX_PENDING_PER_USER,
+  DEFAULT_PAYMENT_TTL_MINUTES,
+} from './booking.constants';
 
 const SLOT_INTERVAL = 30;
 const LOCK_TTL = 10 * 60;
@@ -22,7 +27,32 @@ export class BookingsService {
     private redis: RedisService,
     private calendar: GoogleCalendarService,
     private bookingSync: BookingSyncService,
+    private configService: ConfigService,
   ) {}
+
+  /** Minutes a booking may stay PENDIENTE_PAGO before it releases its slot. */
+  private get paymentTtlMinutes(): number {
+    const configured = Number(this.configService.get('BOOKING_PAYMENT_TTL_MINUTES'));
+    return Number.isFinite(configured) && configured > 0
+      ? configured
+      : DEFAULT_PAYMENT_TTL_MINUTES;
+  }
+
+  /** Pending bookings a user may hold at the same time. */
+  private get maxPendingPerUser(): number {
+    const configured = Number(this.configService.get('BOOKING_MAX_PENDING_PER_USER'));
+    return Number.isFinite(configured) && configured > 0
+      ? configured
+      : DEFAULT_MAX_PENDING_PER_USER;
+  }
+
+  /**
+   * Instants older than this no longer count as a pending payment. A booking
+   * created before the deadline has stopped holding its slot.
+   */
+  private pendingPaymentDeadline(now: Date = new Date()): Date {
+    return new Date(now.getTime() - this.paymentTtlMinutes * 60000);
+  }
 
   async findAll(filters: { userId?: string; date?: string; status?: string }) {
     return this.bookingsRepo.findAll(filters);
@@ -48,7 +78,7 @@ export class BookingsService {
     const service = await this.servicesRepo.findById(serviceId);
     const duration = service.duration;
 
-    const occupied = await this.bookingsRepo.findOccupied(date);
+    const occupied = await this.bookingsRepo.findOccupied(date, this.pendingPaymentDeadline());
 
     const lockedKeys = await this.redis.keys(`slot:${date}:*`);
     const lockedSlots: { startTime: Date; endTime: Date }[] = [];
@@ -93,12 +123,30 @@ export class BookingsService {
     return { serviceId: service.id, date, slots };
   }
 
-  async create(userId: string, dto: CreateBookingDto) {
+  async create(
+    userId: string,
+    dto: CreateBookingDto,
+    options: { enforcePendingCap?: boolean } = {},
+  ) {
     const service = await this.servicesRepo.findById(dto.serviceId);
     const startTime = new Date(dto.startTime);
     const endTime = new Date(startTime.getTime() + service.duration * 60000);
+    const deadline = this.pendingPaymentDeadline();
 
-    const overlap = await this.bookingsRepo.findOverlapping(startTime, endTime);
+    // A single conversation must not block several slots before paying any of
+    // them (joint triage, B-01). The admin path is exempt: the salon staff
+    // creates those bookings on purpose.
+    if (options.enforcePendingCap !== false) {
+      const pending = await this.bookingsRepo.countPendingByUser(userId, deadline);
+      if (pending >= this.maxPendingPerUser) {
+        throw new ConflictException(
+          `Alcanzaste el límite de ${this.maxPendingPerUser} reservas pendientes de pago. ` +
+            'Completa el pago o espera a que la franja se libere.',
+        );
+      }
+    }
+
+    const overlap = await this.bookingsRepo.findOverlapping(startTime, endTime, deadline);
     if (overlap) throw new ConflictException('El horario se cruza con otra cita reservada');
 
     const dateKey = startTime.toISOString().split('T')[0];
@@ -138,9 +186,7 @@ export class BookingsService {
       await this.calendar.deleteEvent(booking.googleEventId);
     }
 
-    const dateKey = new Date(booking.startTime).toISOString().split('T')[0];
-    const lockKey = `slot:${dateKey}:${new Date(booking.startTime).toISOString()}`;
-    try { await this.redis.del(lockKey); } catch {}
+    this.releaseSlotLock(booking.startTime);
 
     return this.bookingsRepo.update(id, { status: 'CANCELADA' } as any);
   }
@@ -178,15 +224,21 @@ export class BookingsService {
     if (!isAdmin && oldBooking.userId !== userId) {
       throw new ForbiddenException('Solo el dueño o un admin puede reagendar');
     }
-    if (oldBooking.status === 'COMPLETADA' || oldBooking.status === 'CANCELADA') {
-      throw new BadRequestException('No se puede reagendar una cita ya finalizada');
+    if (['COMPLETADA', 'CANCELADA', 'EXPIRADA'].includes(oldBooking.status)) {
+      throw new BadRequestException(
+        'No se puede reagendar una cita finalizada o expirada por falta de pago',
+      );
     }
 
     const service = await this.servicesRepo.findById(oldBooking.serviceId);
     const startTime = new Date(newStartTime);
     const endTime = new Date(startTime.getTime() + service.duration * 60000);
 
-    const overlap = await this.bookingsRepo.findOverlapping(startTime, endTime);
+    const overlap = await this.bookingsRepo.findOverlapping(
+      startTime,
+      endTime,
+      this.pendingPaymentDeadline(),
+    );
     if (overlap && overlap.id !== id) {
       throw new ConflictException('El nuevo horario se cruza con otra cita reservada');
     }
@@ -214,9 +266,7 @@ export class BookingsService {
       }
     }
 
-    const oldDateKey = new Date(oldBooking.startTime).toISOString().split('T')[0];
-    const oldLockKey = `slot:${oldDateKey}:${new Date(oldBooking.startTime).toISOString()}`;
-    try { await this.redis.del(oldLockKey); } catch {}
+    this.releaseSlotLock(oldBooking.startTime);
 
     const dateKey = startTime.toISOString().split('T')[0];
     const lockKey = `slot:${dateKey}:${startTime.toISOString()}`;
@@ -224,5 +274,46 @@ export class BookingsService {
     try { await this.redis.setex(lockKey, LOCK_TTL, lockValue); } catch {}
 
     return this.bookingsRepo.update(id, { startTime, endTime } as any);
+  }
+
+  /**
+   * Moves every PENDIENTE_PAGO booking that outlived the payment window to
+   * EXPIRADA, releasing the slot it was holding (joint triage, B-01). Idempotent
+   * and safe to run from more than one instance: the status change is
+   * conditional on the booking still being PENDIENTE_PAGO, so a payment that
+   * arrives mid sweep wins.
+   */
+  async expireOverduePendingBookings(now: Date = new Date()): Promise<{ expired: number }> {
+    const overdue = await this.bookingsRepo.findOverduePending(this.pendingPaymentDeadline(now));
+    let expired = 0;
+
+    for (const booking of overdue) {
+      const moved = await this.bookingsRepo.markExpired(booking.id);
+      if (!moved) continue; // a payment confirmed it between the query and the update
+
+      if (booking.googleEventId) {
+        await this.calendar
+          .deleteEvent(booking.googleEventId)
+          .catch(() =>
+            this.logger.warn(`No se pudo borrar el evento de la cita expirada ${booking.id}`),
+          );
+      }
+
+      this.releaseSlotLock(booking.startTime);
+      expired++;
+    }
+
+    if (expired > 0) {
+      this.logger.log(`Citas expiradas por falta de pago: ${expired}`);
+    }
+
+    return { expired };
+  }
+
+  /** Drops the Redis hold on a slot; the key TTL would remove it anyway. */
+  private releaseSlotLock(startTime: Date): void {
+    const dateKey = new Date(startTime).toISOString().split('T')[0];
+    const lockKey = `slot:${dateKey}:${new Date(startTime).toISOString()}`;
+    this.redis.del(lockKey).catch(() => {});
   }
 }

@@ -87,7 +87,9 @@ export class BookingsController {
   @ApiResponse({ status: 201, description: 'Cita creada' })
   createForUser(@Body() dto: CreateBookingDto) {
     if (!dto.userId) throw new Error('userId es requerido para crear citas a nombre de un cliente');
-    return this.bookingsService.create(dto.userId, dto);
+    // El cupo de reservas pendientes protege del abuso por el canal
+    // conversacional; la creación administrativa es intencional y no lo consume.
+    return this.bookingsService.create(dto.userId, dto, { enforcePendingCap: false });
   }
 
   @Patch(':id/confirm')

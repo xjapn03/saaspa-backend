@@ -110,6 +110,14 @@ describe('BookingSyncService', () => {
     await expect(service.confirmAndSync('booking-1')).rejects.toThrow(BadRequestException);
   });
 
+  it('should throw for a booking that expired for lack of payment', async () => {
+    // A payment that arrives after the window must not silently resurrect it.
+    bookingsRepo.findById.mockResolvedValue({ ...mockBooking, status: 'EXPIRADA' } as any);
+
+    await expect(service.confirmAndSync('booking-1')).rejects.toThrow(BadRequestException);
+    expect(bookingsRepo.update).not.toHaveBeenCalled();
+  });
+
   it('should retry pending syncs and report counts', async () => {
     bookingsRepo.findPendingCalendarSync.mockResolvedValue([
       { ...mockBooking, id: 'b1', status: 'CONFIRMADA', calendarSync: 'PENDING' } as any,

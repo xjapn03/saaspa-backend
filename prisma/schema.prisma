@@ -20,6 +20,7 @@ enum BookingStatus {
   CANCELADA
   COMPLETADA
   NO_ASISTIO
+  EXPIRADA
 }
 
 enum PaymentType {

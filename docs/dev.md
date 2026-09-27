@@ -52,6 +52,8 @@ Este backend es el **único emisor** del turn token: firma en ES256 (P-256) la i
 | `IA_BOT_API_KEY` | Secreto de la dirección NestJS → `saaspa-IA` (no confundir con el anterior). |
 | `TENANT_ID` | Debe coincidir **exactamente** con `IA_TENANT_DEFAULT` de `saaspa-IA`. |
 | `TENANT_TIMEZONE` | Debe coincidir con `saaspa.tenant.timezone` de `saaspa-IA` (default `America/Bogota`). En `NODE_ENV=production` es **obligatoria**. |
+| `BOOKING_PAYMENT_TTL_MINUTES` | Ventana de pago de una cita (default `30`). Pasada, la franja se libera y la cita pasa a `EXPIRADA`. |
+| `BOOKING_MAX_PENDING_PER_USER` | Citas `PENDIENTE_PAGO` simultáneas por usuario (default `2`; el camino admin no lo consume). |
 | `NODE_ENV` | `development` \| `production` \| `test` (default `development`). |
 
 Con `NODE_ENV=production` el esquema Joi (`src/config/env.validation.ts`) **aborta el arranque** con
@@ -166,6 +168,39 @@ Tabla `chat_conversation_states` (migración `20260926180000_add_chat_conversati
 > de tu `.env` y el nombre de esa base). Todos los specs aplican el prefijo global `api` igual que `main.ts`.
 > Los specs `auth`/`users` dependen del admin sembrado (`admin123`, la credencial documentada).
 
+## Ventana de pago y tope de reservas pendientes (triaje conjunto B-01)
+
+Una cita se crea en `PENDIENTE_PAGO`, que hasta ahora **ocupaba la franja para siempre** si nadie pagaba
+(`findOccupied` contaba como ocupada toda cita que no fuera `CANCELADA`/`NO_ASISTIO` y no existía ningún job
+que la expirara). Ahora:
+
+- **Ventana de pago configurable** (`BOOKING_PAYMENT_TTL_MINUTES`, default **30**). El número sale de tres
+  datos: el lock de Redis ya reserva la franja 10 minutos (`LOCK_TTL`), un checkout de Wompi se completa
+  normalmente en 2-10 minutos y la agenda es una jornada de 8 horas, así que 30 minutos dan margen a una
+  clienta lenta sin que una cita impaga se coma media tarde.
+- **Regla perezosa (sin depender del job)**: `findOccupied`, `findOverlapping` y `findBySlot` aplican la misma
+  condición (`occupancyFilter`), así que una cita `PENDIENTE_PAGO` creada **antes** del plazo deja de ocupar su
+  franja en el instante en que vence, aunque el barrido todavía no haya corrido. `findOccupied` y
+  `findOverlapping` no pueden divergir: comparten cláusula.
+- **Barrido periódico** (`PendingPaymentExpiryScheduler`, cada 5 minutos + una pasada al arrancar): mueve esas
+  citas a **`EXPIRADA`** (`updateMany` condicionado a que sigan en `PENDIENTE_PAGO`, así que un pago que
+  llegue a mitad del barrido gana), borra el evento de Google Calendar si lo tuviera y suelta el lock de Redis.
+  Es idempotente y seguro con varias instancias. Se usa un `setInterval` con `unref()` en lugar de
+  `@nestjs/schedule` porque el barrido no tiene semántica de calendario y el repo mantiene su conjunto de
+  dependencias pequeño.
+- **Tope por usuario** (`BOOKING_MAX_PENDING_PER_USER`, default **2**): `POST /api/bookings` responde **409** si
+  el usuario ya tiene ese número de citas `PENDIENTE_PAGO` dentro de la ventana, para que una sola
+  conversación no bloquee varias franjas antes de pagar ninguna. El camino administrativo
+  (`POST /api/bookings/admin`) no lo consume: esas citas las crea el salón a propósito.
+- **Pago tardío**: `confirmAndSync` rechaza confirmar una cita `EXPIRADA`; si la webhook de Wompi llega
+  después del vencimiento, el pago queda registrado como `APROBADO` y la cita necesita decisión manual
+  (reembolso o reagenda). Es el caso «reintento tras expirar» que `saaspa-IA` cubre en su contrato.
+- Cubierto por `bookings.repository.spec.ts`, `bookings.service.spec.ts`,
+  `pending-payment-expiry.scheduler.spec.ts` (unidad) y `test/e2e/pending-payment-expiry.e2e-spec.ts` (HTTP +
+  BD real: la franja se libera, la cita queda `EXPIRADA` y el tope responde 409).
+
+---
+
 ## Módulos (orden de implementación)
 
 | # | Módulo      | Estado       | Endpoints                                  |
@@ -173,7 +208,7 @@ Tabla `chat_conversation_states` (migración `20260926180000_add_chat_conversati
 | 1 | Auth        | **Completo** | `POST /api/auth/register`, `/login`, `/refresh`, `/logout` (**cookies httpOnly**: access `Path=/`, refresh `Path=/api/auth`), `/forgot-password`, `/reset-password`, `GET /verify-email/:token` (idempotente), `POST /auth/email-change/request` + `/confirm` (cambio de email con código) |
 | 2 | Users       | **Completo** | `GET /me`, `PATCH /me`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` |
 | 3 | Services    | **Completo** | `GET /`, `GET /public` (+ `?featured=true`), `GET /public/:slug`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id` — slug único; `mainImage`, `carouselImages`, `isFeatured`, `compareAtPrice` |
-| 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reopen`, `PATCH /:id/reschedule`, `GET /:id/balance`, `POST /admin/sync-calendar` — bloqueo GLOBAL de horarios (agenda única), completa solo con saldo pagado, Google Calendar síncrono con reintento (`calendarSync`) |
+| 4 | Bookings    | **Completo** | `GET /`, `GET /slots`, `GET /:id`, `POST /`, `POST /admin`, `PATCH /:id/confirm`, `PATCH /:id/cancel`, `PATCH /:id/complete`, `PATCH /:id/reopen`, `PATCH /:id/reschedule`, `GET /:id/balance`, `POST /admin/sync-calendar` — bloqueo GLOBAL de horarios (agenda única), completa solo con saldo pagado, Google Calendar síncrono con reintento (`calendarSync`), **ventana de pago con expiración automática a `EXPIRADA` y tope de pendientes por usuario** (ver «Ventana de pago y tope de reservas pendientes») |
 | 5 | Payments    | **Completo** | `POST /init` (ABONO/SALDO, `payFull` opcional, captura IP/User-Agent del cliente), `POST /init-cart` (con `fbc`/`fbp`/`eventId` + `shippingNit`), `POST /webhook` (idempotente; dispara Meta CAPI Purchase: e-commerce siempre, citas **solo ABONO**), `POST /manual` (efectivo/transferencia), `GET /transactions` (admin, trazabilidad con filtros), `GET /revenue?month=` (admin), `GET /:bookingId/status`. **Pasarela abstraída** tras `IPaymentProvider` (`modules/payments/providers/`), con implementación Wompi (`wompi.payment-provider.ts`) |
 | 6 | Categories  | **Completo** | `GET /` (includeInactive), `GET /tree`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
 | 7 | Products    | **Completo** | `GET /` (público + filtros), `GET /admin/all`, `GET /:slug`, `POST /`, `PATCH /:id`, `DELETE /:id` |
@@ -226,6 +261,7 @@ Product (products)
 Booking (bookings)
 ├── userId → User, serviceId → Service
 ├── startTime, endTime, status: PENDIENTE_PAGO → CONFIRMADA → COMPLETADA
+│   (+ CANCELADA, NO_ASISTIO y EXPIRADA: la franja queda libre con cualquiera de los cuatro)
 ├── googleEventId?, notes?
 ├── → payments (1:N)
 
@@ -405,7 +441,7 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (434 tests, 56 suites) — no requiere BD
+npm test              # Unit tests (456 tests, 57 suites) — no requiere BD
 npm run test:cov      # Cobertura
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 ```
@@ -455,7 +491,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (56 suites, 434 tests)
+### Inventario de suites (57 suites, 456 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
@@ -468,5 +504,6 @@ El flujo de E2E:
 | Redis | redis, token-blacklist | ~8 |
 | HTTP | `applyProxyTrust` (\`trust proxy\` = 1 salto, hallazgo J-03) | 1 |
 | Chat session | emisión, firma y validación del id de sesión anónimo | 11 |
+| Scheduler | barrido de expiración de `PENDIENTE_PAGO` | 4 |
 | Config | `envValidationSchema` (Joi, fallo cerrado en producción) | 11 |
 | E2E | auth, users | ~19 |

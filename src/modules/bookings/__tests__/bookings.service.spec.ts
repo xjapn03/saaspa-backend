@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { BookingsService } from '../bookings.service';
 import { IBookingsRepository } from '../../../repositories/interfaces/bookings.repository';
@@ -51,9 +52,22 @@ describe('BookingsService', () => {
     calendar = mockDeep<GoogleCalendarService>();
     bookingSync = mockDeep<BookingSyncService>();
 
+    await build();
+  });
+
+  /** Rebuilds the service with a different booking policy (defaults if empty). */
+  async function build(env: Record<string, unknown> = {}) {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         BookingsService,
+        {
+          provide: ConfigService,
+          useValue: new ConfigService({
+            BOOKING_PAYMENT_TTL_MINUTES: 30,
+            BOOKING_MAX_PENDING_PER_USER: 2,
+            ...env,
+          }),
+        },
         { provide: IBookingsRepository, useValue: bookingsRepo },
         { provide: IServicesRepository, useValue: servicesRepo },
         { provide: IPaymentsRepository, useValue: paymentsRepo },
@@ -63,7 +77,14 @@ describe('BookingsService', () => {
       ],
     }).compile();
     service = module.get<BookingsService>(BookingsService);
-  });
+
+    // Defaults of the happy path; individual tests override what they need.
+    bookingsRepo.countPendingByUser.mockResolvedValue(0);
+    bookingsRepo.findOverduePending.mockResolvedValue([]);
+    bookingsRepo.markExpired.mockResolvedValue(true);
+    redis.del.mockResolvedValue(1);
+    calendar.deleteEvent.mockResolvedValue(undefined);
+  }
 
   describe('findAll', () => {
     it('should delegate to repository with filters', async () => {
@@ -110,6 +131,45 @@ describe('BookingsService', () => {
       await expect(
         service.create('user-1', { serviceId: 'svc-1', startTime: startTimeISO }),
       ).rejects.toThrow(ConflictException);
+    });
+
+    it('should look for overlaps with the configured payment window', async () => {
+      servicesRepo.findById.mockResolvedValue(mockService as any);
+      bookingsRepo.findOverlapping.mockResolvedValue(null);
+      bookingsRepo.create.mockResolvedValue({ ...mockBooking } as any);
+
+      await service.create('user-1', { serviceId: 'svc-1', startTime: startTimeISO });
+
+      const [, , deadline] = bookingsRepo.findOverlapping.mock.calls[0];
+      const elapsed = Date.now() - deadline.getTime();
+      expect(elapsed).toBeGreaterThanOrEqual(30 * 60000 - 1000);
+      expect(elapsed).toBeLessThan(30 * 60000 + 1000);
+    });
+
+    it('should throw ConflictException when the user reached the pending bookings cap', async () => {
+      servicesRepo.findById.mockResolvedValue(mockService as any);
+      bookingsRepo.countPendingByUser.mockResolvedValue(2);
+
+      await expect(
+        service.create('user-1', { serviceId: 'svc-1', startTime: startTimeISO }),
+      ).rejects.toThrow(ConflictException);
+
+      // No lock and no booking are taken: the cap is checked before anything else.
+      expect(redis.setex).not.toHaveBeenCalled();
+      expect(bookingsRepo.create).not.toHaveBeenCalled();
+      expect(bookingsRepo.findOverlapping).not.toHaveBeenCalled();
+    });
+
+    it('should not apply the cap to a booking created by the salon staff', async () => {
+      servicesRepo.findById.mockResolvedValue(mockService as any);
+      bookingsRepo.countPendingByUser.mockResolvedValue(99);
+      bookingsRepo.findOverlapping.mockResolvedValue(null);
+      bookingsRepo.create.mockResolvedValue({ ...mockBooking } as any);
+
+      await service.create('user-1', { serviceId: 'svc-1', startTime: startTimeISO }, { enforcePendingCap: false });
+
+      expect(bookingsRepo.countPendingByUser).not.toHaveBeenCalled();
+      expect(bookingsRepo.create).toHaveBeenCalled();
     });
   });
 
@@ -279,6 +339,15 @@ describe('BookingsService', () => {
         service.reschedule('booking-1', newStartTime, 'user-3', false),
       ).rejects.toThrow(ForbiddenException);
     });
+    it('should throw BadRequestException when the booking expired without payment', async () => {
+      bookingsRepo.findById.mockResolvedValue({ ...mockBooking, status: 'EXPIRADA' });
+
+      await expect(
+        service.reschedule('booking-1', '2026-08-16T10:00:00.000Z', 'user-1', false),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(bookingsRepo.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('getAvailability', () => {
@@ -335,6 +404,94 @@ describe('BookingsService', () => {
       const window = await service.getAvailabilityWindow('svc-1', '2026-08-15');
 
       expect(window.slots.map((slot) => slot.start.toISOString())).toEqual(slots);
+    });
+  });
+
+  describe('expireOverduePendingBookings', () => {
+    it('moves the overdue pending bookings to EXPIRADA and releases their slot', async () => {
+      bookingsRepo.findOverduePending.mockResolvedValue([
+        { id: 'booking-1', startTime: mockBooking.startTime, googleEventId: null },
+        { id: 'booking-2', startTime: mockBooking.startTime, googleEventId: null },
+      ]);
+
+      const result = await service.expireOverduePendingBookings();
+
+      expect(result).toEqual({ expired: 2 });
+      expect(bookingsRepo.markExpired).toHaveBeenCalledWith('booking-1');
+      expect(bookingsRepo.markExpired).toHaveBeenCalledWith('booking-2');
+      expect(redis.del).toHaveBeenCalledTimes(2);
+      expect(redis.del).toHaveBeenCalledWith('slot:2026-08-15:2026-08-15T10:00:00.000Z');
+    });
+
+    it('selects the bookings with the configured payment window', async () => {
+      await service.expireOverduePendingBookings();
+
+      const [deadline] = bookingsRepo.findOverduePending.mock.calls[0];
+      const elapsed = Date.now() - deadline.getTime();
+      expect(elapsed).toBeGreaterThanOrEqual(30 * 60000 - 1000);
+      expect(elapsed).toBeLessThan(30 * 60000 + 1000);
+    });
+
+    it('keeps a booking that a payment confirmed during the sweep', async () => {
+      bookingsRepo.findOverduePending.mockResolvedValue([
+        { id: 'booking-1', startTime: mockBooking.startTime, googleEventId: null },
+      ]);
+      bookingsRepo.markExpired.mockResolvedValue(false);
+
+      const result = await service.expireOverduePendingBookings();
+
+      expect(result).toEqual({ expired: 0 });
+      expect(redis.del).not.toHaveBeenCalled();
+    });
+
+    it('removes the calendar event when the expired booking had one', async () => {
+      bookingsRepo.findOverduePending.mockResolvedValue([
+        { id: 'booking-1', startTime: mockBooking.startTime, googleEventId: 'google-event-123' },
+      ]);
+
+      await service.expireOverduePendingBookings();
+
+      expect(calendar.deleteEvent).toHaveBeenCalledWith('google-event-123');
+    });
+  });
+
+  describe('booking policy configuration', () => {
+    it('falls back to the documented defaults when nothing is configured', async () => {
+      await build({ BOOKING_PAYMENT_TTL_MINUTES: undefined, BOOKING_MAX_PENDING_PER_USER: undefined });
+      servicesRepo.findById.mockResolvedValue(mockService as any);
+      bookingsRepo.findOccupied.mockResolvedValue([]);
+      redis.keys.mockResolvedValue([]);
+
+      await service.getAvailability('svc-1', '2026-08-15');
+
+      const [, deadline] = bookingsRepo.findOccupied.mock.calls[0];
+      const elapsed = Date.now() - deadline.getTime();
+      expect(elapsed).toBeGreaterThanOrEqual(30 * 60000 - 1000);
+      expect(elapsed).toBeLessThan(30 * 60000 + 1000);
+    });
+
+    it('honours a shorter payment window', async () => {
+      await build({ BOOKING_PAYMENT_TTL_MINUTES: 15 });
+      servicesRepo.findById.mockResolvedValue(mockService as any);
+      bookingsRepo.findOccupied.mockResolvedValue([]);
+      redis.keys.mockResolvedValue([]);
+
+      await service.getAvailability('svc-1', '2026-08-15');
+
+      const [, deadline] = bookingsRepo.findOccupied.mock.calls[0];
+      const elapsed = Date.now() - deadline.getTime();
+      expect(elapsed).toBeGreaterThanOrEqual(15 * 60000 - 1000);
+      expect(elapsed).toBeLessThan(15 * 60000 + 1000);
+    });
+
+    it('honours a custom pending bookings cap', async () => {
+      await build({ BOOKING_MAX_PENDING_PER_USER: 1 });
+      servicesRepo.findById.mockResolvedValue(mockService as any);
+      bookingsRepo.countPendingByUser.mockResolvedValue(1);
+
+      await expect(
+        service.create('user-1', { serviceId: 'svc-1', startTime: startTimeISO }),
+      ).rejects.toThrow(ConflictException);
     });
   });
 });
