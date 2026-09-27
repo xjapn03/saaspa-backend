@@ -56,6 +56,9 @@ export class TurnTokenService {
     };
     if (input.userId) payload.userId = input.userId;
     if (input.role) payload.role = input.role;
+    // Optional on purpose: it comes from the trusted proxy (`resolveClientIp`),
+    // and a token without it stays valid for saaspa-IA (H-04 follow-up).
+    if (input.clientIp) payload.clientIp = input.clientIp;
 
     return this.jwtService.sign(payload, {
       privateKey: this.loadPrivateKey(),

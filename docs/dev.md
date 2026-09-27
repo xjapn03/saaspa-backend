@@ -38,6 +38,12 @@ Este backend es el **único emisor** del turn token: firma en ES256 (P-256) la i
 `saaspa-IA` lo verifica con la clave pública. El contrato y los claims están en el **ADR 0006** de
 `saaspa-IA` y en la sección 6 de `AGENTS.md`.
 
+El claim opcional **`clientIp`** es la dirección que `resolveClientIp` extrae de `req.ip` de Express, resuelta
+con `TRUSTED_PROXY_HOPS = 1` (`applyProxyTrust`): la que **añade** Nginx al final de `X-Forwarded-For`,
+idéntica a la que usa el `ThrottlerGuard` para el bucket (hallazgo J-03). Nunca se toma de una cabecera sin
+validar, se emite cruda (sin normalizar IPv6, para no divergir del bucket) y se omite si no hay dirección;
+`saaspa-IA` la usa para topear por origen además de por tenant/conversación.
+
 ### Variables
 
 | Variable | Descripción |
@@ -576,7 +582,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (61 suites, 537 tests)
+### Inventario de suites (62 suites, 545 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
@@ -587,7 +593,7 @@ El flujo de E2E:
 | Internal (IA) | turn-token, internal-auth, internal controllers, guards metadata | ~44 |
 | Chat (IA) | chat service/controller, ia-bot client, chat state repository | ~34 |
 | Redis | redis, token-blacklist | ~8 |
-| HTTP | `applyProxyTrust` (\`trust proxy\` = 1 salto, hallazgo J-03) | 1 |
+| HTTP | `applyProxyTrust` (\`trust proxy\` = 1 salto, hallazgo J-03) y `resolveClientIp` (fuente única de la IP del cliente, la del claim `clientIp`) | 5 |
 | Chat session | emisión, firma y validación del id de sesión anónimo | 11 |
 | Chat timeouts | escalera de plazos backend > IA (J-04) | 4 |
 | Chat handoff | aviso al salón, entrega/reintento, cierre/reapertura y auditoría (J-05, H-03) | 14 |

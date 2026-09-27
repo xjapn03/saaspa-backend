@@ -74,7 +74,8 @@ describe('ChatService', () => {
     ...overrides,
   });
 
-  const request = (cookies: Record<string, string> = {}) => ({ cookies } as unknown as Request);
+  const request = (cookies: Record<string, string> = {}, ip?: string) =>
+    ({ cookies, ip } as unknown as Request);
   const response = () => ({ cookie: jest.fn() }) as unknown as Response & { cookie: jest.Mock };
 
   beforeEach(async () => {
@@ -140,6 +141,22 @@ describe('ChatService', () => {
       // restarts and the anonymous counter never accumulates.
       expect(states.create).toHaveBeenCalledWith(
         expect.objectContaining({ messageCount: 1, lastMessageAt: expect.any(Date) }),
+      );
+    });
+
+    it('carries the proxy-resolved client IP in the turn token', async () => {
+      await service.handle({ message: { text: 'Hola' } }, request({}, '203.0.113.7'), response());
+
+      expect(turnTokens.issue).toHaveBeenCalledWith(
+        expect.objectContaining({ clientIp: '203.0.113.7' }),
+      );
+    });
+
+    it('omits the client IP when the request resolved none', async () => {
+      await service.handle({ message: { text: 'Hola' } }, request(), response());
+
+      expect(turnTokens.issue).toHaveBeenCalledWith(
+        expect.objectContaining({ clientIp: undefined }),
       );
     });
 

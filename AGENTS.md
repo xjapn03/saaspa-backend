@@ -139,8 +139,12 @@ Cada tarea se considera hecha cuando:
 
 El contrato del turn token es el **ADR 0006** de `saaspa-IA`: ES256 (P-256, PEM), header `kid`, claims
 `iss`, `aud` (`saaspa-ia`), `iat`, `exp` corta, `jti` = `turnId`, `tenantId`, `conversationId`, `channel`,
-`agent`, `userId?`, `role?`. Este backend lo **emite y lo verifica** (deriva la pública de la privada);
-`saaspa-IA` solo lo verifica y lo reenvía tal cual en cada llamada interna.
+`agent`, `userId?`, `role?`, `clientIp?`. Este backend lo **emite y lo verifica** (deriva la pública de la
+privada); `saaspa-IA` solo lo verifica y lo reenvía tal cual en cada llamada interna. `clientIp?` es la
+dirección que este backend resuelve con su proxy de confianza (`resolveClientIp`: el `req.ip` con el que
+`applyProxyTrust` aplica `TRUSTED_PROXY_HOPS = 1`, el **mismo valor** con el que el `ThrottlerGuard` arma el
+bucket; hallazgo J-03), **nunca** una cabecera reenviada sin validar. Es opcional a propósito: su guard de coste
+puede topear por origen además de por tenant/conversación, y un token sin el claim sigue siendo válido.
 
 ---
 
@@ -389,3 +393,14 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   400/501/429/504 ya no se vuelven a envolver en 502; 3 tests nuevos en `ia-bot.client.spec.ts` (429 con
   `detail`, 429 sin `detail` y el aviso de `scope=tenant`) — verify verde (61 suites, 537 tests). El throttle
   por IP/sesión del guard de IA es la otra mitad del hallazgo y lo evalúa `saaspa-IA`; aquí no se toca.
+- 2026-09-26 — feature/turn-token-client-ip — seguimiento de **H-04** coordinado con `saaspa-IA` (ADR 0020 en
+  su repo, modo tolerante): el turn token lleva ahora el claim opcional **`clientIp`**, la dirección que este
+  backend resuelve con su proxy de confianza, para que su guard de coste pueda topear por origen además de por
+  tenant/conversación (hoy una sola IP anónima podía agotar el presupuesto del tenant). Nuevo helper
+  `resolveClientIp` (`src/common/http/client-ip.ts`) = `req.ip` de Express con `TRUSTED_PROXY_HOPS = 1`, **el
+  mismo valor con el que el `ThrottlerGuard` arma el bucket** (J-03): nunca una cabecera reenviada sin validar,
+  sin normalizar IPv6 (para no divergir del bucket) y omitido cuando no hay dirección. El claim es opcional y
+  `verify()` no lo exige, así que un token sin él sigue siendo válido; 8 tests unitarios nuevos (`client-ip` 4,
+  `turn-token` 2, `chat.service` 2) y un caso E2E nuevo en `rate-limit.e2e-spec.ts` que decodifica el turn token
+  reenviado y afirma que `clientIp` es la dirección que añadió el proxy, no el prefijo forjado — verify verde
+  (62 suites, 545 tests) y E2E completo en verde (9 suites, 61 tests).
