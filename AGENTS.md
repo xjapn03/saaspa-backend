@@ -260,6 +260,13 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   `AuthService.register`) y responde 400 si no es parseable; 4 tests unitarios nuevos que **fallan sin el
   fix** más la aserción E2E del valor persistido; las suites E2E `auth`/`users` quedan **25/25** — verify
   verde (53 suites, 407 tests).
+- 2026-09-26 — fix/production-config-fail-closed — el esquema Joi del entorno sale de `config.module.ts` a
+  `src/config/env.validation.ts` y pasa a exigir `IA_BOT_URL`, `IA_BOT_TIMEOUT_MS` y `TENANT_TIMEZONE`
+  cuando `NODE_ENV=production`: el arranque muere con `Config validation error: ...` en lugar de caer a
+  `localhost`, a un timeout inventado o a una zona adivinada; fuera de producción conservan su default
+  (`http://localhost:8000`, `20000`, `America/Bogota`); 11 tests unitarios nuevos que **fallan sin el fix**
+  (6 de 11) y README/`docs/dev.md` actualizados con la obligatoriedad y los conteos — verify verde
+  (54 suites, 418 tests).
 - 2026-09-26 — docs/post-merge-sync — tras el merge del PR #73 (`develop` = `9fc8b12`) se alinea la
   documentación con el código real: la sección 9 pasa a listar las variables que `kamerinos-infra` debe
   inyectar (`TENANT_TIMEZONE`, `TURN_TOKEN_ISSUER`/`AUDIENCE`/`TTL_SECONDS` explícitos y `IA_BOT_URL`/
