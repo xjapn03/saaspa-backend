@@ -84,6 +84,11 @@ describe('BookingsService', () => {
     bookingsRepo.markExpired.mockResolvedValue(true);
     redis.del.mockResolvedValue(1);
     calendar.deleteEvent.mockResolvedValue(undefined);
+    bookingsRepo.findByIdempotencyKey.mockResolvedValue(null);
+    bookingsRepo.createWithIdempotencyKey.mockResolvedValue({
+      booking: mockBooking as never,
+      replayed: false,
+    });
   }
 
   describe('findAll', () => {
@@ -170,6 +175,103 @@ describe('BookingsService', () => {
 
       expect(bookingsRepo.countPendingByUser).not.toHaveBeenCalled();
       expect(bookingsRepo.create).toHaveBeenCalled();
+    });
+  });
+
+  describe('idempotency (ADR 0008/0012)', () => {
+    const KEY = 'turn-1:crearCita';
+
+    it('should return the booking of the first call when the key was already used', async () => {
+      bookingsRepo.findByIdempotencyKey.mockResolvedValue({ ...mockBooking } as any);
+
+      const result = await service.create(
+        'user-1',
+        { serviceId: 'svc-1', startTime: startTimeISO },
+        { idempotencyKey: KEY },
+      );
+
+      expect(result.id).toBe('booking-1');
+      // A retry must not be rejected by the state the first call created, and it
+      // must not create anything: no cap check, no lock, no second booking.
+      expect(bookingsRepo.countPendingByUser).not.toHaveBeenCalled();
+      expect(redis.setex).not.toHaveBeenCalled();
+      expect(bookingsRepo.create).not.toHaveBeenCalled();
+      expect(bookingsRepo.createWithIdempotencyKey).not.toHaveBeenCalled();
+    });
+
+    it('should send the key to the repository when it is new', async () => {
+      servicesRepo.findById.mockResolvedValue(mockService as any);
+      bookingsRepo.findOverlapping.mockResolvedValue(null);
+
+      await service.create(
+        'user-1',
+        { serviceId: 'svc-1', startTime: startTimeISO },
+        { idempotencyKey: KEY },
+      );
+
+      expect(bookingsRepo.createWithIdempotencyKey).toHaveBeenCalledWith(
+        expect.objectContaining({ startTime: expect.any(Date), endTime: expect.any(Date) }),
+        KEY,
+      );
+      expect(bookingsRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('should return the winner booking when two calls race with the same key', async () => {
+      servicesRepo.findById.mockResolvedValue(mockService as any);
+      bookingsRepo.findOverlapping.mockResolvedValue(null);
+      bookingsRepo.createWithIdempotencyKey.mockResolvedValue({
+        booking: { ...mockBooking, id: 'winner' } as never,
+        replayed: true,
+      });
+
+      const result = await service.create(
+        'user-1',
+        { serviceId: 'svc-1', startTime: startTimeISO },
+        { idempotencyKey: KEY },
+      );
+
+      expect(result.id).toBe('winner');
+    });
+
+    it('should reject a key that belongs to another user', async () => {
+      bookingsRepo.findByIdempotencyKey.mockResolvedValue({
+        ...mockBooking,
+        userId: 'other-user',
+      } as any);
+
+      await expect(
+        service.create(
+          'user-1',
+          { serviceId: 'svc-1', startTime: startTimeISO },
+          { idempotencyKey: KEY },
+        ),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it.each(['con espacio', 'ñ'.repeat(3), 'x'.repeat(201)])(
+      'should reject the malformed idempotency key (%s)',
+      async (key) => {
+        await expect(
+          service.create(
+            'user-1',
+            { serviceId: 'svc-1', startTime: startTimeISO },
+            { idempotencyKey: key },
+          ),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(servicesRepo.findById).not.toHaveBeenCalled();
+      },
+    );
+
+    it('should not look up any key when the header is absent', async () => {
+      servicesRepo.findById.mockResolvedValue(mockService as any);
+      bookingsRepo.findOverlapping.mockResolvedValue(null);
+      bookingsRepo.create.mockResolvedValue({ ...mockBooking } as any);
+
+      await service.create('user-1', { serviceId: 'svc-1', startTime: startTimeISO });
+
+      expect(bookingsRepo.findByIdempotencyKey).not.toHaveBeenCalled();
+      expect(bookingsRepo.createWithIdempotencyKey).not.toHaveBeenCalled();
     });
   });
 

@@ -5,6 +5,7 @@ import {
   IBookingsRepository,
   BookingFilters,
   IBookingSafe,
+  IdempotentBooking,
   IOverduePendingBooking,
   PaginatedResult,
 } from './interfaces/bookings.repository';
@@ -22,11 +23,17 @@ const bookingSelect = {
   googleEventId: true,
   calendarSync: true,
   notes: true,
+  idempotencyKey: true,
   createdAt: true,
   updatedAt: true,
   user: { select: { firstName: true, lastName: true, email: true, phone: true } },
   service: { select: { name: true, duration: true, price: true } },
 } satisfies Prisma.BookingSelect;
+
+/** Postgres unique violation, as reported by Prisma. */
+function isUniqueViolation(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
 
 @Injectable()
 export class BookingsRepository extends IBookingsRepository {
@@ -150,6 +157,35 @@ export class BookingsRepository extends IBookingsRepository {
 
   async create(data: Prisma.BookingCreateInput) {
     return this.prisma.booking.create({ data });
+  }
+
+  async createWithIdempotencyKey(
+    data: Prisma.BookingCreateInput,
+    idempotencyKey: string,
+  ): Promise<IdempotentBooking> {
+    try {
+      const booking = await this.prisma.booking.create({
+        data: { ...data, idempotencyKey },
+      });
+      return { booking, replayed: false };
+    } catch (error) {
+      // The unique index on the key is the atomicity primitive: whoever loses
+      // the race reads the resource created by the winner (ADR 0012 point 4).
+      if (!isUniqueViolation(error)) throw error;
+
+      const existing = await this.prisma.booking.findUnique({ where: { idempotencyKey } });
+      if (existing) return { booking: existing, replayed: true };
+
+      throw error;
+    }
+  }
+
+  async findByIdempotencyKey(idempotencyKey: string): Promise<IBookingSafe | null> {
+    const booking = await this.prisma.booking.findUnique({
+      where: { idempotencyKey },
+      select: bookingSelect,
+    });
+    return (booking as unknown as IBookingSafe) ?? null;
   }
 
   async update(id: string, data: Prisma.BookingUpdateInput) {

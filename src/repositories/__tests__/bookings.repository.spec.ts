@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { PrismaService } from '../../database/prisma.service';
 import { BookingsRepository } from '../bookings.repository';
@@ -239,6 +240,72 @@ describe('BookingsRepository', () => {
       const result = await repo.create(data as any);
       expect(result.id).toBe('booking-1');
       expect(prisma.booking.create).toHaveBeenCalledWith({ data });
+    });
+  });
+
+  describe('createWithIdempotencyKey', () => {
+    const data = {
+      user: { connect: { id: 'user-1' } },
+      service: { connect: { id: 'svc-1' } },
+      startTime: mockRow.startTime,
+      endTime: mockRow.endTime,
+    };
+
+    it('should store the key together with the booking', async () => {
+      prisma.booking.create.mockResolvedValue({ ...mockRow, idempotencyKey: 'key-1' } as any);
+
+      const result = await repo.createWithIdempotencyKey(data as any, 'key-1');
+
+      expect(result.replayed).toBe(false);
+      expect(prisma.booking.create).toHaveBeenCalledWith({
+        data: { ...data, idempotencyKey: 'key-1' },
+      });
+    });
+
+    it('should return the booking of the first call when the key is taken', async () => {
+      prisma.booking.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: '5.22.0',
+        }),
+      );
+      prisma.booking.findUnique.mockResolvedValue(mockRow as any);
+
+      const result = await repo.createWithIdempotencyKey(data as any, 'key-1');
+
+      expect(result.replayed).toBe(true);
+      expect(result.booking.id).toBe('booking-1');
+      expect(prisma.booking.findUnique).toHaveBeenCalledWith({
+        where: { idempotencyKey: 'key-1' },
+      });
+    });
+
+    it('should not swallow other database errors', async () => {
+      prisma.booking.create.mockRejectedValue(new Error('connection lost'));
+
+      await expect(repo.createWithIdempotencyKey(data as any, 'key-1')).rejects.toThrow(
+        'connection lost',
+      );
+    });
+  });
+
+  describe('findByIdempotencyKey', () => {
+    it('should return the booking created with that key', async () => {
+      prisma.booking.findUnique.mockResolvedValue({ ...mockRow, idempotencyKey: 'key-1' } as any);
+
+      const result = await repo.findByIdempotencyKey('key-1');
+
+      expect(result?.id).toBe('booking-1');
+      expect(prisma.booking.findUnique).toHaveBeenCalledWith({
+        where: { idempotencyKey: 'key-1' },
+        select: expect.any(Object),
+      });
+    });
+
+    it('should return null when the key is unknown', async () => {
+      prisma.booking.findUnique.mockResolvedValue(null);
+
+      await expect(repo.findByIdempotencyKey('unknown')).resolves.toBeNull();
     });
   });
 

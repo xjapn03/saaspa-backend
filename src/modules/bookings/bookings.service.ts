@@ -16,6 +16,13 @@ const SLOT_INTERVAL = 30;
 const LOCK_TTL = 10 * 60;
 const BUSINESS_HOURS = { start: 8, end: 18 };
 
+/**
+ * Shape accepted for the `Idempotency-Key` header (ADR 0008/0012). The key is
+ * built by the caller and only travels: the backend honours it, it never derives
+ * it from model output.
+ */
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:@-]{1,200}$/;
+
 @Injectable()
 export class BookingsService {
   private readonly logger = new Logger(BookingsService.name);
@@ -126,8 +133,18 @@ export class BookingsService {
   async create(
     userId: string,
     dto: CreateBookingDto,
-    options: { enforcePendingCap?: boolean } = {},
+    options: { enforcePendingCap?: boolean; idempotencyKey?: string } = {},
   ) {
+    const idempotencyKey = this.normalizeIdempotencyKey(options.idempotencyKey);
+    // A retry of a request that already created a booking returns that same
+    // booking, and it is resolved before the cap and the slot are evaluated:
+    // otherwise the retry would be rejected by the state the first call created
+    // (ADR 0008 / ADR 0012 point 4).
+    if (idempotencyKey) {
+      const existing = await this.bookingsRepo.findByIdempotencyKey(idempotencyKey);
+      if (existing) return this.assertReplayBelongsToUser(existing, userId);
+    }
+
     const service = await this.servicesRepo.findById(dto.serviceId);
     const startTime = new Date(dto.startTime);
     const endTime = new Date(startTime.getTime() + service.duration * 60000);
@@ -149,19 +166,53 @@ export class BookingsService {
     const overlap = await this.bookingsRepo.findOverlapping(startTime, endTime, deadline);
     if (overlap) throw new ConflictException('El horario se cruza con otra cita reservada');
 
+    const data = {
+      user: { connect: { id: userId } },
+      service: { connect: { id: dto.serviceId } },
+      startTime,
+      endTime,
+    };
+
     const dateKey = startTime.toISOString().split('T')[0];
     const lockKey = `slot:${dateKey}:${startTime.toISOString()}`;
 
     const lockValue = JSON.stringify({ start: startTime.toISOString(), end: endTime.toISOString() });
     await this.redis.setex(lockKey, LOCK_TTL, lockValue);
 
-    const booking = await this.bookingsRepo.create({
-      user: { connect: { id: userId } },
-      service: { connect: { id: dto.serviceId } },
-      startTime,
-      endTime,
-    });
+    if (idempotencyKey) {
+      const { booking, replayed } = await this.bookingsRepo.createWithIdempotencyKey(
+        data,
+        idempotencyKey,
+      );
+      return replayed ? this.assertReplayBelongsToUser(booking as never, userId) : booking;
+    }
 
+    return this.bookingsRepo.create(data);
+  }
+
+  /**
+   * Validates the `Idempotency-Key` header. Absent means "no idempotency", which
+   * is the case for the channels that do not send it.
+   */
+  private normalizeIdempotencyKey(raw?: string): string | undefined {
+    if (raw === undefined || raw === '') return undefined;
+    if (!IDEMPOTENCY_KEY_PATTERN.test(raw)) {
+      throw new BadRequestException(
+        'Idempotency-Key inválida: máximo 200 caracteres de [A-Za-z0-9._:@-]',
+      );
+    }
+    return raw;
+  }
+
+  /**
+   * A key that is already taken identifies the resource created by the first
+   * call. If that resource belongs to somebody else the key was reused across
+   * users: fail closed instead of leaking the booking.
+   */
+  private assertReplayBelongsToUser<T extends { userId: string }>(booking: T, userId: string): T {
+    if (booking.userId !== userId) {
+      throw new ConflictException('Idempotency-Key ya utilizada por otra operación');
+    }
     return booking;
   }
 

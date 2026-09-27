@@ -79,7 +79,20 @@ describe('BookingsController', () => {
       const result = await controller.create('user-1', dto);
 
       expect(result.id).toBe('booking-1');
-      expect(bookingsService.create).toHaveBeenCalledWith('user-1', dto);
+      expect(bookingsService.create).toHaveBeenCalledWith('user-1', dto, {
+        idempotencyKey: undefined,
+      });
+    });
+
+    it('should forward the Idempotency-Key header (ADR 0008/0012)', async () => {
+      bookingsService.create.mockResolvedValue(mockBooking as any);
+      const dto = { serviceId: 'svc-1', startTime: '2026-08-15T10:00:00.000Z' };
+
+      await controller.create('user-1', dto, 'turn-1:crearCita');
+
+      expect(bookingsService.create).toHaveBeenCalledWith('user-1', dto, {
+        idempotencyKey: 'turn-1:crearCita',
+      });
     });
 
     it('should not consume the pending bookings cap when the salon creates the booking', async () => {
@@ -90,6 +103,19 @@ describe('BookingsController', () => {
 
       expect(bookingsService.create).toHaveBeenCalledWith('user-1', dto, {
         enforcePendingCap: false,
+        idempotencyKey: undefined,
+      });
+    });
+
+    it('should forward the header on the admin path too', async () => {
+      bookingsService.create.mockResolvedValue(mockBooking as any);
+      const dto = { serviceId: 'svc-1', startTime: '2026-08-15T10:00:00.000Z', userId: 'user-1' };
+
+      await controller.createForUser(dto, 'turn-2:crearCitaAdmin');
+
+      expect(bookingsService.create).toHaveBeenCalledWith('user-1', dto, {
+        enforcePendingCap: false,
+        idempotencyKey: 'turn-2:crearCitaAdmin',
       });
     });
   });

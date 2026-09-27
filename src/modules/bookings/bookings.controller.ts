@@ -1,7 +1,7 @@
 import {
-  Controller, Get, Post, Patch, Param, Body, Query, HttpCode, HttpStatus,
+  Controller, Get, Post, Patch, Param, Body, Query, Headers, HttpCode, HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiHeader } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { BookingsService } from './bookings.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -75,21 +75,46 @@ export class BookingsController {
   @Post()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear cita (status: PENDIENTE_PAGO)' })
-  @ApiResponse({ status: 201, description: 'Cita creada' })
-  create(@CurrentUser('id') userId: string, @Body() dto: CreateBookingDto) {
-    return this.bookingsService.create(userId, dto);
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: false,
+    description:
+      'Opcional. Un reintento con la misma clave devuelve la misma cita en lugar de crear otra (ADR 0008/0012).',
+  })
+  @ApiResponse({ status: 201, description: 'Cita creada (o la misma cita, si es un reintento)' })
+  @ApiResponse({
+    status: 409,
+    description: 'Franja ocupada, tope de reservas pendientes o clave ya usada por otra operación',
+  })
+  create(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateBookingDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.bookingsService.create(userId, dto, { idempotencyKey });
   }
 
   @Post('admin')
   @Roles(Role.ADMIN, Role.EMPLEADO)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear cita para un cliente (Admin/Empleado)' })
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: false,
+    description: 'Opcional. Mismo comportamiento que en POST /bookings.',
+  })
   @ApiResponse({ status: 201, description: 'Cita creada' })
-  createForUser(@Body() dto: CreateBookingDto) {
+  createForUser(
+    @Body() dto: CreateBookingDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
     if (!dto.userId) throw new Error('userId es requerido para crear citas a nombre de un cliente');
     // El cupo de reservas pendientes protege del abuso por el canal
     // conversacional; la creación administrativa es intencional y no lo consume.
-    return this.bookingsService.create(dto.userId, dto, { enforcePendingCap: false });
+    return this.bookingsService.create(dto.userId, dto, {
+      enforcePendingCap: false,
+      idempotencyKey,
+    });
   }
 
   @Patch(':id/confirm')
