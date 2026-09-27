@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { execSync } from 'child_process';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -11,6 +12,10 @@ import { HANDOFF_ACTIVE_MESSAGE } from '../../src/modules/chat/chat.constants';
 
 const UUID = new RegExp('^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
 const CONVERSATION_ID = new RegExp('^[0-9a-f]{32}$');
+/** Server issued anonymous session: 128 bit id plus its HMAC signature. */
+const ISSUED_SESSION = new RegExp('^[0-9a-f]{32}\\.[0-9a-f]{64}$');
+
+const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
 /**
  * HTTP level test of POST /api/chat. saaspa-IA is not running in this environment,
@@ -98,7 +103,7 @@ describe('Web chat (e2e)', () => {
 
     const cookie = sessionCookieOf(response);
     expect(cookie).toContain('kamerinos_chat_session=');
-    expect(cookie.split('=')[1]).toMatch(CONVERSATION_ID);
+    expect(cookie.split('=')[1]).toMatch(ISSUED_SESSION);
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [url, options] = fetchSpy.mock.calls[0];
@@ -190,13 +195,41 @@ describe('Web chat (e2e)', () => {
     mockAssistant(assistantReply());
     const first = await chat({ message: { text: 'Hola' } });
     createdConversations.add(first.body.conversationId);
+    // A second visit gets its own session, issued by the server.
+    const second = await chat({ message: { text: 'Hola' } });
+    createdConversations.add(second.body.conversationId);
 
     const response = await chat(
       { conversationId: first.body.conversationId, message: { text: 'Hola' } },
-      `kamerinos_chat_session=${'b'.repeat(32)}`,
+      sessionCookieOf(second),
     );
 
     expect(response.status).toBe(403);
+  });
+
+  it('does not trust a session cookie the server did not issue', async () => {
+    mockAssistant(assistantReply());
+    // The old rule accepted any value of 16+ characters as a session, so this
+    // cookie used to reset the per session message cap (finding J-03).
+    const fabricated = 'b'.repeat(32);
+
+    const response = await chat(
+      { message: { text: 'Hola' } },
+      `kamerinos_chat_session=${fabricated}`,
+    );
+    createdConversations.add(response.body.conversationId);
+
+    expect(response.status).toBe(200);
+    const issuedValue = sessionCookieOf(response).split('=')[1];
+    expect(issuedValue).toMatch(ISSUED_SESSION);
+    expect(issuedValue.split('.')[0]).not.toBe(fabricated);
+
+    // The turn belongs to the session the server issued, never to the invented value.
+    const state = await prisma.chatConversationState.findUnique({
+      where: { conversationId: response.body.conversationId },
+    });
+    expect(state?.sessionKeyHash).toBe(sha256(`anon:${issuedValue.split('.')[0]}`));
+    expect(state?.sessionKeyHash).not.toBe(sha256(`anon:${fabricated}`));
   });
 
   it('rejects a message longer than the limit with 413 without calling the assistant', async () => {

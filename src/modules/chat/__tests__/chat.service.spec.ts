@@ -18,8 +18,14 @@ import {
   ANONYMOUS_MESSAGE_WINDOW_MS,
   HANDOFF_ACTIVE_MESSAGE,
 } from '../chat.constants';
+import { deriveSessionKey, signAnonymousSessionId } from '../chat-session';
 
 const hashOf = (value: string) => createHash('sha256').update(value).digest('hex');
+
+const JWT_SECRET = 'test-secret';
+const signingKey = deriveSessionKey(JWT_SECRET);
+/** Cookie value the server issues for this session id (id + signature). */
+const issuedCookie = (sessionId: string) => signAnonymousSessionId(sessionId, signingKey);
 
 describe('ChatService', () => {
   let service: ChatService;
@@ -73,6 +79,7 @@ describe('ChatService', () => {
             TENANT_ID: 'kamerinos',
             TENANT_TIMEZONE: 'America/Bogota',
             NODE_ENV: 'test',
+            JWT_SECRET,
           }),
         },
         { provide: TokenService, useValue: tokenService },
@@ -162,6 +169,67 @@ describe('ChatService', () => {
       );
       expect(res.cookie).toHaveBeenCalledTimes(1);
     });
+
+    it('accepts the session id the server issued on a previous turn', async () => {
+      states.findByConversationId.mockResolvedValue(stateFor());
+      const res = response();
+
+      await service.handle(
+        { conversationId: ANON_ID, message: { text: 'Hola de nuevo' } },
+        request({ kamerinos_chat_session: issuedCookie(ANON_ID) }),
+        res,
+      );
+
+      // Trusted as is: the conversation is found (no 403) and the cookie is not reissued.
+      expect(res.cookie).not.toHaveBeenCalled();
+      expect(states.findByConversationId).toHaveBeenCalledWith(ANON_ID);
+      expect(states.update).toHaveBeenCalledWith(
+        'state-1',
+        expect.objectContaining({ messageCount: 2 }),
+      );
+      expect(states.create).not.toHaveBeenCalled();
+    });
+
+    it.each(['b'.repeat(32), 'client-chosen-session-value'])(
+      'rejects the session id the client fabricated (%s) and issues a new one',
+      async (fabricated) => {
+        const res = response();
+
+        await service.handle(
+          { message: { text: 'Hola' } },
+          request({ kamerinos_chat_session: fabricated }),
+          res,
+        );
+
+        expect(res.cookie).toHaveBeenCalledTimes(1);
+        const [, issued] = res.cookie.mock.calls[0] as [string, string];
+        expect(issued).not.toBe(fabricated);
+        // The turn belongs to the session the server issued, never to the invented value.
+        expect(states.create).toHaveBeenCalledWith(
+          expect.objectContaining({ sessionKeyHash: hashOf(`anon:${issued.split('.')[0]}`) }),
+        );
+        expect(states.create).not.toHaveBeenCalledWith(
+          expect.objectContaining({ sessionKeyHash: hashOf(`anon:${fabricated}`) }),
+        );
+      },
+    );
+
+    it('rejects a server issued session id whose signature was tampered with', async () => {
+      const res = response();
+
+      await service.handle(
+        { message: { text: 'Hola' } },
+        request({ kamerinos_chat_session: `${ANON_ID}.${'0'.repeat(64)}` }),
+        res,
+      );
+
+      expect(res.cookie).toHaveBeenCalledTimes(1);
+      const [, issued] = res.cookie.mock.calls[0] as [string, string];
+      expect(issued.split('.')[0]).not.toBe(ANON_ID);
+      expect(states.create).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionKeyHash: hashOf(`anon:${issued.split('.')[0]}`) }),
+      );
+    });
   });
 
   describe('conversation binding', () => {
@@ -170,7 +238,7 @@ describe('ChatService', () => {
 
       const reply = await service.handle(
         { conversationId: ANON_ID, message: { text: 'Hola de nuevo' } },
-        request({ kamerinos_chat_session: ANON_ID }),
+        request({ kamerinos_chat_session: issuedCookie(ANON_ID) }),
         response(),
       );
 
@@ -184,7 +252,7 @@ describe('ChatService', () => {
       await expect(
         service.handle(
           { conversationId: ANON_ID, message: { text: 'Hola' } },
-          request({ kamerinos_chat_session: 'b'.repeat(32) }),
+          request({ kamerinos_chat_session: issuedCookie('b'.repeat(32)) }),
           response(),
         ),
       ).rejects.toThrow('La conversación no pertenece a esta sesión');
@@ -199,7 +267,7 @@ describe('ChatService', () => {
       await expect(
         service.handle(
           { conversationId: ANON_ID, message: { text: 'Hola' } },
-          request({ kamerinos_chat_session: ANON_ID }),
+          request({ kamerinos_chat_session: issuedCookie(ANON_ID) }),
           response(),
         ),
       ).rejects.toThrow('La conversación no pertenece a este tenant');
@@ -216,7 +284,7 @@ describe('ChatService', () => {
 
       const reply = await service.handle(
         { conversationId: ANON_ID, message: { text: 'Tengo una alergia' } },
-        request({ kamerinos_chat_session: ANON_ID }),
+        request({ kamerinos_chat_session: issuedCookie(ANON_ID) }),
         response(),
       );
 
@@ -251,7 +319,7 @@ describe('ChatService', () => {
 
       const reply = await service.handle(
         { conversationId: ANON_ID, message: { text: 'Cuánto cuesta el facial?' } },
-        request({ kamerinos_chat_session: ANON_ID }),
+        request({ kamerinos_chat_session: issuedCookie(ANON_ID) }),
         response(),
       );
 
@@ -285,7 +353,7 @@ describe('ChatService', () => {
       await expect(
         service.handle(
           { conversationId: ANON_ID, message: { text: 'Hola' } },
-          request({ kamerinos_chat_session: ANON_ID }),
+          request({ kamerinos_chat_session: issuedCookie(ANON_ID) }),
           response(),
         ),
       ).rejects.toMatchObject({ status: 429 });
@@ -324,7 +392,7 @@ describe('ChatService', () => {
 
       await service.handle(
         { conversationId: ANON_ID, message: { text: 'Hola' } },
-        request({ kamerinos_chat_session: ANON_ID }),
+        request({ kamerinos_chat_session: issuedCookie(ANON_ID) }),
         response(),
       );
 
