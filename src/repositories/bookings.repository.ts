@@ -1,7 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
-import { IBookingsRepository, BookingFilters, IBookingSafe, PaginatedResult } from './interfaces/bookings.repository';
+import {
+  IBookingsRepository,
+  BookingFilters,
+  IBookingSafe,
+  IOverduePendingBooking,
+  PaginatedResult,
+} from './interfaces/bookings.repository';
+
+/** Upper bound of bookings handled by one expiry sweep. */
+const EXPIRY_BATCH_SIZE = 500;
 
 const bookingSelect = {
   id: true,
@@ -23,6 +32,21 @@ const bookingSelect = {
 export class BookingsRepository extends IBookingsRepository {
   constructor(private prisma: PrismaService) {
     super();
+  }
+
+  /**
+   * A booking holds its slot until it is cancelled, completed, missed or
+   * expired; a PENDIENTE_PAGO one stops holding it once its payment window
+   * closes, even if the sweep has not normalised the status yet. One shared rule
+   * so availability and the overlap checks can never disagree.
+   */
+  private occupancyFilter(pendingPaymentDeadline: Date): Prisma.BookingWhereInput {
+    return {
+      NOT: [
+        { status: { in: ['CANCELADA', 'NO_ASISTIO', 'EXPIRADA'] } },
+        { status: 'PENDIENTE_PAGO', createdAt: { lt: pendingPaymentDeadline } },
+      ],
+    };
   }
 
   async findAll(filters: BookingFilters = {}): Promise<PaginatedResult<IBookingSafe>> {
@@ -82,21 +106,26 @@ export class BookingsRepository extends IBookingsRepository {
     return booking as unknown as IBookingSafe;
   }
 
-  async findBySlot(serviceId: string, startTime: Date, endTime: Date) {
+  async findBySlot(
+    serviceId: string,
+    startTime: Date,
+    endTime: Date,
+    pendingPaymentDeadline: Date,
+  ) {
     return this.prisma.booking.findFirst({
       where: {
         serviceId,
         startTime,
         endTime,
-        status: { notIn: ['CANCELADA', 'NO_ASISTIO'] },
+        ...this.occupancyFilter(pendingPaymentDeadline),
       },
     });
   }
 
-  async findOverlapping(startTime: Date, endTime: Date) {
+  async findOverlapping(startTime: Date, endTime: Date, pendingPaymentDeadline: Date) {
     return this.prisma.booking.findFirst({
       where: {
-        status: { notIn: ['CANCELADA', 'NO_ASISTIO'] },
+        ...this.occupancyFilter(pendingPaymentDeadline),
         startTime: { lt: endTime },
         endTime: { gt: startTime },
       },
@@ -104,7 +133,7 @@ export class BookingsRepository extends IBookingsRepository {
     });
   }
 
-  async findOccupied(date: string) {
+  async findOccupied(date: string, pendingPaymentDeadline: Date) {
     const [yyyy, mm, dd] = date.split('-').map(Number);
     const dayStart = new Date(yyyy, mm - 1, dd, 0, 0, 0);
     const dayEnd = new Date(yyyy, mm - 1, dd, 23, 59, 59, 999);
@@ -112,7 +141,7 @@ export class BookingsRepository extends IBookingsRepository {
     const bookings = await this.prisma.booking.findMany({
       where: {
         startTime: { gte: dayStart, lte: dayEnd },
-        status: { notIn: ['CANCELADA', 'NO_ASISTIO'] },
+        ...this.occupancyFilter(pendingPaymentDeadline),
       },
       select: { startTime: true, endTime: true },
     });
@@ -142,5 +171,37 @@ export class BookingsRepository extends IBookingsRepository {
       orderBy: { startTime: 'asc' },
     });
     return bookings as unknown as IBookingSafe[];
+  }
+
+  async countPendingByUser(userId: string, pendingPaymentDeadline: Date): Promise<number> {
+    return this.prisma.booking.count({
+      where: {
+        userId,
+        status: 'PENDIENTE_PAGO',
+        createdAt: { gte: pendingPaymentDeadline },
+      },
+    });
+  }
+
+  async findOverduePending(pendingPaymentDeadline: Date): Promise<IOverduePendingBooking[]> {
+    return this.prisma.booking.findMany({
+      where: {
+        status: 'PENDIENTE_PAGO',
+        createdAt: { lt: pendingPaymentDeadline },
+      },
+      select: { id: true, startTime: true, googleEventId: true },
+      orderBy: { createdAt: 'asc' },
+      take: EXPIRY_BATCH_SIZE,
+    });
+  }
+
+  async markExpired(id: string): Promise<boolean> {
+    // Conditional on purpose: the sweep must not overwrite a booking that a
+    // payment confirmed between the query and this write.
+    const { count } = await this.prisma.booking.updateMany({
+      where: { id, status: 'PENDIENTE_PAGO' },
+      data: { status: 'EXPIRADA' },
+    });
+    return count === 1;
   }
 }

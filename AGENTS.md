@@ -286,6 +286,19 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   conocido del tope por sesión (se cuenta por conversación y borrar la cookie da una sesión nueva), y el
   límite global del lado de `saaspa-IA` va en su propio repo — verify verde (56 suites, 434 tests) con el
   E2E completo local en verde.
+- 2026-09-26 — feature/pending-payment-expiry — hallazgo **B-01** del triaje conjunto (bloqueante de la
+  escritura de Fase 2): la franja de una cita `PENDIENTE_PAGO` ya no queda bloqueada para siempre. Ventana de
+  pago configurable (`BOOKING_PAYMENT_TTL_MINUTES`, default **30** min: el lock de Redis ya reserva 10, un
+  checkout de Wompi tarda 2-10 y la jornada es de 8 h) aplicada de forma **perezosa** por una única cláusula
+  compartida (`occupancyFilter`) en `findOccupied`/`findOverlapping`/`findBySlot`; nuevo estado `EXPIRADA`
+  (migración `20260926235900_add_expired_booking_status`) al que un barrido periódico
+  (`PendingPaymentExpiryScheduler`: cada 5 min y una pasada al arrancar, `setInterval` con `unref()`, sin
+  `@nestjs/schedule`) mueve las citas vencidas con un `updateMany` condicionado a que sigan en
+  `PENDIENTE_PAGO` (un pago a mitad del barrido gana) y liberando el lock de Redis; tope de pendientes
+  simultáneas por usuario (`BOOKING_MAX_PENDING_PER_USER`, default 2 → **409**, el camino admin no lo
+  consume); 22 tests unitarios nuevos y un E2E HTTP con BD real (la franja se libera, la cita queda
+  `EXPIRADA` y el tope responde 409); documentado en `README.md`, `.env.example` y `docs/dev.md` — verify
+  verde (57 suites, 456 tests).
 - 2026-09-26 — docs/post-merge-sync — tras el merge del PR #73 (`develop` = `9fc8b12`) se alinea la
   documentación con el código real: la sección 9 pasa a listar las variables que `kamerinos-infra` debe
   inyectar (`TENANT_TIMEZONE`, `TURN_TOKEN_ISSUER`/`AUDIENCE`/`TTL_SECONDS` explícitos y `IA_BOT_URL`/

@@ -81,6 +81,17 @@ describe('BookingsController', () => {
       expect(result.id).toBe('booking-1');
       expect(bookingsService.create).toHaveBeenCalledWith('user-1', dto);
     });
+
+    it('should not consume the pending bookings cap when the salon creates the booking', async () => {
+      bookingsService.create.mockResolvedValue(mockBooking as any);
+      const dto = { serviceId: 'svc-1', startTime: '2026-08-15T10:00:00.000Z', userId: 'user-1' };
+
+      await controller.createForUser(dto);
+
+      expect(bookingsService.create).toHaveBeenCalledWith('user-1', dto, {
+        enforcePendingCap: false,
+      });
+    });
   });
 
   describe('cancel', () => {
