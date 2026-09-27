@@ -226,6 +226,10 @@ Pendientes (van a otro repo; **no** se implementan aquí):
   `AGENTS.md`.
 - **`saaspa-frontend`:** el widget de chat envía `credentials: 'include'` y reenvía `conversationId`
   en cada turno.
+- **`kamerinos-infra`:** inyectar `SALON_NOTIFICATION_EMAIL` en el servicio `backend` (J-05 / ADR 0013): es la
+  bandeja que recibe los avisos de handoff del chat. **No es un secreto**, así que puede ir en el compose o en
+  el `.env` del despliegue sin fricción; si no se define, los avisos caen en `ADMIN_NOTIFY_EMAIL`
+  (`kamerinosg@gmail.com`), que ya recibe las copias de citas y pedidos.
 
 ---
 
@@ -322,6 +326,16 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   que la clienta nunca vio); `chat/__tests__/timeout-ladder.spec.ts` (4 tests) vigila la relación —falla si el
   backend baja del deadline del asistente— y fija los números acordados; `.env.example`, `README.md` y
   `docs/dev.md` documentan la escalera — verify verde (60 suites, 492 tests).
+- 2026-09-26 — feature/handoff-notification-and-reopen — hallazgo **J-05** / ADR 0013: el handoff deja de ser un
+  latch permanente. Al activarse se envía un correo interno al salón (`SALON_NOTIFICATION_EMAIL`, con
+  `ADMIN_NOTIFY_EMAIL` como respaldo; se eligió correo por la fricción de la plantilla de Meta en WhatsApp y
+  porque SendGrid ya está integrado) con el motivo, la conversación, el turno, el mensaje que lo disparó y cómo
+  cerrarlo; el disparo queda persistido (`handoffMessage`, `handoffAt`, `handoffClosedAt`, migración
+  `20260927120000_add_chat_handoff_detail`) y un endpoint admin
+  (`PATCH /api/chat/conversations/:id/handoff` con `close`/`reopen`, ADMIN/EMPLEADO) permite desactivarlo con
+  constancia en el AuditLog (el interceptor ahora lee el `entityId` de rutas con una colección intermedia); 20
+  tests unitarios nuevos (chat, repositorio, email y auditoría) y un E2E del flujo completo (handoff → aviso →
+  cierre por endpoint → el bot responde otra vez) — verify verde (61 suites, 512 tests).
 - 2026-09-26 — docs/post-merge-sync — tras el merge del PR #73 (`develop` = `9fc8b12`) se alinea la
   documentación con el código real: la sección 9 pasa a listar las variables que `kamerinos-infra` debe
   inyectar (`TENANT_TIMEZONE`, `TURN_TOKEN_ISSUER`/`AUDIENCE`/`TTL_SECONDS` explícitos y `IA_BOT_URL`/

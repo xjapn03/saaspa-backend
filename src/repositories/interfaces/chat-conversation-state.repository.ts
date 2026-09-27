@@ -12,6 +12,9 @@ export interface IChatConversationState {
   sessionKeyHash: string;
   handoffActive: boolean;
   handoffReason: string | null;
+  handoffMessage: string | null;
+  handoffAt: Date | null;
+  handoffClosedAt: Date | null;
   lastTurnId: string | null;
   messageCount: number;
   lastMessageAt: Date | null;
@@ -31,6 +34,8 @@ export interface CreateChatConversationStateInput {
   lastMessageAt?: Date;
   handoffActive?: boolean;
   handoffReason?: string | null;
+  handoffMessage?: string | null;
+  handoffAt?: Date | null;
 }
 
 export interface UpdateChatConversationStateInput {
@@ -39,10 +44,26 @@ export interface UpdateChatConversationStateInput {
   lastMessageAt: Date;
   handoffActive?: boolean;
   handoffReason?: string | null;
+  handoffMessage?: string | null;
+  handoffAt?: Date | null;
+}
+
+/** Reversal of the handoff by a person of the salon (ADR 0013 point 2). */
+export interface SetChatHandoffInput {
+  handoffActive: boolean;
+  handoffReason?: string | null;
+  handoffMessage?: string | null;
+  handoffAt?: Date | null;
+  handoffClosedAt?: Date | null;
 }
 
 export abstract class IChatConversationStateRepository {
   abstract findByConversationId(conversationId: string): Promise<IChatConversationState | null>;
   abstract create(data: CreateChatConversationStateInput): Promise<IChatConversationState>;
   abstract update(id: string, data: UpdateChatConversationStateInput): Promise<IChatConversationState>;
+  /** Closes or reopens the handoff without touching the turn counters. */
+  abstract setHandoff(
+    conversationId: string,
+    data: SetChatHandoffInput,
+  ): Promise<IChatConversationState>;
 }

@@ -5,6 +5,7 @@ import {
   CreateChatConversationStateInput,
   IChatConversationState,
   IChatConversationStateRepository,
+  SetChatHandoffInput,
   UpdateChatConversationStateInput,
 } from './interfaces/chat-conversation-state.repository';
 
@@ -44,6 +45,30 @@ export class ChatConversationStateRepository extends IChatConversationStateRepos
         lastMessageAt: data.lastMessageAt,
         ...(data.handoffActive === undefined ? {} : { handoffActive: data.handoffActive }),
         ...(data.handoffReason === undefined ? {} : { handoffReason: data.handoffReason }),
+        ...(data.handoffMessage === undefined ? {} : { handoffMessage: data.handoffMessage }),
+        ...(data.handoffAt === undefined ? {} : { handoffAt: data.handoffAt }),
+      },
+    });
+    return state as unknown as IChatConversationState;
+  }
+
+  /**
+   * Closes or reopens the handoff of a conversation (ADR 0013 point 2). It does
+   * not touch the turn counters: a person acting on the conversation is not a
+   * turn of the bot.
+   */
+  async setHandoff(
+    conversationId: string,
+    data: SetChatHandoffInput,
+  ): Promise<IChatConversationState> {
+    const state = await this.prisma.chatConversationState.update({
+      where: { conversationId },
+      data: {
+        handoffActive: data.handoffActive,
+        ...(data.handoffReason === undefined ? {} : { handoffReason: data.handoffReason }),
+        ...(data.handoffMessage === undefined ? {} : { handoffMessage: data.handoffMessage }),
+        ...(data.handoffAt === undefined ? {} : { handoffAt: data.handoffAt }),
+        ...(data.handoffClosedAt === undefined ? {} : { handoffClosedAt: data.handoffClosedAt }),
       },
     });
     return state as unknown as IChatConversationState;

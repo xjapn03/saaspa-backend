@@ -23,6 +23,9 @@ export const HANDOFF_ACTIVE_MESSAGE =
 
 export const CHAT_LOCALE = 'es-CO';
 
+/** Reason stored when a person of the salon hands the conversation back to a human. */
+export const MANUAL_REOPEN_REASON = 'MANUAL_REOPEN';
+
 export const ANONYMOUS_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**

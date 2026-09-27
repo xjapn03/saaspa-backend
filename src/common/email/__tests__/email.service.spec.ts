@@ -167,4 +167,77 @@ describe('EmailService', () => {
       await expect(service.sendBookingReceipt(bookingData)).resolves.toBeUndefined();
     });
   });
+
+  describe('chat handoff notification (J-05 / ADR 0013)', () => {
+    const handoff = {
+      conversationId: 'a'.repeat(32),
+      reason: 'HEALTH_TOPIC',
+      message: 'Tengo una alergia <b>fuerte</b>',
+      at: new Date('2026-09-27T12:00:00.000Z'),
+      turnId: 'turn-1',
+      userId: 'user-1',
+    };
+
+    const build = async (env: Record<string, string | undefined>) => {
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          EmailService,
+          { provide: ConfigService, useValue: { get: (key: string) => env[key] } },
+        ],
+      }).compile();
+      return module.get<EmailService>(EmailService);
+    };
+
+    const sendCalls = (send: jest.SpyInstance) =>
+      send.mock.calls[0] as [string, string, string, string, string];
+
+    it('sends the alert to SALON_NOTIFICATION_EMAIL with what a person needs', async () => {
+      const emailService = await build({ SALON_NOTIFICATION_EMAIL: 'salon@test.com' });
+      const send = jest.spyOn(emailService as any, 'send').mockResolvedValue(undefined);
+
+      await emailService.sendHandoffNotification(handoff);
+
+      const [to, subject, html, template, id] = sendCalls(send);
+      expect(to).toBe('salon@test.com');
+      expect(subject).toContain('atención humana');
+      expect(template).toBe('chat-handoff');
+      expect(id).toBe(handoff.conversationId);
+      expect(html).toContain('HEALTH_TOPIC');
+      expect(html).toContain(handoff.conversationId);
+      expect(html).toContain('turn-1');
+      expect(html).toContain('registrada (user-1)');
+      // How to close it, so a person can undo the latch without the dashboard.
+      expect(html).toContain(`/api/chat/conversations/${handoff.conversationId}/handoff`);
+      expect(html).toContain('"action":"close"');
+      expect(html).toContain('"action":"reopen"');
+    });
+
+    it('escapes the client message before it reaches the HTML', async () => {
+      const emailService = await build({ SALON_NOTIFICATION_EMAIL: 'salon@test.com' });
+      const send = jest.spyOn(emailService as any, 'send').mockResolvedValue(undefined);
+
+      await emailService.sendHandoffNotification(handoff);
+
+      const [, , html] = sendCalls(send);
+      expect(html).toContain('&lt;b&gt;fuerte&lt;/b&gt;');
+      expect(html).not.toContain('<b>fuerte</b>');
+    });
+
+    it('falls back to the staff inbox when SALON_NOTIFICATION_EMAIL is missing', async () => {
+      const emailService = await build({ ADMIN_NOTIFY_EMAIL: 'staff@test.com' });
+      const send = jest.spyOn(emailService as any, 'send').mockResolvedValue(undefined);
+
+      await emailService.sendHandoffNotification({
+        ...handoff,
+        reason: null,
+        message: null,
+        userId: null,
+      });
+
+      const [to, , html] = sendCalls(send);
+      expect(to).toBe('staff@test.com');
+      expect(html).toContain('(sin texto)');
+      expect(html).toContain('anónima (widget)');
+    });
+  });
 });

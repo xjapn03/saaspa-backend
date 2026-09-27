@@ -257,6 +257,13 @@ model ChatConversationState {
   sessionKeyHash String
   handoffActive  Boolean   @default(false)
   handoffReason  String?
+  /// Text of the client message that triggered the handoff: the reason alone is
+  /// not enough for a person to take over the conversation (J-05 / ADR 0013).
+  handoffMessage String?
+  /// When the handoff was requested.
+  handoffAt      DateTime?
+  /// When a person closed it; who and when also live in the AuditLog.
+  handoffClosedAt DateTime?
   lastTurnId     String?
   messageCount   Int       @default(0)
   lastMessageAt  DateTime?

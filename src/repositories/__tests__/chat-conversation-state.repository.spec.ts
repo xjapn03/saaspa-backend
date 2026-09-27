@@ -18,6 +18,9 @@ describe('ChatConversationStateRepository', () => {
     sessionKeyHash: 'hash',
     handoffActive: false,
     handoffReason: null,
+    handoffMessage: null,
+    handoffAt: null,
+    handoffClosedAt: null,
     lastTurnId: 'turn-1',
     messageCount: 1,
     lastMessageAt: new Date(),
@@ -111,5 +114,70 @@ describe('ChatConversationStateRepository', () => {
     const data = prisma.chatConversationState.update.mock.calls[0][0].data as Record<string, unknown>;
     expect('handoffActive' in data).toBe(false);
     expect('handoffReason' in data).toBe(false);
+    expect('handoffMessage' in data).toBe(false);
+    expect('handoffAt' in data).toBe(false);
+  });
+
+  it('stores the message and the instant that triggered the handoff', async () => {
+    prisma.chatConversationState.update.mockResolvedValue(row as never);
+    const handoffAt = new Date('2026-09-27T12:00:00.000Z');
+
+    await repository.update('state-1', {
+      lastTurnId: 'turn-2',
+      messageCount: 2,
+      lastMessageAt: handoffAt,
+      handoffActive: true,
+      handoffReason: 'HEALTH_TOPIC',
+      handoffMessage: 'Tengo una alergia',
+      handoffAt,
+    });
+
+    expect(prisma.chatConversationState.update).toHaveBeenCalledWith({
+      where: { id: 'state-1' },
+      data: expect.objectContaining({
+        handoffActive: true,
+        handoffReason: 'HEALTH_TOPIC',
+        handoffMessage: 'Tengo una alergia',
+        handoffAt,
+      }),
+    });
+  });
+
+  describe('setHandoff', () => {
+    it('closes the handoff without touching the turn counters', async () => {
+      prisma.chatConversationState.update.mockResolvedValue(row as never);
+      const closedAt = new Date('2026-09-27T13:00:00.000Z');
+
+      await repository.setHandoff('c1', { handoffActive: false, handoffClosedAt: closedAt });
+
+      expect(prisma.chatConversationState.update).toHaveBeenCalledWith({
+        where: { conversationId: 'c1' },
+        data: { handoffActive: false, handoffClosedAt: closedAt },
+      });
+    });
+
+    it('reopens the handoff with its reason', async () => {
+      prisma.chatConversationState.update.mockResolvedValue(row as never);
+      const handoffAt = new Date('2026-09-27T14:00:00.000Z');
+
+      await repository.setHandoff('c1', {
+        handoffActive: true,
+        handoffReason: 'MANUAL_REOPEN',
+        handoffMessage: null,
+        handoffAt,
+        handoffClosedAt: null,
+      });
+
+      const data = prisma.chatConversationState.update.mock.calls[0][0].data as Record<string, unknown>;
+      expect(data).toEqual({
+        handoffActive: true,
+        handoffReason: 'MANUAL_REOPEN',
+        handoffMessage: null,
+        handoffAt,
+        handoffClosedAt: null,
+      });
+      expect('messageCount' in data).toBe(false);
+      expect('lastTurnId' in data).toBe(false);
+    });
   });
 });

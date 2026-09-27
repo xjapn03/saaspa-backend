@@ -1,9 +1,22 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Req, Res } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Req,
+  Res,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import { Role } from '@prisma/client';
 import { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { ChatService } from './chat.service';
+import { UpdateHandoffDto } from './dto/update-handoff.dto';
 import { WebChatRequestDto } from './dto/web-chat-request.dto';
 
 /**
@@ -34,5 +47,20 @@ export class ChatController {
     @Res({ passthrough: true }) response: Response,
   ) {
     return this.chatService.handle(dto, request, response);
+  }
+
+  /**
+   * Reversal of the handoff (J-05 / ADR 0013): without it the bot never answers
+   * that conversation again. The global AuditInterceptor records who and when.
+   */
+  @Patch('conversations/:id/handoff')
+  @Roles(Role.ADMIN, Role.EMPLEADO)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cerrar o reabrir el handoff de una conversación (Admin/Empleado)' })
+  @ApiParam({ name: 'id', description: 'conversationId de la conversación' })
+  @ApiResponse({ status: 200, description: 'Estado del handoff actualizado' })
+  @ApiResponse({ status: 404, description: 'Conversación no encontrada' })
+  updateHandoff(@Param('id') id: string, @Body() dto: UpdateHandoffDto) {
+    return this.chatService.setHandoff(id, dto.action);
   }
 }

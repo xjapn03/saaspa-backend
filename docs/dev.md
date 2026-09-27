@@ -164,7 +164,7 @@ Punto de entrada único del canal web (widget anónimo y clienta logueada). El f
 | Identidad | cookie de sesión (`kamerinos_access_token`, HS256) → canal `WEB_LOGGED`; ausente o caducada → anónimo y canal `WEB_WIDGET` (el canal `DASHBOARD` llega en la Fase 3) |
 | `conversationId` | ausente → aleatorio de **128 bits** (32 hex) y se devuelve en la respuesta |
 | Sesión anónima | cookie httpOnly `kamerinos_chat_session` con un id de **128 bits emitido por el servidor** y firmado (`<id>.<hmac>`); un valor fabricado o manipulado por el cliente se rechaza y el servidor emite uno nuevo. El estado guarda `sha256(sessionKey)`, así que un `conversationId` de otra sesión responde **403** |
-| Handoff (A-10a) | `ChatConversationState.handoffActive`; mientras esté activo el backend responde el mensaje canónico **sin** llamar a la IA |
+| Handoff (A-10a) | `ChatConversationState.handoffActive`; mientras esté activo el backend responde el mensaje canónico **sin** llamar a la IA. Se cierra o se reabre desde el endpoint admin (ver «Handoff: aviso al salón y cierre/reapertura») |
 | Anti-abuso | 20 req/min por IP (`@Throttle`), tope de 30 mensajes por sesión anónima en ventana de 1 h (**429**) y mensaje de más de 1000 caracteres (**413**) |
 | Errores de la IA | `ProblemDetail` mapeado: 400 → 400, 501 → 501, timeout → **504**, resto → **502** |
 
@@ -195,6 +195,32 @@ Escalera de plazos de un turno (hallazgo J-04):
   sobrescribir por entorno (mismo default). La relación la vigila `chat/__tests__/timeout-ladder.spec.ts`:
   baja el timeout del backend por debajo del deadline del asistente y la suite falla, incluido un test que fija
   los números acordados para que moverlos sea una decisión consciente y conjunta.
+
+### Handoff del chat: aviso al salón y cierre/reapertura (J-05 / ADR 0013)
+
+El handoff era un **latch permanente**: el backend guardaba `handoffActive`/`handoffReason`, nadie recibía el
+aviso y nada permitía desactivarlo. Ahora:
+
+- **Aviso por correo al salón.** Cuando el turno lo pide `saaspa-IA` se envía un correo interno a
+  `SALON_NOTIFICATION_EMAIL` (si no está configurada, a `ADMIN_NOTIFY_EMAIL`) con el **motivo**, la
+  **conversación**, el **turno**, el **mensaje que lo disparó** y **cómo cerrarlo**. Se eligió correo y no
+  WhatsApp porque un mensaje saliente fuera de la ventana de 24 h exige plantilla aprobada por Meta, y el correo
+  ya está integrado. El texto de la clienta se escapa antes de llegar al HTML.
+- **El disparo queda persistido** en `chat_conversation_states`: `handoffMessage` (el texto), `handoffAt`
+  (cuándo) y `handoffReason`; `handoffClosedAt` guarda cuándo se cerró, y **quién** lo cerró vive en el
+  `AuditLog`.
+- **Cierre y reapertura por endpoint admin** (mismo patrón que `POST /bookings/admin`):
+  `PATCH /api/chat/conversations/:id/handoff` con `{ "action": "close" }` o `{ "action": "reopen" }`
+  (`ADMIN`/`EMPLEADO`). El interceptor global de auditoría registra acción, entidad (`chat`), `entityId` (el
+  `conversationId`), actor e IP.
+  - `close`: la persona ya atendió a la clienta → el handoff termina y **el bot vuelve a responder** ese hilo.
+  - `reopen`: devolver la conversación a una persona (motivo `MANUAL_REOPEN`); no vuelve a avisar al salón,
+    porque lo pidió una persona a propósito.
+- **Sigue pendiente (J-02):** no hay endpoint del widget que consuma este estado ni vista visual de la
+  conversación; este trabajo es de datos y notificación. La interfaz es tarea futura de `saaspa-frontend`.
+- Cubierto por `chat/__tests__/chat.service.spec.ts`, `chat-conversation-state.repository.spec.ts`,
+  `email.service.spec.ts`, `audit.interceptor.spec.ts` y el E2E `chat-handoff.e2e-spec.ts` (el handoff se activa
+  → llega el aviso → se cierra por el endpoint → el bot responde otra vez).
 
 Tabla `chat_conversation_states` (migración `20260926180000_add_chat_conversation_state`): `tenantId`
 (default `kamerinos`), `conversationId` único, `channel`, `identityKind`, `userId`, `sessionKeyHash`,
@@ -478,7 +504,7 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (492 tests, 60 suites) — no requiere BD
+npm test              # Unit tests (512 tests, 61 suites) — no requiere BD
 npm run test:cov      # Cobertura
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 ```
@@ -528,7 +554,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (60 suites, 492 tests)
+### Inventario de suites (61 suites, 512 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
@@ -542,6 +568,8 @@ El flujo de E2E:
 | HTTP | `applyProxyTrust` (\`trust proxy\` = 1 salto, hallazgo J-03) | 1 |
 | Chat session | emisión, firma y validación del id de sesión anónimo | 11 |
 | Chat timeouts | escalera de plazos backend > IA (J-04) | 4 |
+| Chat handoff | aviso al salón, cierre/reapertura y auditoría (J-05) | 11 |
+| Audit | interceptor: actor, entidad e `entityId` | 5 |
 | Scheduler | barrido de expiración de `PENDIENTE_PAGO` | 4 |
 | Internal identity | contrato arquitectónico + `@TurnContext`/`requireTurnUser` (ADR 0012) | 17 |
 | Config | `envValidationSchema` (Joi, fallo cerrado en producción) | 11 |
