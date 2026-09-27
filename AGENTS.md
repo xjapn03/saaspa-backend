@@ -224,6 +224,13 @@ Pendientes (van a otro repo; **no** se implementan aquí):
   `tzdata` porque la zona se calcula con `Intl`/ICU, pero los logs y los procesos de Node sí.
 - **`saaspa-IA`:** documentar el acoplamiento `TENANT_ID` ↔ `IA_TENANT_DEFAULT` (ver sección 6) en su
   `AGENTS.md`.
+- **`saaspa-IA`:** actualizar la nota del 429 en sus contratos: en `docs/contracts/chat-api.openapi.yaml` ya no
+  aplica el «hoy el backend mapea cualquier respuesta distinta de 400/501 a 502 (J-07)» — el 429 llega tal cual
+  al widget (H-04, resuelto aquí) — y la descripción del 429 en `docs/contracts/web-chat-api.openapi.yaml`, que
+  hoy solo menciona el Throttler de 20 req/min por IP y el tope de 30 mensajes por hora, debe incluir el tope de
+  coste de la IA (`scope` `tenant`|`conversation`, `measure` `turns`|`tokens`, ADR 0010).
+- **`saaspa-IA`:** la otra mitad de H-04 (throttle por IP/sesión dentro del guard de IA) la evalúa ese repo por
+  separado; este backend no la toca.
 - **`saaspa-frontend`:** el widget de chat envía `credentials: 'include'` y reenvía `conversationId`
   en cada turno.
 - **`saaspa-frontend`:** el estado nuevo **`PAGO_TARDE`** (H-01) es el de una cita con el pago **aprobado** y
@@ -373,3 +380,12 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   antes de que exista quien lo necesite); 6 tests unitarios nuevos y un caso E2E nuevo (primer envío falla, el
   siguiente turno reintenta y registra la entrega) — verify verde (61 suites, 534 tests) y E2E completo en verde
   (9 suites, 60 tests).
+- 2026-09-26 — fix/ia-429-mapping — hallazgo **H-04** de la revisión conjunta #2: el 429 que `saaspa-IA` puede
+  devolver por el tope de coste de ADR 0010 deja de llegar al widget como **502** genérico.
+  `IaBotClient.mapError` lo mapea a un `HttpException` con **429** y texto propio (el `detail` del
+  `ProblemDetail` si viene; si no, «estamos recibiendo muchos mensajes en este momento») y `readProblemDetail`
+  extrae además el `scope`, así que un rechazo con `scope=tenant` deja un `logger.warn` como señal de abuso o de
+  tope por subir (sin PII); el `catch` se simplifica a re-lanzar cualquier `HttpException`, de modo que
+  400/501/429/504 ya no se vuelven a envolver en 502; 3 tests nuevos en `ia-bot.client.spec.ts` (429 con
+  `detail`, 429 sin `detail` y el aviso de `scope=tenant`) — verify verde (61 suites, 537 tests). El throttle
+  por IP/sesión del guard de IA es la otra mitad del hallazgo y lo evalúa `saaspa-IA`; aquí no se toca.
