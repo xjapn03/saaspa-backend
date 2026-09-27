@@ -119,7 +119,7 @@ Ver `.env.example` para la lista completa. Claves principales:
 | `TURN_TOKEN_KID`        | Identificador de la clave en el header del turn token (`kid`) |
 | `TENANT_ID`             | Debe coincidir con `IA_TENANT_DEFAULT` de saaspa-IA |
 | `TENANT_TIMEZONE`       | Debe coincidir con `saaspa.tenant.timezone` de saaspa-IA — **obligatoria en producción** |
-| `BOOKING_PAYMENT_TTL_MINUTES` | Minutos que una cita puede estar `PENDIENTE_PAGO` antes de liberar su franja (default `30`) |
+| `BOOKING_PAYMENT_TTL_MINUTES` | Minutos que una cita puede estar `PENDIENTE_PAGO` antes de liberar su franja (default `30`); el hold de Redis cubre toda la ventana |
 | `BOOKING_MAX_PENDING_PER_USER` | Citas `PENDIENTE_PAGO` simultáneas por usuario (default `2`) |
 
 > Con `NODE_ENV=production` el arranque **falla** (`Config validation error: ...`) si falta alguna de

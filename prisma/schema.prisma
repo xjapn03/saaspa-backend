@@ -21,6 +21,10 @@ enum BookingStatus {
   COMPLETADA
   NO_ASISTIO
   EXPIRADA
+  /// Payment received after the window closed (or after the slot was taken):
+  /// the money is in, the slot is NOT confirmed and a person of the salon has to
+  /// assign one or refund. It never blocks a slot.
+  PAGO_TARDE
 }
 
 enum PaymentType {

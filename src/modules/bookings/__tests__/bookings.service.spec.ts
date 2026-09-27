@@ -123,7 +123,9 @@ describe('BookingsService', () => {
       expect(result.id).toBe('new-booking');
       expect(redis.setex).toHaveBeenCalledWith(
         expect.stringContaining('slot:2026-08-15'),
-        600,
+        // H-01: the Redis hold covers the whole payment window (30 min) plus one
+        // sweep interval (5 min), not the old fixed 10 minutes.
+        2100,
         expect.any(String),
       );
       expect(bookingsRepo.create).toHaveBeenCalled();
@@ -449,6 +451,28 @@ describe('BookingsService', () => {
       ).rejects.toThrow(BadRequestException);
 
       expect(bookingsRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('assigns a slot and confirms a booking paid late (H-01)', async () => {
+      bookingsRepo.findById.mockResolvedValue({ ...mockBooking, status: 'PAGO_TARDE' });
+      servicesRepo.findById.mockResolvedValue(mockService as any);
+      bookingsRepo.findOverlapping.mockResolvedValue(null);
+      bookingsRepo.update.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' } as any);
+      calendar.createEvent.mockResolvedValue('evt-late');
+
+      await service.reschedule('booking-1', newStartTime, 'user-1', false);
+
+      expect(bookingsRepo.findOverlapping).toHaveBeenCalledWith(
+        expect.any(Date),
+        expect.any(Date),
+        expect.any(Date),
+        'booking-1',
+      );
+      expect(calendar.createEvent).toHaveBeenCalled();
+      expect(bookingsRepo.update).toHaveBeenCalledWith(
+        'booking-1',
+        expect.objectContaining({ status: 'CONFIRMADA' }),
+      );
     });
   });
 

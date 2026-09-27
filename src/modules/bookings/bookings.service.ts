@@ -9,11 +9,12 @@ import { BookingSyncService } from './booking-sync.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import {
   DEFAULT_MAX_PENDING_PER_USER,
-  DEFAULT_PAYMENT_TTL_MINUTES,
+  pendingPaymentDeadline,
+  resolvePaymentTtlMinutes,
+  resolveSlotLockTtlSeconds,
 } from './booking.constants';
 
 const SLOT_INTERVAL = 30;
-const LOCK_TTL = 10 * 60;
 const BUSINESS_HOURS = { start: 8, end: 18 };
 
 /**
@@ -39,10 +40,15 @@ export class BookingsService {
 
   /** Minutes a booking may stay PENDIENTE_PAGO before it releases its slot. */
   private get paymentTtlMinutes(): number {
-    const configured = Number(this.configService.get('BOOKING_PAYMENT_TTL_MINUTES'));
-    return Number.isFinite(configured) && configured > 0
-      ? configured
-      : DEFAULT_PAYMENT_TTL_MINUTES;
+    return resolvePaymentTtlMinutes(this.configService);
+  }
+
+  /**
+   * TTL of the Redis slot hold (H-01): the whole payment window plus the sweep
+   * interval, instead of the fixed 10 minutes that left the last 20 uncovered.
+   */
+  private get lockTtlSeconds(): number {
+    return resolveSlotLockTtlSeconds(this.configService);
   }
 
   /** Pending bookings a user may hold at the same time. */
@@ -55,10 +61,12 @@ export class BookingsService {
 
   /**
    * Instants older than this no longer count as a pending payment. A booking
-   * created before the deadline has stopped holding its slot.
+   * created before the deadline has stopped holding its slot. One definition
+   * shared with the payment webhook and the sweep (`booking.constants`), so they
+   * cannot disagree on when a slot stops being held.
    */
   private pendingPaymentDeadline(now: Date = new Date()): Date {
-    return new Date(now.getTime() - this.paymentTtlMinutes * 60000);
+    return pendingPaymentDeadline(this.configService, now);
   }
 
   async findAll(filters: { userId?: string; date?: string; status?: string }) {
@@ -177,7 +185,7 @@ export class BookingsService {
     const lockKey = `slot:${dateKey}:${startTime.toISOString()}`;
 
     const lockValue = JSON.stringify({ start: startTime.toISOString(), end: endTime.toISOString() });
-    await this.redis.setex(lockKey, LOCK_TTL, lockValue);
+    await this.redis.setex(lockKey, this.lockTtlSeconds, lockValue);
 
     if (idempotencyKey) {
       const { booking, replayed } = await this.bookingsRepo.createWithIdempotencyKey(
@@ -285,12 +293,17 @@ export class BookingsService {
     const startTime = new Date(newStartTime);
     const endTime = new Date(startTime.getTime() + service.duration * 60000);
 
+    // A late payment is resolved by assigning it a free slot: the booking was
+    // left as PAGO_TARDE for a person of the salon to place it (H-01).
+    const resolvesLatePayment = oldBooking.status === 'PAGO_TARDE';
+
     const overlap = await this.bookingsRepo.findOverlapping(
       startTime,
       endTime,
       this.pendingPaymentDeadline(),
+      id,
     );
-    if (overlap && overlap.id !== id) {
+    if (overlap) {
       throw new ConflictException('El nuevo horario se cruza con otra cita reservada');
     }
 
@@ -303,12 +316,12 @@ export class BookingsService {
         user: oldBooking.user as any,
         service: oldBooking.service as any,
       });
-    } else if (oldBooking.status === 'CONFIRMADA') {
+    } else if (oldBooking.status === 'CONFIRMADA' || resolvesLatePayment) {
       const createdId = await this.calendar.createEvent({
         id: oldBooking.id,
         startTime,
         endTime,
-        status: oldBooking.status,
+        status: 'CONFIRMADA',
         user: oldBooking.user as any,
         service: oldBooking.service as any,
       });
@@ -322,9 +335,13 @@ export class BookingsService {
     const dateKey = startTime.toISOString().split('T')[0];
     const lockKey = `slot:${dateKey}:${startTime.toISOString()}`;
     const lockValue = JSON.stringify({ start: startTime.toISOString(), end: endTime.toISOString() });
-    try { await this.redis.setex(lockKey, LOCK_TTL, lockValue); } catch {}
+    try { await this.redis.setex(lockKey, this.lockTtlSeconds, lockValue); } catch {}
 
-    return this.bookingsRepo.update(id, { startTime, endTime } as any);
+    return this.bookingsRepo.update(id, {
+      startTime,
+      endTime,
+      ...(resolvesLatePayment ? { status: 'CONFIRMADA' } : {}),
+    } as any);
   }
 
   /**

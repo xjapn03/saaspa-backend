@@ -62,10 +62,17 @@ export abstract class IBookingsRepository {
     endTime: Date,
     pendingPaymentDeadline: Date,
   ): Promise<Booking | null>;
+  /**
+   * Any booking that would overlap the range and still holds its slot.
+   * `excludeBookingId` lets the caller ignore the booking being acted on (the
+   * one that is being confirmed or moved), which otherwise counts as its own
+   * overlap.
+   */
   abstract findOverlapping(
     startTime: Date,
     endTime: Date,
     pendingPaymentDeadline: Date,
+    excludeBookingId?: string,
   ): Promise<Booking | null>;
   abstract findOccupied(
     date: string,
@@ -89,4 +96,10 @@ export abstract class IBookingsRepository {
   abstract findOverduePending(pendingPaymentDeadline: Date): Promise<IOverduePendingBooking[]>;
   /** Moves one booking to EXPIRADA only if it is still PENDIENTE_PAGO. */
   abstract markExpired(id: string): Promise<boolean>;
+  /**
+   * Parks a booking whose payment arrived too late as PAGO_TARDE (H-01).
+   * Conditional, so it never overwrites a confirmation that won the race; false
+   * means someone else changed the booking first.
+   */
+  abstract flagPaidWithoutSlot(id: string): Promise<boolean>;
 }

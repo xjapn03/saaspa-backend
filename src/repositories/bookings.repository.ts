@@ -44,13 +44,14 @@ export class BookingsRepository extends IBookingsRepository {
   /**
    * A booking holds its slot until it is cancelled, completed, missed or
    * expired; a PENDIENTE_PAGO one stops holding it once its payment window
-   * closes, even if the sweep has not normalised the status yet. One shared rule
-   * so availability and the overlap checks can never disagree.
+   * closes, even if the sweep has not normalised the status yet, and a
+   * PAGO_TARDE one never got a confirmed slot. One shared rule so availability
+   * and the overlap checks can never disagree.
    */
   private occupancyFilter(pendingPaymentDeadline: Date): Prisma.BookingWhereInput {
     return {
       NOT: [
-        { status: { in: ['CANCELADA', 'NO_ASISTIO', 'EXPIRADA'] } },
+        { status: { in: ['CANCELADA', 'NO_ASISTIO', 'EXPIRADA', 'PAGO_TARDE'] } },
         { status: 'PENDIENTE_PAGO', createdAt: { lt: pendingPaymentDeadline } },
       ],
     };
@@ -129,9 +130,15 @@ export class BookingsRepository extends IBookingsRepository {
     });
   }
 
-  async findOverlapping(startTime: Date, endTime: Date, pendingPaymentDeadline: Date) {
+  async findOverlapping(
+    startTime: Date,
+    endTime: Date,
+    pendingPaymentDeadline: Date,
+    excludeBookingId?: string,
+  ) {
     return this.prisma.booking.findFirst({
       where: {
+        ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
         ...this.occupancyFilter(pendingPaymentDeadline),
         startTime: { lt: endTime },
         endTime: { gt: startTime },
@@ -237,6 +244,17 @@ export class BookingsRepository extends IBookingsRepository {
     const { count } = await this.prisma.booking.updateMany({
       where: { id, status: 'PENDIENTE_PAGO' },
       data: { status: 'EXPIRADA' },
+    });
+    return count === 1;
+  }
+
+  async flagPaidWithoutSlot(id: string): Promise<boolean> {
+    // Conditional on purpose: a payment that arrived too late parks the booking
+    // so a person places it, but it must never overwrite a booking that a
+    // confirmation won in the meantime (H-01).
+    const { count } = await this.prisma.booking.updateMany({
+      where: { id, status: { in: ['PENDIENTE_PAGO', 'EXPIRADA'] } },
+      data: { status: 'PAGO_TARDE' },
     });
     return count === 1;
   }

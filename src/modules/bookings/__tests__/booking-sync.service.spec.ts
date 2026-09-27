@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 import { BookingSyncService } from '../booking-sync.service';
 import { IBookingsRepository } from '../../../repositories/interfaces/bookings.repository';
@@ -39,6 +40,10 @@ describe('BookingSyncService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         BookingSyncService,
+        {
+          provide: ConfigService,
+          useValue: new ConfigService({ BOOKING_PAYMENT_TTL_MINUTES: 30 }),
+        },
         { provide: IBookingsRepository, useValue: bookingsRepo },
         { provide: GoogleCalendarService, useValue: calendar },
         { provide: MetaCapiService, useValue: metaCapi },
@@ -47,6 +52,7 @@ describe('BookingSyncService', () => {
     }).compile();
 
     service = module.get<BookingSyncService>(BookingSyncService);
+    bookingsRepo.flagPaidWithoutSlot.mockResolvedValue(true);
   });
 
   it('should confirm PENDIENTE_PAGO booking, create event and store googleEventId', async () => {
@@ -132,5 +138,73 @@ describe('BookingSyncService', () => {
     expect(result).toEqual({ synced: 1, failed: 1 });
     expect(bookingsRepo.update).toHaveBeenCalledWith('b1', { googleEventId: 'evt-1', calendarSync: 'SYNCED' } as any);
     expect(bookingsRepo.update).toHaveBeenCalledWith('b2', { calendarSync: 'FAILED' } as any);
+  });
+
+  describe('confirmOnPayment (H-01)', () => {
+    const staleBooking = () => ({ ...mockBooking, createdAt: new Date(Date.now() - 31 * 60000) });
+
+    it('confirms inside the window when the slot is free, excluding itself from the overlap', async () => {
+      bookingsRepo.findById.mockResolvedValue(mockBooking as any);
+      bookingsRepo.findOverlapping.mockResolvedValue(null);
+      bookingsRepo.update.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' } as any);
+      calendar.createEvent.mockResolvedValue('evt-1');
+      redis.del.mockResolvedValue(1);
+
+      const { outcome } = await service.confirmOnPayment('booking-1');
+
+      expect(outcome).toBe('CONFIRMED');
+      expect(bookingsRepo.findOverlapping).toHaveBeenCalledWith(
+        mockBooking.startTime,
+        mockBooking.endTime,
+        expect.any(Date),
+        'booking-1',
+      );
+      expect(bookingsRepo.update).toHaveBeenCalledWith('booking-1', { status: 'CONFIRMADA' } as any);
+    });
+
+    it('parks the booking as PAGO_TARDE when the payment arrives after the window', async () => {
+      bookingsRepo.findById.mockResolvedValue(staleBooking() as any);
+      bookingsRepo.findOverlapping.mockResolvedValue(null);
+      redis.del.mockResolvedValue(1);
+
+      const { outcome } = await service.confirmOnPayment('booking-1');
+
+      expect(outcome).toBe('NEEDS_SLOT');
+      expect(bookingsRepo.flagPaidWithoutSlot).toHaveBeenCalledWith('booking-1');
+      expect(bookingsRepo.update).not.toHaveBeenCalled();
+      expect(metaCapi.sendEvent).not.toHaveBeenCalled();
+    });
+
+    it('flags the payment for review when the freed slot was already taken', async () => {
+      bookingsRepo.findById.mockResolvedValue(staleBooking() as any);
+      bookingsRepo.findOverlapping.mockResolvedValue({ ...mockBooking, id: 'booking-2' } as any);
+      redis.del.mockResolvedValue(1);
+
+      const { outcome } = await service.confirmOnPayment('booking-1');
+
+      expect(outcome).toBe('NEEDS_REVIEW');
+      expect(bookingsRepo.flagPaidWithoutSlot).toHaveBeenCalledWith('booking-1');
+      expect(bookingsRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('treats an already confirmed booking as a retry without side effects', async () => {
+      bookingsRepo.findById.mockResolvedValue({ ...mockBooking, status: 'CONFIRMADA' } as any);
+
+      const { outcome } = await service.confirmOnPayment('booking-1');
+
+      expect(outcome).toBe('CONFIRMED');
+      expect(bookingsRepo.update).not.toHaveBeenCalled();
+      expect(metaCapi.sendEvent).not.toHaveBeenCalled();
+    });
+
+    it('leaves a cancelled booking alone and flags the payment for review', async () => {
+      bookingsRepo.findById.mockResolvedValue({ ...mockBooking, status: 'CANCELADA' } as any);
+
+      const { outcome } = await service.confirmOnPayment('booking-1');
+
+      expect(outcome).toBe('NEEDS_REVIEW');
+      expect(bookingsRepo.update).not.toHaveBeenCalled();
+      expect(bookingsRepo.flagPaidWithoutSlot).not.toHaveBeenCalled();
+    });
   });
 });
