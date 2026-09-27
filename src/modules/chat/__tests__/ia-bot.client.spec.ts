@@ -2,6 +2,7 @@ import {
   BadGatewayException,
   BadRequestException,
   GatewayTimeoutException,
+  HttpException,
   NotImplementedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -100,6 +101,49 @@ describe('IaBotClient', () => {
     fetchSpy.mockResolvedValue(errorResponse(500, {}));
 
     await expect(client.chat(turn, 'turn-token')).rejects.toThrow(BadGatewayException);
+  });
+
+  it('maps a 429 to a real 429 with the upstream detail, not to a 502 (H-04)', async () => {
+    fetchSpy.mockResolvedValue(
+      errorResponse(429, {
+        detail: 'Tope de coste superado: tokens (12000 de 10000 en PT1H)',
+        scope: 'conversation',
+        measure: 'tokens',
+        measured: 12000,
+        limit: 10000,
+        window: 'PT1H',
+      }),
+    );
+
+    const error = (await client.chat(turn, 'turn-token').catch((e) => e)) as HttpException;
+
+    expect(error).toBeInstanceOf(HttpException);
+    expect(error).not.toBeInstanceOf(BadGatewayException);
+    expect(error.getStatus()).toBe(429);
+    const response = error.getResponse();
+    const text = typeof response === 'string' ? response : JSON.stringify(response);
+    expect(text).toContain('Tope de coste superado');
+  });
+
+  it('uses its own text for a 429 without an upstream detail', async () => {
+    fetchSpy.mockResolvedValue(errorResponse(429, {}));
+
+    const error = (await client.chat(turn, 'turn-token').catch((e) => e)) as HttpException;
+
+    expect(error.getStatus()).toBe(429);
+    const response = error.getResponse();
+    const text = typeof response === 'string' ? response : JSON.stringify(response);
+    expect(text).toContain('muchos mensajes');
+  });
+
+  it('logs a signal when the cost cap that fired is the tenant one (H-04)', async () => {
+    const warn = jest.spyOn((client as any).logger, 'warn').mockImplementation(() => undefined);
+    fetchSpy.mockResolvedValue(errorResponse(429, { scope: 'tenant', detail: 'tope del tenant' }));
+
+    await expect(client.chat(turn, 'turn-token')).rejects.toThrow(HttpException);
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('tope de coste del tenant'));
+    warn.mockRestore();
   });
 
   it('maps a network failure to BadGatewayException', async () => {

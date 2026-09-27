@@ -166,7 +166,7 @@ Punto de entrada único del canal web (widget anónimo y clienta logueada). El f
 | Sesión anónima | cookie httpOnly `kamerinos_chat_session` con un id de **128 bits emitido por el servidor** y firmado (`<id>.<hmac>`); un valor fabricado o manipulado por el cliente se rechaza y el servidor emite uno nuevo. El estado guarda `sha256(sessionKey)`, así que un `conversationId` de otra sesión responde **403** |
 | Handoff (A-10a) | `ChatConversationState.handoffActive`; mientras esté activo el backend responde el mensaje canónico **sin** llamar a la IA. Se cierra o se reabre desde el endpoint admin (ver «Handoff: aviso al salón y cierre/reapertura») |
 | Anti-abuso | 20 req/min por IP (`@Throttle`), tope de 30 mensajes por sesión anónima en ventana de 1 h (**429**) y mensaje de más de 1000 caracteres (**413**) |
-| Errores de la IA | `ProblemDetail` mapeado: 400 → 400, 501 → 501, timeout → **504**, resto → **502** |
+| Errores de la IA | `ProblemDetail` mapeado: 400 → 400, **429 → 429** (tope de coste de la IA, ADR 0010; se registra un aviso cuando el `scope` es `tenant`, señal de abuso o de tope por subir), 501 → 501, timeout → **504**, resto → **502** |
 
 Anti-abuso y `trust proxy` (hallazgo J-03):
 
@@ -576,7 +576,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (61 suites, 534 tests)
+### Inventario de suites (61 suites, 537 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
