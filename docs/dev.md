@@ -135,10 +135,27 @@ Punto de entrada único del canal web (widget anónimo y clienta logueada). El f
 | Cuerpo | solo `message.text` (≤1000) y `conversationId` opcional; el `ValidationPipe` global rechaza campos desconocidos (400) |
 | Identidad | cookie de sesión (`kamerinos_access_token`, HS256) → canal `WEB_LOGGED`; ausente o caducada → anónimo y canal `WEB_WIDGET` (el canal `DASHBOARD` llega en la Fase 3) |
 | `conversationId` | ausente → aleatorio de **128 bits** (32 hex) y se devuelve en la respuesta |
-| Sesión anónima | cookie httpOnly `kamerinos_chat_session` (128 bits); el estado guarda `sha256(sessionKey)`, así que un `conversationId` de otra sesión responde **403** |
+| Sesión anónima | cookie httpOnly `kamerinos_chat_session` con un id de **128 bits emitido por el servidor** y firmado (`<id>.<hmac>`); un valor fabricado o manipulado por el cliente se rechaza y el servidor emite uno nuevo. El estado guarda `sha256(sessionKey)`, así que un `conversationId` de otra sesión responde **403** |
 | Handoff (A-10a) | `ChatConversationState.handoffActive`; mientras esté activo el backend responde el mensaje canónico **sin** llamar a la IA |
 | Anti-abuso | 20 req/min por IP (`@Throttle`), tope de 30 mensajes por sesión anónima en ventana de 1 h (**429**) y mensaje de más de 1000 caracteres (**413**) |
 | Errores de la IA | `ProblemDetail` mapeado: 400 → 400, 501 → 501, timeout → **504**, resto → **502** |
+
+Anti-abuso y `trust proxy` (hallazgo J-03):
+
+- `applyProxyTrust()` (`src/common/http/proxy-trust.ts`) fija `trust proxy` en **1 salto**: Express lee la
+  entrada **derecha** de `X-Forwarded-For`, que es la que añade Nginx (`$proxy_add_x_forwarded_for`), y
+  **ignora** el prefijo que pueda escribir el cliente. Con `true` leería la entrada izquierda (la del
+  cliente) y el bucket del rate limit —y con él los logs y el AuditLog— quedarían a merced de una cabecera.
+- La firma de la cookie de sesión anónima usa una clave derivada de `JWT_SECRET` (`deriveSessionKey`), así
+  que el chat no necesita otra variable de entorno; sin secreto falla en cerrado.
+- Cubierto por `src/common/http/__tests__/proxy-trust.spec.ts` (unidad),
+  `src/modules/chat/__tests__/chat-session.spec.ts` (unidad) y `test/e2e/rate-limit.e2e-spec.ts` (el bucket
+  no cambia cuando el cliente inyecta `X-Forwarded-For`).
+
+> **Límite conocido:** el tope de 30 mensajes/hora se cuenta por conversación y la cookie es la única
+> identidad anónima, así que quien borre la cookie obtiene una sesión nueva. El control efectivo del abuso
+> anónimo es el límite por IP del `ThrottlerGuard`; un tope por identidad fuerte (cuenta o IP+sesión) es una
+> tarea aparte.
 
 Tabla `chat_conversation_states` (migración `20260926180000_add_chat_conversation_state`): `tenantId`
 (default `kamerinos`), `conversationId` único, `channel`, `identityKind`, `userId`, `sessionKeyHash`,
@@ -388,7 +405,7 @@ Controller → Service → Repository Interface (abstract class) ← Repository 
 ## Tests
 
 ```bash
-npm test              # Unit tests (418 tests, 54 suites) — no requiere BD
+npm test              # Unit tests (434 tests, 56 suites) — no requiere BD
 npm run test:cov      # Cobertura
 npm run test:e2e      # E2E (requiere PostgreSQL corriendo)
 ```
@@ -438,7 +455,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (54 suites, 418 tests)
+### Inventario de suites (56 suites, 434 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
@@ -449,5 +466,7 @@ El flujo de E2E:
 | Internal (IA) | turn-token, internal-auth, internal controllers, guards metadata | ~44 |
 | Chat (IA) | chat service/controller, ia-bot client, chat state repository | ~34 |
 | Redis | redis, token-blacklist | ~8 |
+| HTTP | `applyProxyTrust` (\`trust proxy\` = 1 salto, hallazgo J-03) | 1 |
+| Chat session | emisión, firma y validación del id de sesión anónimo | 11 |
 | Config | `envValidationSchema` (Joi, fallo cerrado en producción) | 11 |
 | E2E | auth, users | ~19 |

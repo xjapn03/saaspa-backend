@@ -115,6 +115,13 @@ Cada tarea se considera hecha cuando:
 - Rutas internas (`/api/internal/v1/*`): `@Public()` solo para saltar el guard de sesión; la autorización
   real la hace el guard dedicado, y **siempre con la identidad del turn token**, nunca con parámetros de
   la petición ni con argumentos generados por el modelo.
+- **`trust proxy` = 1 salto (`applyProxyTrust`, `src/common/http/proxy-trust.ts`), nunca `true`:** Nginx es
+  el único salto de confianza y el único que **añade** la IP real al final de `X-Forwarded-For`, así que un
+  valor que anteponga el cliente no define `req.ip` y no puede mover el bucket del rate limit, los logs ni
+  el AuditLog (hallazgo J-03 del informe conjunto).
+- **La sesión anónima del chat la emite el servidor:** la cookie `kamerinos_chat_session` solo transporta
+  `<id de 128 bits>.<hmac>`, firmado con una clave derivada de `JWT_SECRET`; un valor fabricado, truncado o
+  manipulado se rechaza y el servidor emite uno nuevo. La cookie nunca es identidad por sí misma.
 
 ---
 
@@ -267,6 +274,18 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   (`http://localhost:8000`, `20000`, `America/Bogota`); 11 tests unitarios nuevos que **fallan sin el fix**
   (6 de 11) y README/`docs/dev.md` actualizados con la obligatoriedad y los conteos — verify verde
   (54 suites, 418 tests).
+- 2026-09-26 — fix/trust-proxy-and-session-id — hallazgo **J-03** del informe conjunto: `trust proxy` pasa
+  de `true` a **1 salto** (`applyProxyTrust`, `src/common/http/proxy-trust.ts`), así que Express lee la
+  entrada que Nginx **añade** al final de `X-Forwarded-For` y el bucket del rate limit, los logs y el
+  AuditLog dejan de ser falsificables con una cabecera (`test/e2e/rate-limit.e2e-spec.ts`: con el
+  comportamiento anterior la petición 21 responde 200 en vez de 429); la sesión anónima del chat pasa a ser
+  un id de 128 bits **emitido y firmado por el servidor** (`src/modules/chat/chat-session.ts`, HMAC con clave
+  derivada de `JWT_SECRET`, la cookie solo lo transporta) y se rechaza cualquier valor fabricado, truncado o
+  manipulado (con la regla anterior fallan 9 de los 42 tests del chat); tests nuevos: 11 de `chat-session`,
+  1 de `proxy-trust` y 4 de `ChatService`, más el E2E del chat actualizado; queda documentado el límite
+  conocido del tope por sesión (se cuenta por conversación y borrar la cookie da una sesión nueva), y el
+  límite global del lado de `saaspa-IA` va en su propio repo — verify verde (56 suites, 434 tests) con el
+  E2E completo local en verde.
 - 2026-09-26 — docs/post-merge-sync — tras el merge del PR #73 (`develop` = `9fc8b12`) se alinea la
   documentación con el código real: la sección 9 pasa a listar las variables que `kamerinos-infra` debe
   inyectar (`TENANT_TIMEZONE`, `TURN_TOKEN_ISSUER`/`AUDIENCE`/`TTL_SECONDS` explícitos y `IA_BOT_URL`/

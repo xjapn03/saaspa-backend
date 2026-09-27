@@ -12,6 +12,7 @@ import { PrismaClient } from '@prisma/client';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
+import { applyProxyTrust } from './common/http/proxy-trust';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -23,9 +24,10 @@ async function bootstrap() {
 
   app.setGlobalPrefix(config.get<string>('API_PREFIX', 'api'));
 
-  // Detrás de Nginx/Cloudflare: confiar en X-Forwarded-For para que el
-  // Throttler, los logs y el AuditLog registren la IP real del cliente.
-  app.set('trust proxy', true);
+  // Detrás de Nginx/Cloudflare: se confía en un solo salto (Nginx), que añade la
+  // IP real al final de X-Forwarded-For, para que el Throttler, los logs y el
+  // AuditLog usen la IP real y no un valor que el cliente pueda anteponer.
+  applyProxyTrust(app);
 
   app.use(helmet());
   app.use(compression());

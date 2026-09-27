@@ -30,6 +30,12 @@ import {
   HANDOFF_ACTIVE_MESSAGE,
   MAX_MESSAGE_LENGTH,
 } from './chat.constants';
+import {
+  deriveSessionKey,
+  issueAnonymousSessionId,
+  readIssuedSessionId,
+  signAnonymousSessionId,
+} from './chat-session';
 import { IaBotClient } from './ia-bot.client';
 import { WebChatRequestDto } from './dto/web-chat-request.dto';
 
@@ -45,6 +51,8 @@ interface ResolvedIdentity {
   kind: ChatIdentityKind;
   channel: ChatChannel;
   sessionKey: string;
+  /** True when the server had to issue a new anonymous session for this turn. */
+  sessionIssued: boolean;
   userId?: string;
   role?: TurnRole;
 }
@@ -77,7 +85,9 @@ export class ChatService {
     }
 
     const identity = await this.resolveIdentity(request);
-    if (identity.kind === 'ANONYMOUS' && !request.cookies?.[CHAT_SESSION_COOKIE]) {
+    // The cookie only transports a session id this server issued: when it is
+    // absent or does not verify, the server issues one and replaces the cookie.
+    if (identity.kind === 'ANONYMOUS' && identity.sessionIssued) {
       this.setAnonymousSessionCookie(response, identity.sessionKey);
     }
 
@@ -185,6 +195,7 @@ export class ChatService {
             kind: 'USER',
             channel: 'WEB_LOGGED',
             sessionKey: `user:${user.id}`,
+            sessionIssued: false,
             userId: user.id,
             role: user.role as TurnRole,
           };
@@ -194,27 +205,43 @@ export class ChatService {
       }
     }
 
-    const existing = request.cookies?.[CHAT_SESSION_COOKIE];
-    const anonymousId =
-      typeof existing === 'string' && existing.length >= 16
-        ? existing
-        : randomBytes(16).toString('hex');
+    // Only a value this server issued is accepted as a session; a client cannot
+    // invent or edit one to get a fresh message counter (finding J-03).
+    const issuedSessionId = readIssuedSessionId(
+      request.cookies?.[CHAT_SESSION_COOKIE],
+      this.sessionSigningKey,
+    );
+    const anonymousId = issuedSessionId ?? issueAnonymousSessionId();
 
     return {
       kind: 'ANONYMOUS',
       channel: 'WEB_WIDGET',
       sessionKey: `${ANON_PREFIX}${anonymousId}`,
+      sessionIssued: issuedSessionId === null,
     };
   }
 
+  /** Signs the session id before it travels in the cookie, and never in clear. */
   private setAnonymousSessionCookie(response: Response, sessionKey: string): void {
-    response.cookie(CHAT_SESSION_COOKIE, sessionKey.slice(ANON_PREFIX.length), {
-      httpOnly: true,
-      secure: this.configService.get<string>('NODE_ENV') === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: ANONYMOUS_SESSION_TTL_MS,
-    });
+    response.cookie(
+      CHAT_SESSION_COOKIE,
+      signAnonymousSessionId(sessionKey.slice(ANON_PREFIX.length), this.sessionSigningKey),
+      {
+        httpOnly: true,
+        secure: this.configService.get<string>('NODE_ENV') === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: ANONYMOUS_SESSION_TTL_MS,
+      },
+    );
+  }
+
+  /**
+   * Signing key of the anonymous session, derived from the session secret so the
+   * chat does not need another environment variable.
+   */
+  private get sessionSigningKey(): Buffer {
+    return deriveSessionKey(this.configService.get<string>('JWT_SECRET') || '');
   }
 
   private assertConversationBelongsToSession(
