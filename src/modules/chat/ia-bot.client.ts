@@ -9,6 +9,7 @@ import {
   NotImplementedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { pickProblemExtensions } from '../../common/http/problem-extensions';
 import { DEFAULT_IA_BOT_TIMEOUT_MS } from './chat.constants';
 
 export interface IaBotLink {
@@ -84,14 +85,14 @@ export class IaBotClient {
       if (!response.ok) {
         const problem = await this.readProblemDetail(response);
         this.logger.warn(`saaspa-IA respondio ${response.status} al turno ${request.turnId}`);
-        if (problem.scope === 'tenant') {
+        if (problem.extensions.scope === 'tenant') {
           // The tenant cost cap (ADR 0010) was hit: either abuse or a limit that
           // has to be raised. No PII, only the turn and the scope.
           this.logger.warn(
             `saaspa-IA aplico el tope de coste del tenant al turno ${request.turnId}: revisar si hay que subir el limite`,
           );
         }
-        throw this.mapError(response.status, problem.detail);
+        throw this.mapError(response.status, problem.detail, problem.extensions);
       }
 
       return (await response.json()) as IaBotTurnResponse;
@@ -110,15 +111,24 @@ export class IaBotClient {
     }
   }
 
-  private mapError(status: number, detail: string): Error {
+  private mapError(
+    status: number,
+    detail: string,
+    extensions: Record<string, unknown> = {},
+  ): Error {
     if (status === 400) return new BadRequestException(detail);
     if (status === 429) {
-      // The assistant is limiting this turn (cost cap per conversation or per
-      // tenant, ADR 0010): it must reach the widget as a real 429, not as a
-      // generic 502, so the clienta can wait and retry.
+      // The assistant is limiting this turn (cost cap per conversation, tenant or
+      // origin: ADR 0010/0020). It must reach the widget as a real 429, carrying
+      // the cap metadata so the reason is not lost on the way (J-07).
       return new HttpException(
-        detail ||
-          'Estamos recibiendo muchos mensajes en este momento. Intenta de nuevo en un momento.',
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          message:
+            detail ||
+            'Estamos recibiendo muchos mensajes en este momento. Intenta de nuevo en un momento.',
+          ...extensions,
+        },
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
@@ -128,24 +138,25 @@ export class IaBotClient {
 
   /**
    * Extracts the text from RFC 9457 (detail/title) or from the Nest default
-   * shape, plus the `scope` of a cost-cap rejection (`tenant` | `conversation`,
-   * ADR 0010), which is only used to log a signal, never returned to the widget.
+   * shape, plus the cost cap extensions (`scope`, `measure`, `measured`, `limit`,
+   * `window`) that have to travel with the rejection (J-07).
    */
-  private async readProblemDetail(response: Response): Promise<{ detail: string; scope?: string }> {
+  private async readProblemDetail(
+    response: Response,
+  ): Promise<{ detail: string; extensions: Record<string, unknown> }> {
     try {
-      const body = (await response.json()) as {
-        detail?: string;
-        title?: string;
-        message?: string;
-        scope?: string;
-      };
-      return {
-        detail:
-          body?.detail || body?.title || (typeof body?.message === 'string' ? body.message : ''),
-        scope: typeof body?.scope === 'string' ? body.scope : undefined,
-      };
+      const body = (await response.json()) as Record<string, unknown>;
+      const detail =
+        typeof body?.detail === 'string'
+          ? body.detail
+          : typeof body?.title === 'string'
+            ? body.title
+            : typeof body?.message === 'string'
+              ? body.message
+              : '';
+      return { detail, extensions: pickProblemExtensions(body) };
     } catch {
-      return { detail: '' };
+      return { detail: '', extensions: {} };
     }
   }
 }
