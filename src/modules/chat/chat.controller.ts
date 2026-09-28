@@ -8,6 +8,7 @@ import {
   Post,
   Req,
   Res,
+  UseFilters,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -15,6 +16,7 @@ import { Role } from '@prisma/client';
 import { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { ProblemDetailsFilter } from '../../common/filters/problem-details.filter';
 import { ChatService } from './chat.service';
 import { UpdateHandoffDto } from './dto/update-handoff.dto';
 import { WebChatRequestDto } from './dto/web-chat-request.dto';
@@ -24,11 +26,14 @@ import { WebChatRequestDto } from './dto/web-chat-request.dto';
  * The frontend always talks to this endpoint, never to saaspa-IA.
  *
  * Contract: saaspa-IA/docs/contracts/web-chat-api.openapi.yaml.
+ * Errors: RFC 9457 (`application/problem+json`) via ProblemDetailsFilter (J-07);
+ * the rest of the API keeps the Nest shape `{ statusCode, message, error }`.
  * Anti-abuse: 20 requests per minute per IP plus a per-session message cap and a
  * maximum message length, both enforced in ChatService.
  */
 @ApiTags('Chat')
 @Controller('chat')
+@UseFilters(ProblemDetailsFilter)
 export class ChatController {
   constructor(private chatService: ChatService) {}
 

@@ -123,6 +123,18 @@ describe('IaBotClient', () => {
     const response = error.getResponse();
     const text = typeof response === 'string' ? response : JSON.stringify(response);
     expect(text).toContain('Tope de coste superado');
+    // J-07: the cap metadata reaches the client instead of being dropped.
+    expect(response).toEqual(
+      expect.objectContaining({
+        statusCode: 429,
+        message: expect.stringContaining('Tope de coste superado'),
+        scope: 'conversation',
+        measure: 'tokens',
+        measured: 12000,
+        limit: 10000,
+        window: 'PT1H',
+      }),
+    );
   });
 
   it('uses its own text for a 429 without an upstream detail', async () => {

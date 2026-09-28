@@ -109,6 +109,9 @@ describe('Rate limit behind the proxy (e2e)', () => {
     // to the address Nginx appended, not to the value the client invented.
     const throttled = await chat('10.0.0.250');
     expect(throttled.status).toBe(429);
+    // The shape does not depend on who rejected the turn: the guard blocks before
+    // the handler runs, and the chat still answers RFC 9457 (J-07).
+    expect(throttled.headers['content-type']).toContain('application/problem+json');
   }, 60000);
 
   it('stamps the turn token with the appended address, never the forged prefix', async () => {

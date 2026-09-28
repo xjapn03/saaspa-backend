@@ -69,7 +69,8 @@ Convenciones:
 - Repositorios nuevos: interfaz abstracta + implementación registrada en `RepositoriesModule` (`@Global`).
 - Guards en directorios `guards/` (los globs de cobertura de Jest los incluyen).
 - Errores HTTP con las excepciones de Nest (`NotFoundException`, `ConflictException`, `UnauthorizedException`,
-  `PayloadTooLargeException`, …); la forma de respuesta es `{ statusCode, message, error }`.
+  `PayloadTooLargeException`, …); la forma de respuesta es `{ statusCode, message, error }`, **salvo los endpoints
+  del chat**, que responden RFC 9457 (`application/problem+json`, `ProblemDetailsFilter`; hallazgo J-07).
 - Llamadas HTTP externas con `fetch` nativo + `AbortController` (sin `axios`/`HttpModule`).
 - Migraciones Prisma **inmutables**: nunca editar una migración ya aplicada.
 
@@ -235,6 +236,15 @@ Pendientes (van a otro repo; **no** se implementan aquí):
   coste de la IA (`scope` `tenant`|`conversation`, `measure` `turns`|`tokens`, ADR 0010).
 - **`saaspa-IA`:** la otra mitad de H-04 (throttle por IP/sesión dentro del guard de IA) la evalúa ese repo por
   separado; este backend no la toca.
+- **`saaspa-IA`:** corregir en sus contratos la documentación de los errores **del backend** (J-07). En
+  `docs/contracts/internal-api.openapi.yaml`, las respuestas de error de **nuestros** endpoints (`Unauthorized`,
+  `Forbidden`, `NotFound`) están tipadas `$ref: Problem` bajo `application/json` mientras la descripción del
+  schema dice «el backend hoy responde {statusCode, message, error}»: hay que reflejar la forma real por endpoint.
+  En `docs/contracts/web-chat-api.openapi.yaml`, el **400** referencia `Problem` bajo `application/json` con esa
+  misma nota genérica: desde este cambio el chat responde RFC 9457 (`application/problem+json`, con
+  `type`/`title`/`status`/`detail`/`instance` y las extensiones del tope `scope`/`measure`/`measured`/`limit`/
+  `window`), así que conviene corregir el media type y extender la nota a 403/413/429/502/504. No es trabajo
+  nuevo: es alinear la documentación con lo que el backend hace.
 - **`saaspa-frontend`:** el widget de chat envía `credentials: 'include'` y reenvía `conversationId`
   en cada turno.
 - **`saaspa-frontend`:** el estado nuevo **`PAGO_TARDE`** (H-01) es el de una cita con el pago **aprobado** y
@@ -404,3 +414,18 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   `turn-token` 2, `chat.service` 2) y un caso E2E nuevo en `rate-limit.e2e-spec.ts` que decodifica el turn token
   reenviado y afirma que `clientIp` es la dirección que añadió el proxy, no el prefijo forjado — verify verde
   (62 suites, 545 tests) y E2E completo en verde (9 suites, 61 tests).
+- 2026-09-26 — fix/chat-error-problem-details — hallazgo **J-07** (contrato de error end-to-end): los contratos
+  describen los errores del chat como RFC 9457 y el backend respondía la forma por defecto de Nest, así que el
+  `detail` de `saaspa-IA` llegaba como `message` y sus extensiones se perdían. `ProblemDetailsFilter`
+  (`src/common/filters/problem-details.filter.ts`) se aplica **solo a `ChatController`** y responde
+  `application/problem+json` con `type` (`about:blank`), `title`, `status`, `detail` (el texto de la IA o el
+  nuestro) e `instance`, más las extensiones del tope cuando vienen; un error no-HTTP responde **500** con
+  `detail` genérico y el stack solo en los logs, mientras el resto del API conserva
+  `{ statusCode, message, error }`. `pickProblemExtensions` (`src/common/http/problem-extensions.ts`) es la
+  **única** definición de qué extensiones se copian y `IaBotClient` ahora propaga las del tope de coste
+  (`scope`, `measure`, `measured`, `limit`, `window`), así que el widget puede distinguir un tope por
+  conversación de uno por tenant o por origen; se **eliminó** el `AllExceptionsFilter` muerto (nunca registrado
+  y con una tercera forma distinta). 10 tests unitarios nuevos (`problem-details.filter` 5,
+  `problem-extensions` 5) y E2E: el 429 de la IA conserva `detail` y extensiones, y el del Throttler también
+  responde problem+json (el formato no depende de quién rechazó el turno) — verify verde (64 suites, 555 tests)
+  y E2E completo en verde (9 suites, 63 tests).

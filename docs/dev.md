@@ -173,6 +173,16 @@ Punto de entrada único del canal web (widget anónimo y clienta logueada). El f
 | Handoff (A-10a) | `ChatConversationState.handoffActive`; mientras esté activo el backend responde el mensaje canónico **sin** llamar a la IA. Se cierra o se reabre desde el endpoint admin (ver «Handoff: aviso al salón y cierre/reapertura») |
 | Anti-abuso | 20 req/min por IP (`@Throttle`), tope de 30 mensajes por sesión anónima en ventana de 1 h (**429**) y mensaje de más de 1000 caracteres (**413**) |
 | Errores de la IA | `ProblemDetail` mapeado: 400 → 400, **429 → 429** (tope de coste de la IA, ADR 0010; se registra un aviso cuando el `scope` es `tenant`, señal de abuso o de tope por subir), 501 → 501, timeout → **504**, resto → **502** |
+| Formato de error (J-07) | **RFC 9457** (`application/problem+json`): `type` (`about:blank`), `title`, `status`, `detail` (el texto de la IA o el nuestro) e `instance` (la ruta), más las extensiones del tope (`scope`, `measure`, `measured`, `limit`, `window`) cuando vienen. Lo aplica `ProblemDetailsFilter` **solo a los endpoints del chat**; el resto del API conserva la forma de Nest `{ statusCode, message, error }` |
+
+Errores del chat (hallazgo J-07): los contratos describen los errores del chat como RFC 9457, pero el backend
+respondía la forma por defecto de Nest (`{ statusCode, message, error }`) y, además, el `detail` de la IA llegaba
+como `message` y sus extensiones (`scope`, `measure`, `measured`, `limit`, `window`) se perdían por el camino.
+`ProblemDetailsFilter` (`src/common/filters/problem-details.filter.ts`) acota la forma RFC 9457 a los endpoints
+del chat y `pickProblemExtensions` (`src/common/http/problem-extensions.ts`) es la **única** definición de qué
+extensiones se copian, de modo que el widget puede distinguir un tope por conversación de uno por tenant o por
+origen. Un error no-HTTP se responde **500** con `detail` genérico: el mensaje interno y el stack quedan en los
+logs. El `AllExceptionsFilter` anterior (sin registrar y con una tercera forma distinta) se eliminó.
 
 Anti-abuso y `trust proxy` (hallazgo J-03):
 
@@ -582,7 +592,7 @@ El flujo de E2E:
 
 > **Importante:** `kamerinos_db_tests` solo contiene datos de prueba. Nunca apuntar los E2E a la BD real.
 
-### Inventario de suites (62 suites, 545 tests)
+### Inventario de suites (64 suites, 555 tests)
 
 | Capa | Suites | Tests |
 |------|--------|-------|
@@ -593,7 +603,8 @@ El flujo de E2E:
 | Internal (IA) | turn-token, internal-auth, internal controllers, guards metadata | ~44 |
 | Chat (IA) | chat service/controller, ia-bot client, chat state repository | ~34 |
 | Redis | redis, token-blacklist | ~8 |
-| HTTP | `applyProxyTrust` (\`trust proxy\` = 1 salto, hallazgo J-03) y `resolveClientIp` (fuente única de la IP del cliente, la del claim `clientIp`) | 5 |
+| HTTP | `applyProxyTrust` (\`trust proxy\` = 1 salto, hallazgo J-03), `resolveClientIp` (fuente única de la IP del cliente) y `pickProblemExtensions` (extensiones del `ProblemDetail` que viajan al widget) | 10 |
+| Filtros | `ProblemDetailsFilter`: errores del chat en RFC 9457 (`application/problem+json`, J-07) | 5 |
 | Chat session | emisión, firma y validación del id de sesión anónimo | 11 |
 | Chat timeouts | escalera de plazos backend > IA (J-04) | 4 |
 | Chat handoff | aviso al salón, entrega/reintento, cierre/reapertura y auditoría (J-05, H-03) | 14 |

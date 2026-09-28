@@ -39,6 +39,10 @@ describe('Web chat (e2e)', () => {
   const mockAssistant = (body: unknown) =>
     fetchSpy.mockResolvedValue({ ok: true, status: 200, json: async () => body } as never);
 
+  /** saaspa-IA rejecting the turn with an RFC 9457 ProblemDetail. */
+  const mockAssistantProblem = (status: number, body: unknown) =>
+    fetchSpy.mockResolvedValue({ ok: false, status, json: async () => body } as never);
+
   const chat = (payload: unknown, cookie?: string) => {
     const call = request(app.getHttpServer()).post('/api/chat').send(payload as object);
     return cookie ? call.set('Cookie', cookie) : call;
@@ -238,6 +242,14 @@ describe('Web chat (e2e)', () => {
     const response = await chat({ message: { text: 'x'.repeat(1001) } });
 
     expect(response.status).toBe(413);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        type: 'about:blank',
+        status: 413,
+        title: 'Contenido demasiado grande',
+      }),
+    );
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -266,5 +278,57 @@ describe('Web chat (e2e)', () => {
 
     expect(response.status).toBe(400);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('answers our own validation errors as an RFC 9457 problem (J-07)', async () => {
+    const response = await chat({ message: { text: '' } });
+
+    expect(response.status).toBe(400);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        type: 'about:blank',
+        title: 'Solicitud incorrecta',
+        status: 400,
+      }),
+    );
+    expect(typeof response.body.detail).toBe('string');
+    expect(response.body.detail.length).toBeGreaterThan(0);
+    // The Nest shape is gone on this endpoint: the contract promises RFC 9457.
+    expect(response.body).not.toHaveProperty('statusCode');
+    expect(response.body).not.toHaveProperty('error');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('preserves the assistant 429 and its cap metadata (J-07)', async () => {
+    mockAssistantProblem(429, {
+      type: 'about:blank',
+      title: 'Too Many Requests',
+      status: 429,
+      detail: 'Tope de coste superado: tokens (12000 de 10000 en PT1H)',
+      scope: 'tenant',
+      measure: 'tokens',
+      measured: 12000,
+      limit: 10000,
+      window: 'PT1H',
+    });
+
+    const response = await chat({ message: { text: 'Hola' } });
+
+    expect(response.status).toBe(429);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        type: 'about:blank',
+        title: 'Demasiadas solicitudes',
+        status: 429,
+        detail: 'Tope de coste superado: tokens (12000 de 10000 en PT1H)',
+        scope: 'tenant',
+        measure: 'tokens',
+        measured: 12000,
+        limit: 10000,
+        window: 'PT1H',
+      }),
+    );
   });
 });

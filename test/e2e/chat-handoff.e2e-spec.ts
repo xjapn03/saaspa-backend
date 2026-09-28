@@ -65,6 +65,20 @@ describe('Chat handoff (e2e)', () => {
   const stateOf = (conversationId: string) =>
     prisma.chatConversationState.findUnique({ where: { conversationId } });
 
+  /**
+   * Waits for an AuditLog row. The AuditInterceptor records fire-and-forget (a
+   * slow insert must not delay the response), so the assertion polls instead of
+   * racing the write, which is what made this spec flaky under the full suite.
+   */
+  const waitForAudit = async (where: { entity: string; entityId: string; action: string }) => {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const row = await prisma.auditLog.findFirst({ where });
+      if (row) return row;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return null;
+  };
+
   /** Starts a conversation that ends in handoff and returns its ids. */
   const startHandoff = async (text: string) => {
     mockAssistant(assistantReply({ handoff: { requested: true, reason: 'EXPLICIT_REQUEST' } }));
@@ -163,8 +177,10 @@ describe('Chat handoff (e2e)', () => {
     );
     expect(closed.body).not.toHaveProperty('sessionKeyHash');
 
-    const audit = await prisma.auditLog.findFirst({
-      where: { entity: 'chat', entityId: conversationId, action: 'PATCH' },
+    const audit = await waitForAudit({
+      entity: 'chat',
+      entityId: conversationId,
+      action: 'PATCH',
     });
     expect(audit).not.toBeNull();
     expect(audit?.actorEmail).toBe(ADMIN_EMAIL);
