@@ -438,5 +438,5 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   no valores); ambos textos se exportan del filtro para tests y E2E. 2 tests unitarios nuevos (reemplazan el
   que unía los mensajes en `detail`), aserciones E2E nuevas en `rate-limit` (el 429 del Throttler fija el
   `detail` canónico) y `web-chat` (el 400 de validación fija `VALIDATION_DETAIL`) — verify verde (64 suites,
-  556 tests); E2E de `web-chat` (12/12) y `rate-limit` (2/2) en verde. Nota: en este equipo los E2E necesitan
-  `NODE_OPTIONS=--max-old-space-size=4096` (el heap por defecto de ~2 GB se queda corto en el mount FUSE).
+  556 tests); E2E de `web-chat` (12/12) y `rate-limit` (2/2) en verde. Nota local: los E2E se corrieron con
+  `NODE_OPTIONS=--max-old-space-size=4096`.
