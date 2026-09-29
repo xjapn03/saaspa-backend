@@ -255,6 +255,18 @@ Pendientes (van a otro repo; **no** se implementan aquí):
   bandeja que recibe los avisos de handoff del chat. **No es un secreto**, así que puede ir en el compose o en
   el `.env` del despliegue sin fricción; si no se define, los avisos caen en `ADMIN_NOTIFY_EMAIL`
   (`kamerinosg@gmail.com`), que ya recibe las copias de citas y pedidos.
+- **`saaspa-IA`:** escribir en `docs/contracts/internal-api.openapi.yaml` la forma real de
+  `GET /api/internal/v1/me/bookings` (implementado aquí en `feat/internal-me-bookings`; hoy el endpoint solo
+  tiene descripción, sin schema): respuesta exacta `{ timezone, bookings: [{ id, serviceId, serviceName,
+  price, start, end, status }], hasMore }` con `start`/`end` en offset ISO de la zona del tenant (misma
+  convención que `/availability`) y estados que incluyen `EXPIRADA` y `PAGO_TARDE`; sin PII (sin `user`,
+  `notes`, `idempotencyKey`, `googleEventId`). `hasMore` avisa de que hay más resultados que los de la
+  página. Orden: por defecto, historial completo con `startTime` descendente (así lo próximo queda antes que
+  lo pasado); con `upcoming=true`, solo lo que empieza de ahora en adelante con `startTime` ascendente (la
+  próxima cita primero). Paginación por query: `page` (default 1), `limit` (default 20, máximo 50; por encima
+  responde 400) y `upcoming` (`true`/`false`; cualquier otro valor responde 400). El 403 del turno anónimo
+  (`requireTurnUser`) y el 401/403 del guard son los ya declarados. El contrato lo escribe la sesión de IA;
+  este backend no lo cambia desde aquí.
 
 ---
 
@@ -429,14 +441,23 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   `problem-extensions` 5) y E2E: el 429 de la IA conserva `detail` y extensiones, y el del Throttler también
   responde problem+json (el formato no depende de quién rechazó el turno) — verify verde (64 suites, 555 tests)
   y E2E completo en verde (9 suites, 63 tests).
-- 2026-09-28 — fix/chat-throttler-detail — residual **R-07.a** de la tercera revisión conjunta: los textos que
-  genera el propio gateway ya no llegan crudos a la clienta. El `ProblemDetailsFilter` especial-casa la
-  `ThrottlerException` (literal `ThrottlerException: Too Many Requests` de `@nestjs/throttler` 6.5.0) con el
-  `detail` canónico en español `THROTTLER_DETAIL`, y los 400 de validación del chat (arreglo de mensajes de
-  class-validator, la única forma de 400 que no es texto propio) responden el `detail` fijo `VALIDATION_DETAIL`
-  con el motivo técnico al log (`warn`, sin PII: los mensajes de class-validator llevan rutas de propiedades,
-  no valores); ambos textos se exportan del filtro para tests y E2E. 2 tests unitarios nuevos (reemplazan el
-  que unía los mensajes en `detail`), aserciones E2E nuevas en `rate-limit` (el 429 del Throttler fija el
-  `detail` canónico) y `web-chat` (el 400 de validación fija `VALIDATION_DETAIL`) — verify verde (64 suites,
-  556 tests); E2E de `web-chat` (12/12) y `rate-limit` (2/2) en verde. Nota local: los E2E se corrieron con
-  `NODE_OPTIONS=--max-old-space-size=4096`.
+- 2026-09-28 — feat/internal-me-bookings — primer endpoint de **Fase 2**, de lectura: `GET
+  /api/internal/v1/me/bookings` (`InternalMeBookingsController`) con las guardas obligatorias
+  (`@Public` + `@SkipThrottle` + `InternalAuthGuard`) y el sujeto **solo** desde el turn token
+  (`requireTurnUser`, 403 si el turno es anónimo). Respuesta exacta `{ timezone, bookings: [{ id,
+  serviceId, serviceName, price, start, end, status }], hasMore }`: sin PII ni internos (proyección
+  recortada), `start`/`end` con offset explícito en la zona del tenant (misma convención que
+  `/availability`), `EXPIRADA`/`PAGO_TARDE` incluidos a propósito (H-06) y `hasMore` como señal de que la
+  página no es todo el listado. Orden por defecto: historial completo con `startTime` descendente; con
+  `upcoming=true`: solo lo que empieza de ahora en adelante, `startTime` ascendente (la próxima cita
+  primero), para que un historial largo no oculte lo vigente con `limit` bajo. Paginación por query: `page`
+  (default 1), `limit` (default 20, máximo 50; por encima 400) y `upcoming` (`true`/`false`; otro valor 400);
+  para soportarla `BookingsService.findAll` pasa a aceptar el `BookingFilters` completo del repositorio
+  (`page`/`limit` y un `from` nuevo para `upcoming`, cambio de firma aditivo). Test-guarda pedido por
+  la persona: dos `create()` secuenciales al mismo slot con `Idempotency-Key` distintas producen **409**
+  en el segundo (`bookings-idempotency.e2e-spec.ts`; el solape ya tenía test unitario, este lo fija a
+  nivel HTTP). 4 tests unitarios nuevos del controlador + las 2 pruebas arquitectónicas actualizadas
+  con el controlador nuevo (que suman sus propios casos), 6 casos E2E nuevos en `internal-api.e2e-spec.ts`
+  — verify verde (65 suites, 564 tests); E2E completo en verde (9 suites, 70 tests), con `internal-api`
+  19/19 y `bookings-idempotency` 4/4. El
+  contrato de `saaspa-IA` lo escribe su sesión (pedido anotado en §9); este repo no lo toca.

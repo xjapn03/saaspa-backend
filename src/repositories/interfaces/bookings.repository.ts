@@ -30,6 +30,8 @@ export interface IdempotentBooking {
 export interface BookingFilters {
   userId?: string;
   date?: string;
+  /** Only bookings starting at or after this instant (`upcoming` of misCitas). */
+  from?: Date;
   status?: string;
   search?: string;
   sortBy?: string;
