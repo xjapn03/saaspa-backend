@@ -255,6 +255,14 @@ Pendientes (van a otro repo; **no** se implementan aquí):
   bandeja que recibe los avisos de handoff del chat. **No es un secreto**, así que puede ir en el compose o en
   el `.env` del despliegue sin fricción; si no se define, los avisos caen en `ADMIN_NOTIFY_EMAIL`
   (`kamerinosg@gmail.com`), que ya recibe las copias de citas y pedidos.
+- **`saaspa-IA`:** escribir en `docs/contracts/internal-api.openapi.yaml` la forma real de
+  `GET /api/internal/v1/me/bookings` (implementado aquí en `feat/internal-me-bookings`; hoy el endpoint solo
+  tiene descripción, sin schema): respuesta exacta `{ timezone, bookings: [{ id, serviceId, serviceName,
+  price, start, end, status }] }` con `start`/`end` en offset ISO de la zona del tenant (misma convención que
+  `/availability`) y estados que incluyen `EXPIRADA` y `PAGO_TARDE`; sin PII (sin `user`, `notes`,
+  `idempotencyKey`, `googleEventId`). Paginación por query: `page` (default 1) y `limit` (default 20, máximo
+  50; por encima responde 400). El 403 del turno anónimo (`requireTurnUser`) y el 401/403 del guard son los ya
+  declarados. El contrato lo escribe la sesión de IA; este backend no lo cambia desde aquí.
 
 ---
 
@@ -429,3 +437,18 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   `problem-extensions` 5) y E2E: el 429 de la IA conserva `detail` y extensiones, y el del Throttler también
   responde problem+json (el formato no depende de quién rechazó el turno) — verify verde (64 suites, 555 tests)
   y E2E completo en verde (9 suites, 63 tests).
+- 2026-09-28 — feat/internal-me-bookings — primer endpoint de **Fase 2**, de lectura: `GET
+  /api/internal/v1/me/bookings` (`InternalMeBookingsController`) con las guardas obligatorias
+  (`@Public` + `@SkipThrottle` + `InternalAuthGuard`) y el sujeto **solo** desde el turn token
+  (`requireTurnUser`, 403 si el turno es anónimo). Respuesta exacta `{ timezone, bookings: [{ id,
+  serviceId, serviceName, price, start, end, status }] }`: sin PII ni internos (proyección recortada),
+  `start`/`end` con offset explícito en la zona del tenant (misma convención que `/availability`) y
+  `EXPIRADA`/`PAGO_TARDE` incluidos a propósito (H-06). Paginación por query: `page` (default 1) y
+  `limit` (default 20, máximo 50; por encima 400); para soportarla `BookingsService.findAll` pasa a
+  aceptar el `BookingFilters` completo del repositorio (cambio de firma aditivo). Test-guarda pedido por
+  la persona: dos `create()` secuenciales al mismo slot con `Idempotency-Key` distintas producen **409**
+  en el segundo (`bookings-idempotency.e2e-spec.ts`; el solape ya tenía test unitario, este lo fija a
+  nivel HTTP). 4 tests unitarios nuevos del controlador + las 2 pruebas arquitectónicas actualizadas
+  con el controlador nuevo (que suman sus propios casos), 4 casos E2E nuevos en `internal-api.e2e-spec.ts`
+  — verify verde (65 suites, 562 tests); E2E `internal-api` 17/17 y `bookings-idempotency` 4/4. El
+  contrato de `saaspa-IA` lo escribe su sesión (pedido anotado en §9); este repo no lo toca.

@@ -3,6 +3,7 @@ import { THROTTLER_SKIP } from '@nestjs/throttler/dist/throttler.constants';
 import { IS_PUBLIC_KEY } from '../../../common/decorators/public.decorator';
 import { InternalAuthGuard } from '../guards/internal-auth.guard';
 import { InternalAvailabilityController } from '../internal-availability.controller';
+import { InternalMeBookingsController } from '../internal-me-bookings.controller';
 import { InternalServicesController } from '../internal-services.controller';
 
 /**
@@ -10,7 +11,11 @@ import { InternalServicesController } from '../internal-services.controller';
  * refactor: they have to skip the global throttler and they must be protected by
  * the dedicated guard (the @Public() flag only skips the user session guard).
  */
-const CONTROLLERS = [InternalServicesController, InternalAvailabilityController] as const;
+const CONTROLLERS = [
+  InternalServicesController,
+  InternalAvailabilityController,
+  InternalMeBookingsController,
+] as const;
 
 describe('Internal controllers metadata', () => {
   for (const controller of CONTROLLERS) {

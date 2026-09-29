@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
+import { BookingFilters, IBookingsRepository } from '../../repositories/interfaces/bookings.repository';
 import { IServicesRepository } from '../../repositories/interfaces/services.repository';
 import { IPaymentsRepository } from '../../repositories/interfaces/payments.repository';
 import { RedisService } from '../../common/redis/redis.service';
@@ -69,7 +69,11 @@ export class BookingsService {
     return pendingPaymentDeadline(this.configService, now);
   }
 
-  async findAll(filters: { userId?: string; date?: string; status?: string }) {
+  /**
+   * Listing filter accepted by the repository, exposed as-is: the internal
+   * `me/bookings` endpoint paginates through here.
+   */
+  async findAll(filters: BookingFilters = {}) {
     return this.bookingsRepo.findAll(filters);
   }
 

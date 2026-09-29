@@ -138,6 +138,23 @@ describe('Booking idempotency (e2e)', () => {
     expect(second.body.id).not.toBe(first.body.id);
   });
 
+  /**
+   * Guard test: the cross-turn brake is the overlap check, not the idempotency
+   * key (which is per turn by design, ADR 0008/0012). saaspa-IA's ADR leans on
+   * this behavior: two equivalent turns must not produce two bookings, and the
+   * second one has to fail with 409.
+   */
+  it('rejects a second booking of the same slot when the key is different', async () => {
+    const start = slotAt(11);
+
+    const first = await createBooking(start, 'turn-e2e-4:crearCita');
+    const second = await createBooking(start, 'turn-e2e-5:crearCita');
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(409);
+    expect(await prisma.booking.count({ where: { userId, startTime: new Date(start) } })).toBe(1);
+  });
+
   it('rejects a malformed Idempotency-Key with 400', async () => {
     const response = await createBooking(slotAt(16), 'clave con espacios');
 
