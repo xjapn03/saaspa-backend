@@ -255,6 +255,22 @@ Pendientes (van a otro repo; **no** se implementan aquí):
   bandeja que recibe los avisos de handoff del chat. **No es un secreto**, así que puede ir en el compose o en
   el `.env` del despliegue sin fricción; si no se define, los avisos caen en `ADMIN_NOTIFY_EMAIL`
   (`kamerinosg@gmail.com`), que ya recibe las copias de citas y pedidos.
+- **`saaspa-frontend`:** página `/pago` para el deep-link de pago de la Fase 2 (opción A aceptada, diseño en
+  `docs/f2-create-and-payment-design.md`): lee `booking`/`exp`/`sig` de la URL, llama al endpoint público
+  nuevo del backend que devuelve la config del widget y pinta el widget de Wompi. El enlace lo emite el
+  backend y es **reenviable por diseño** (sin PII, vida corta). Seguirá pendiente además el consumidor de
+  `EXPIRADA`/`PAGO_TARDE` del dashboard (H-06).
+- **`kamerinos-infra`:** inyectar `FRONTEND_BASE_URL` en el servicio `backend` (deep-link de pago, Fase 2): es
+  la URL **pública** del frontend, no la interna del compose; sin ella el backend no puede construir el
+  `paymentUrl` de una cita.
+- **`saaspa-IA`:** cuando su sesión escriba el contrato de los endpoints internos de Fase 2 (diseño aceptado en
+  `docs/f2-create-and-payment-design.md`): schema de `POST /api/internal/v1/bookings` con `Idempotency-Key`
+  **obligatoria** y formato acordado `bookings.create:<jti>` (la construye el llamador), las tres capas de
+  validación de `startTime`, el campo aditivo `code` de los 409 con los valores `SLOT_TAKEN` y
+  `PENDING_CAP_REACHED`, el rechazo de cancelar una cita `EXPIRADA` con `BOOKING_EXPIRED`, y
+  `Booking.paymentUrl` con su vida corta (la IA no lo cachea ni lo reenvía en turnos posteriores). De paso,
+  corregir la nota falsa de `internal-api.openapi.yaml` que dice que `POST /api/bookings` no acepta
+  `Idempotency-Key` (HN-02 de la tercera revisión, falso desde el PR #78).
 
 ---
 
@@ -264,7 +280,7 @@ Pendientes (van a otro repo; **no** se implementan aquí):
 |---|---|---|
 | 0 | Alineación de contratos con `saaspa-IA` | Completada |
 | 1 | Turn token ES256 + guard · `/api/internal/v1/*` de lectura (services, services/{id\|slug}, availability) · `POST /api/chat` con handoff por conversación y anti-abuso | Completada y **aceptada con un E2E real contra `saaspa-IA` en ejecución** (no simulado); el despliegue en producción sigue pendiente |
-| 2 | Escrituras por chat (`Idempotency-Key`, deep-link Wompi, `me/bookings`) | Pendiente |
+| 2 | Escrituras por chat (`Idempotency-Key`, deep-link Wompi, `me/bookings`) | Pendiente — diseño aceptado en `docs/f2-create-and-payment-design.md`; `GET /api/internal/v1/me/bookings` implementado (PR #87) |
 | 3 | Agente ADMIN + reportes internos | Pendiente |
 | 4 | Canal WhatsApp con identidad (`waId` resuelto por este backend y firmado en el token) | Pendiente |
 
@@ -429,3 +445,18 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   `problem-extensions` 5) y E2E: el 429 de la IA conserva `detail` y extensiones, y el del Throttler también
   responde problem+json (el formato no depende de quién rechazó el turno) — verify verde (64 suites, 555 tests)
   y E2E completo en verde (9 suites, 63 tests).
+- 2026-09-28 — docs/f2-create-and-payment-design — **solo documentación, sin código**: diseño de Fase 2
+  aceptado por la persona, fijado en `docs/f2-create-and-payment-design.md` para que la implementación no
+  reabra decisiones. Contiene: `paymentUrl` **opción A** (enlace firmado de vida corta a una página nueva
+  del frontend, TTL = ventana de pago, HMAC con derivación de clave por etiqueta **distinta** a la de
+  `chat-session`, endpoint público con throttle propio que solo devuelve la config del widget si la cita
+  sigue `PENDIENTE_PAGO`, y constancia explícita de que el enlace es **reenviable**); `POST` interno de
+  creación con `Idempotency-Key = bookings.create:<jti>` construida por el llamador, tres capas de validación
+  de `startTime` (offset explícito, coherencia del offset con la zona del tenant, pertenencia al slot),
+  **sin `payFull` en v1**, AuditLog con `userId` del turno y `conversationId`, y 409 con código estable
+  (`SLOT_TAKEN` / `PENDING_CAP_REACHED`, nombres propuestos); rechazo de cancelar una cita `EXPIRADA` con
+  código estable (`BOOKING_EXPIRED`, propuesto); y la carrera concurrente de `create()` **como decisión
+  pendiente antes de `crearCita`**, con la inclinación registrada hacia el constraint de exclusión en
+  Postgres. Pedidos a otros repos anotados en §9 (página `/pago` de `saaspa-frontend`,
+  `FRONTEND_BASE_URL` de `kamerinos-infra`, contrato y HN-02 de `saaspa-IA`). Sin cambios de código ni de
+  contrato — verify verde (64 suites, 555 tests).
