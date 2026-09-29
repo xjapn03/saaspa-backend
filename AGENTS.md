@@ -255,18 +255,23 @@ Pendientes (van a otro repo; **no** se implementan aquí):
   bandeja que recibe los avisos de handoff del chat. **No es un secreto**, así que puede ir en el compose o en
   el `.env` del despliegue sin fricción; si no se define, los avisos caen en `ADMIN_NOTIFY_EMAIL`
   (`kamerinosg@gmail.com`), que ya recibe las copias de citas y pedidos.
-- **`saaspa-IA`:** escribir en `docs/contracts/internal-api.openapi.yaml` la forma real de
-  `GET /api/internal/v1/me/bookings` (implementado aquí en `feat/internal-me-bookings`; hoy el endpoint solo
-  tiene descripción, sin schema): respuesta exacta `{ timezone, bookings: [{ id, serviceId, serviceName,
-  price, start, end, status }], hasMore }` con `start`/`end` en offset ISO de la zona del tenant (misma
-  convención que `/availability`) y estados que incluyen `EXPIRADA` y `PAGO_TARDE`; sin PII (sin `user`,
-  `notes`, `idempotencyKey`, `googleEventId`). `hasMore` avisa de que hay más resultados que los de la
-  página. Orden: por defecto, historial completo con `startTime` descendente (así lo próximo queda antes que
-  lo pasado); con `upcoming=true`, solo lo que empieza de ahora en adelante con `startTime` ascendente (la
-  próxima cita primero). Paginación por query: `page` (default 1), `limit` (default 20, máximo 50; por encima
-  responde 400) y `upcoming` (`true`/`false`; cualquier otro valor responde 400). El 403 del turno anónimo
-  (`requireTurnUser`) y el 401/403 del guard son los ya declarados. El contrato lo escribe la sesión de IA;
-  este backend no lo cambia desde aquí.
+- **`saaspa-frontend`:** página `/pago` para el deep-link de pago de la Fase 2 (opción A aceptada, diseño en
+  `docs/f2-create-and-payment-design.md`): lee `booking`/`exp`/`sig` de la URL, llama al endpoint público
+  nuevo del backend que devuelve la config del widget y pinta el widget de Wompi. El enlace lo emite el
+  backend y es **reenviable por diseño** (sin PII, vida corta). Seguirá pendiente además el consumidor de
+  `EXPIRADA`/`PAGO_TARDE` del dashboard (H-06).
+- **`kamerinos-infra`:** inyectar `FRONTEND_BASE_URL` en el servicio `backend` (deep-link de pago, Fase 2): es
+  la URL **pública** del frontend, no la interna del compose; sin ella el backend no puede construir el
+  `paymentUrl` de una cita.
+- **`saaspa-IA`:** cuando su sesión escriba el contrato de los endpoints internos de Fase 2 (diseño aceptado en
+  `docs/f2-create-and-payment-design.md`): schema de `POST /api/internal/v1/bookings` con `Idempotency-Key`
+  **obligatoria** y formato acordado `bookings.create:<jti>` (la construye el llamador), las tres capas de
+  validación de `startTime`, el campo aditivo `code` en los errores de negocio (`SLOT_TAKEN` y
+  `PENDING_CAP_REACHED` en 409, `INVALID_SLOT` en 400 para una hora que no es slot), el rechazo de cancelar
+  una cita `EXPIRADA` con `BOOKING_EXPIRED`, y `Booking.paymentUrl` con su vida corta (la IA no lo cachea ni
+  lo reenvía en turnos posteriores; enlace de pago: **404** con firma inválida y **410** con firma válida
+  pero vencida). De paso, corregir la nota falsa de `internal-api.openapi.yaml` que dice que
+  `POST /api/bookings` no acepta `Idempotency-Key` (HN-02 de la tercera revisión, falso desde el PR #78).
 
 ---
 
@@ -276,7 +281,7 @@ Pendientes (van a otro repo; **no** se implementan aquí):
 |---|---|---|
 | 0 | Alineación de contratos con `saaspa-IA` | Completada |
 | 1 | Turn token ES256 + guard · `/api/internal/v1/*` de lectura (services, services/{id\|slug}, availability) · `POST /api/chat` con handoff por conversación y anti-abuso | Completada y **aceptada con un E2E real contra `saaspa-IA` en ejecución** (no simulado); el despliegue en producción sigue pendiente |
-| 2 | Escrituras por chat (`Idempotency-Key`, deep-link Wompi, `me/bookings`) | Pendiente |
+| 2 | Escrituras por chat (`Idempotency-Key`, deep-link Wompi, `me/bookings`) | Pendiente — diseño aceptado en `docs/f2-create-and-payment-design.md`; `GET /api/internal/v1/me/bookings` implementado (PR #87) |
 | 3 | Agente ADMIN + reportes internos | Pendiente |
 | 4 | Canal WhatsApp con identidad (`waId` resuelto por este backend y firmado en el token) | Pendiente |
 
@@ -441,23 +446,20 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   `problem-extensions` 5) y E2E: el 429 de la IA conserva `detail` y extensiones, y el del Throttler también
   responde problem+json (el formato no depende de quién rechazó el turno) — verify verde (64 suites, 555 tests)
   y E2E completo en verde (9 suites, 63 tests).
-- 2026-09-28 — feat/internal-me-bookings — primer endpoint de **Fase 2**, de lectura: `GET
-  /api/internal/v1/me/bookings` (`InternalMeBookingsController`) con las guardas obligatorias
-  (`@Public` + `@SkipThrottle` + `InternalAuthGuard`) y el sujeto **solo** desde el turn token
-  (`requireTurnUser`, 403 si el turno es anónimo). Respuesta exacta `{ timezone, bookings: [{ id,
-  serviceId, serviceName, price, start, end, status }], hasMore }`: sin PII ni internos (proyección
-  recortada), `start`/`end` con offset explícito en la zona del tenant (misma convención que
-  `/availability`), `EXPIRADA`/`PAGO_TARDE` incluidos a propósito (H-06) y `hasMore` como señal de que la
-  página no es todo el listado. Orden por defecto: historial completo con `startTime` descendente; con
-  `upcoming=true`: solo lo que empieza de ahora en adelante, `startTime` ascendente (la próxima cita
-  primero), para que un historial largo no oculte lo vigente con `limit` bajo. Paginación por query: `page`
-  (default 1), `limit` (default 20, máximo 50; por encima 400) y `upcoming` (`true`/`false`; otro valor 400);
-  para soportarla `BookingsService.findAll` pasa a aceptar el `BookingFilters` completo del repositorio
-  (`page`/`limit` y un `from` nuevo para `upcoming`, cambio de firma aditivo). Test-guarda pedido por
-  la persona: dos `create()` secuenciales al mismo slot con `Idempotency-Key` distintas producen **409**
-  en el segundo (`bookings-idempotency.e2e-spec.ts`; el solape ya tenía test unitario, este lo fija a
-  nivel HTTP). 4 tests unitarios nuevos del controlador + las 2 pruebas arquitectónicas actualizadas
-  con el controlador nuevo (que suman sus propios casos), 6 casos E2E nuevos en `internal-api.e2e-spec.ts`
-  — verify verde (65 suites, 564 tests); E2E completo en verde (9 suites, 70 tests), con `internal-api`
-  19/19 y `bookings-idempotency` 4/4. El
-  contrato de `saaspa-IA` lo escribe su sesión (pedido anotado en §9); este repo no lo toca.
+- 2026-09-28 — docs/f2-create-and-payment-design — **solo documentación, sin código**: diseño de Fase 2
+  aceptado por la persona, fijado en `docs/f2-create-and-payment-design.md` para que la implementación no
+  reabra decisiones. Contiene: `paymentUrl` **opción A** (enlace firmado de vida corta a una página nueva
+  del frontend, TTL = ventana de pago, HMAC con derivación de clave por etiqueta **distinta** a la de
+  `chat-session`, endpoint público con throttle propio que solo devuelve la config del widget si la cita
+  sigue `PENDIENTE_PAGO`, y constancia explícita de que el enlace es **reenviable**); `POST` interno de
+  creación con `Idempotency-Key = bookings.create:<jti>` construida por el llamador, tres capas de validación
+  de `startTime` (offset explícito, coherencia del offset con la zona del tenant, pertenencia al slot),
+  **sin `payFull` en v1**, AuditLog con `userId` del turno y `conversationId`, y errores con código estable
+  (`SLOT_TAKEN` / `PENDING_CAP_REACHED` en 409, **`INVALID_SLOT` en 400 para una hora que no es slot**,
+  nombres propuestos); rechazo de cancelar una cita `EXPIRADA` con código estable (`BOOKING_EXPIRED`,
+  propuesto); enlace de pago con **404** para firma inválida y **410** para firma válida pero vencida; y la
+  carrera concurrente de `create()` **como decisión
+  pendiente antes de `crearCita`**, con la inclinación registrada hacia el constraint de exclusión en
+  Postgres. Pedidos a otros repos anotados en §9 (página `/pago` de `saaspa-frontend`,
+  `FRONTEND_BASE_URL` de `kamerinos-infra`, contrato y HN-02 de `saaspa-IA`). Sin cambios de código ni de
+  contrato — verify verde (64 suites, 555 tests).
