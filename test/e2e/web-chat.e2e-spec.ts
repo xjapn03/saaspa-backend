@@ -9,6 +9,7 @@ import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/database/prisma.service';
 import { HANDOFF_ACTIVE_MESSAGE } from '../../src/modules/chat/chat.constants';
+import { VALIDATION_DETAIL } from '../../src/common/filters/problem-details.filter';
 
 const UUID = new RegExp('^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
 const CONVERSATION_ID = new RegExp('^[0-9a-f]{32}$');
@@ -294,6 +295,10 @@ describe('Web chat (e2e)', () => {
     );
     expect(typeof response.body.detail).toBe('string');
     expect(response.body.detail.length).toBeGreaterThan(0);
+    // R-07.a: class-validator's English never reaches the clienta, the chat has
+    // its own fixed Spanish detail.
+    expect(response.body.detail).toBe(VALIDATION_DETAIL);
+    expect(JSON.stringify(response.body)).not.toContain('should not be empty');
     // The Nest shape is gone on this endpoint: the contract promises RFC 9457.
     expect(response.body).not.toHaveProperty('statusCode');
     expect(response.body).not.toHaveProperty('error');

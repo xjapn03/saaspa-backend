@@ -429,3 +429,14 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   `problem-extensions` 5) y E2E: el 429 de la IA conserva `detail` y extensiones, y el del Throttler también
   responde problem+json (el formato no depende de quién rechazó el turno) — verify verde (64 suites, 555 tests)
   y E2E completo en verde (9 suites, 63 tests).
+- 2026-09-28 — fix/chat-throttler-detail — residual **R-07.a** de la tercera revisión conjunta: los textos que
+  genera el propio gateway ya no llegan crudos a la clienta. El `ProblemDetailsFilter` especial-casa la
+  `ThrottlerException` (literal `ThrottlerException: Too Many Requests` de `@nestjs/throttler` 6.5.0) con el
+  `detail` canónico en español `THROTTLER_DETAIL`, y los 400 de validación del chat (arreglo de mensajes de
+  class-validator, la única forma de 400 que no es texto propio) responden el `detail` fijo `VALIDATION_DETAIL`
+  con el motivo técnico al log (`warn`, sin PII: los mensajes de class-validator llevan rutas de propiedades,
+  no valores); ambos textos se exportan del filtro para tests y E2E. 2 tests unitarios nuevos (reemplazan el
+  que unía los mensajes en `detail`), aserciones E2E nuevas en `rate-limit` (el 429 del Throttler fija el
+  `detail` canónico) y `web-chat` (el 400 de validación fija `VALIDATION_DETAIL`) — verify verde (64 suites,
+  556 tests); E2E de `web-chat` (12/12) y `rate-limit` (2/2) en verde. Nota: en este equipo los E2E necesitan
+  `NODE_OPTIONS=--max-old-space-size=4096` (el heap por defecto de ~2 GB se queda corto en el mount FUSE).

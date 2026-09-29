@@ -7,6 +7,7 @@ import * as request from 'supertest';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from '../../src/app.module';
 import { TRUSTED_PROXY_HOPS, applyProxyTrust } from '../../src/common/http/proxy-trust';
+import { THROTTLER_DETAIL } from '../../src/common/filters/problem-details.filter';
 import { PrismaService } from '../../src/database/prisma.service';
 
 /**
@@ -112,6 +113,9 @@ describe('Rate limit behind the proxy (e2e)', () => {
     // The shape does not depend on who rejected the turn: the guard blocks before
     // the handler runs, and the chat still answers RFC 9457 (J-07).
     expect(throttled.headers['content-type']).toContain('application/problem+json');
+    // R-07.a: the clienta never sees the throttler's raw jargon.
+    expect(throttled.body.detail).toBe(THROTTLER_DETAIL);
+    expect(JSON.stringify(throttled.body)).not.toContain('ThrottlerException');
   }, 60000);
 
   it('stamps the turn token with the appended address, never the forged prefix', async () => {
