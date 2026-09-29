@@ -5,7 +5,12 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { ProblemDetailsFilter } from '../problem-details.filter';
+import { ThrottlerException } from '@nestjs/throttler';
+import {
+  ProblemDetailsFilter,
+  THROTTLER_DETAIL,
+  VALIDATION_DETAIL,
+} from '../problem-details.filter';
 
 describe('ProblemDetailsFilter', () => {
   let filter: ProblemDetailsFilter;
@@ -75,8 +80,9 @@ describe('ProblemDetailsFilter', () => {
     );
   });
 
-  it('joins an array of validation messages into detail', () => {
+  it('replaces the raw validation messages with a fixed Spanish detail (R-07.a)', () => {
     const { argumentsHost, json } = host();
+    jest.spyOn((filter as any).logger, 'warn').mockImplementation(() => undefined);
     const exception = new BadRequestException({
       statusCode: 400,
       message: ['message.text should not be empty', 'message.text must be a string'],
@@ -87,9 +93,33 @@ describe('ProblemDetailsFilter', () => {
 
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({
-        detail: 'message.text should not be empty; message.text must be a string',
+        title: 'Solicitud incorrecta',
+        status: 400,
+        detail: VALIDATION_DETAIL,
       }),
     );
+    // class-validator's English never reaches the clienta...
+    expect(JSON.stringify(json.mock.calls[0][0])).not.toContain('should not be empty');
+    // ...but the technical reason is logged (R-07.a).
+    expect((filter as any).logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('message.text should not be empty; message.text must be a string'),
+    );
+  });
+
+  it('replaces the throttler jargon with a fixed Spanish detail (R-07.a)', () => {
+    const { argumentsHost, json } = host();
+
+    // The message is the literal of @nestjs/throttler 6.5.0, raw by design.
+    filter.catch(new ThrottlerException(), argumentsHost);
+
+    expect(json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Demasiadas solicitudes',
+        status: 429,
+        detail: THROTTLER_DETAIL,
+      }),
+    );
+    expect(JSON.stringify(json.mock.calls[0][0])).not.toContain('ThrottlerException');
   });
 
   it('keeps the message and the title of any status', () => {
