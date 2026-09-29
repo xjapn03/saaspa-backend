@@ -266,11 +266,12 @@ Pendientes (van a otro repo; **no** se implementan aquí):
 - **`saaspa-IA`:** cuando su sesión escriba el contrato de los endpoints internos de Fase 2 (diseño aceptado en
   `docs/f2-create-and-payment-design.md`): schema de `POST /api/internal/v1/bookings` con `Idempotency-Key`
   **obligatoria** y formato acordado `bookings.create:<jti>` (la construye el llamador), las tres capas de
-  validación de `startTime`, el campo aditivo `code` de los 409 con los valores `SLOT_TAKEN` y
-  `PENDING_CAP_REACHED`, el rechazo de cancelar una cita `EXPIRADA` con `BOOKING_EXPIRED`, y
-  `Booking.paymentUrl` con su vida corta (la IA no lo cachea ni lo reenvía en turnos posteriores). De paso,
-  corregir la nota falsa de `internal-api.openapi.yaml` que dice que `POST /api/bookings` no acepta
-  `Idempotency-Key` (HN-02 de la tercera revisión, falso desde el PR #78).
+  validación de `startTime`, el campo aditivo `code` en los errores de negocio (`SLOT_TAKEN` y
+  `PENDING_CAP_REACHED` en 409, `INVALID_SLOT` en 400 para una hora que no es slot), el rechazo de cancelar
+  una cita `EXPIRADA` con `BOOKING_EXPIRED`, y `Booking.paymentUrl` con su vida corta (la IA no lo cachea ni
+  lo reenvía en turnos posteriores; enlace de pago: **404** con firma inválida y **410** con firma válida
+  pero vencida). De paso, corregir la nota falsa de `internal-api.openapi.yaml` que dice que
+  `POST /api/bookings` no acepta `Idempotency-Key` (HN-02 de la tercera revisión, falso desde el PR #78).
 
 ---
 
@@ -453,9 +454,11 @@ Añade una línea por tarea terminada: `fecha — rama — qué cambió — resu
   sigue `PENDIENTE_PAGO`, y constancia explícita de que el enlace es **reenviable**); `POST` interno de
   creación con `Idempotency-Key = bookings.create:<jti>` construida por el llamador, tres capas de validación
   de `startTime` (offset explícito, coherencia del offset con la zona del tenant, pertenencia al slot),
-  **sin `payFull` en v1**, AuditLog con `userId` del turno y `conversationId`, y 409 con código estable
-  (`SLOT_TAKEN` / `PENDING_CAP_REACHED`, nombres propuestos); rechazo de cancelar una cita `EXPIRADA` con
-  código estable (`BOOKING_EXPIRED`, propuesto); y la carrera concurrente de `create()` **como decisión
+  **sin `payFull` en v1**, AuditLog con `userId` del turno y `conversationId`, y errores con código estable
+  (`SLOT_TAKEN` / `PENDING_CAP_REACHED` en 409, **`INVALID_SLOT` en 400 para una hora que no es slot**,
+  nombres propuestos); rechazo de cancelar una cita `EXPIRADA` con código estable (`BOOKING_EXPIRED`,
+  propuesto); enlace de pago con **404** para firma inválida y **410** para firma válida pero vencida; y la
+  carrera concurrente de `create()` **como decisión
   pendiente antes de `crearCita`**, con la inclinación registrada hacia el constraint de exclusión en
   Postgres. Pedidos a otros repos anotados en §9 (página `/pago` de `saaspa-frontend`,
   `FRONTEND_BASE_URL` de `kamerinos-infra`, contrato y HN-02 de `saaspa-IA`). Sin cambios de código ni de

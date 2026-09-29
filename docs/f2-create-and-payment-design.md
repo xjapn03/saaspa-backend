@@ -28,12 +28,13 @@ pago asistido por el salón).
   nunca sirve para fabricar sesiones del chat ni al revés). Igual patrón que `kamerinos_chat_session`, con
   etiqueta propia.
 - **TTL:** igual a la ventana de pago (`BOOKING_PAYMENT_TTL_MINUTES`, default 30). `exp` viaja en el enlace
-  y se verifica; un enlace vencido responde **410** (o 404; a fijar en implementación) y el bot reenvía a
-  `/agendar` o reagenda.
+  y se verifica, decidido: **firma inválida o manipulada → 404**; **firma válida pero vencida → 410**. Con
+  el 410 el bot reenvía a `/agendar` o reagenda.
 - **Endpoint público nuevo:** `POST /api/payments/link-checkout` (nombre tentativo) que solo acepta el
-  `sig` válido y no vencido y **solo devuelve la config si la cita sigue `PENDIENTE_PAGO`**; en cualquier
-  otro estado responde error estable (la cita ya se confirmó, expiró o es `PAGO_TARDE`). Conviene que
-  devuelva también el `reference` para que el frontend pinte el widget sin otra llamada.
+  `sig` válido y no vencido (**404** con firma inválida, **410** con firma válida pero vencida) y **solo
+  devuelve la config si la cita sigue `PENDIENTE_PAGO`**; en cualquier otro estado responde error estable
+  (la cita ya se confirmó, expiró o es `PAGO_TARDE`). Conviene que devuelva también el `reference` para
+  que el frontend pinte el widget sin otra llamada.
 - **Throttle propio:** el endpoint es público y lleva su propio `@Throttle` (no hereda el bucket del chat).
 - **El enlace es reenviable, y se acepta a propósito:** cualquiera con el enlace puede *pagar* esa cita.
   El dinero entra igual al salón por la cita de la clienta, la ventana es de 30 minutos y el estado de la
@@ -65,8 +66,9 @@ pago asistido por el salón).
      frontera de escritura aunque el lado IA mantenga su política de "avisar, no fallar" al leer.
   3. **Pertenencia al slot:** la fecha local (zona del tenant) del `startTime` debe ser uno de los slots de
      `getAvailabilityWindow(serviceId, date)`. Valida horario laboral (8-18), grilla de 30 min y re-chequea
-     ocupación en el instante de la escritura, en una sola consulta. Si no → **409** (franja ya no libre) o
-     **400** (hora imposible, p. ej. 10:17), a fijar en implementación.
+     ocupación en el instante de la escritura, en una sola consulta. Decidido: una hora que no es slot
+     (fuera de horario o fuera de la grilla) responde **400 con código estable `INVALID_SLOT`** (propuesta
+     de nombre); un slot válido pero ya ocupado responde **409 `SLOT_TAKEN`**.
 - **Creación:** delega en `BookingsService.create(subject.userId, dto, { idempotencyKey })`, que ya aporta:
   replay por clave única antes del tope y del lock, tope de 2 pendientes (**409**), chequeo de solape
   (**409**), hold de Redis y `PAGO_TARDE`/`EXPIRADA` excluidos de la ocupación.
@@ -115,7 +117,8 @@ Registrados en `AGENTS.md` §9; desde este repo no se tocan:
 - **`kamerinos-infra`:** `FRONTEND_BASE_URL` en el servicio `backend`.
 - **`saaspa-IA`:** cuando su sesión escriba el contrato: schema de `POST /api/internal/v1/bookings`
   (incluida la `Idempotency-Key` **obligatoria** con formato `bookings.create:<jti>`, las tres capas de
-  validación, el campo aditivo `code` de los 409 con `SLOT_TAKEN`/`PENDING_CAP_REACHED`, el `BOOKING_EXPIRED`
-  de la cancelación y `Booking.paymentUrl` con su vida corta); y corregir de paso la nota falsa de
+  validación, el campo aditivo `code` en los errores de negocio (`SLOT_TAKEN`/`PENDING_CAP_REACHED` en
+  409, `INVALID_SLOT` en 400, `BOOKING_EXPIRED` en la cancelación), y `Booking.paymentUrl` con su vida
+  corta); y corregir de paso la nota falsa de
   `internal-api.openapi.yaml` que dice que `POST /api/bookings` no acepta `Idempotency-Key` (HN-02 de la
   tercera revisión, falso desde el PR #78).
