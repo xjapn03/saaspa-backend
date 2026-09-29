@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 /**
  * Query parameters of GET /api/internal/v1/me/bookings. The subject (which user's
@@ -19,4 +19,14 @@ export class MyBookingsQueryDto {
   @Min(1)
   @Max(50)
   limit?: number;
+
+  /**
+   * `upcoming=true` returns only the bookings that start at or after this
+   * moment, soonest first, so a long history cannot push the client's next
+   * appointment out of the page. Validated as a string on purpose: query
+   * values always arrive as strings.
+   */
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  upcoming?: string;
 }

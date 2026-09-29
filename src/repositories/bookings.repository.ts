@@ -66,6 +66,8 @@ export class BookingsRepository extends IBookingsRepository {
       const dayStart = new Date(yyyy, mm - 1, dd, 0, 0, 0);
       const dayEnd = new Date(yyyy, mm - 1, dd, 23, 59, 59, 999);
       where.startTime = { gte: dayStart, lte: dayEnd };
+    } else if (filters.from) {
+      where.startTime = { gte: filters.from };
     }
     if (filters.search) {
       where.OR = [

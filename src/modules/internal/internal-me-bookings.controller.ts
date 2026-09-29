@@ -44,17 +44,31 @@ export class InternalMeBookingsController {
     // bookings (ADR 0012 points 1 and 2).
     const subject = requireTurnUser(turn);
 
-    const result = await this.bookingsService.findAll({
-      userId: subject.userId,
-      page: query.page,
-      limit: query.limit,
-    });
+    // Default: the whole history, latest `startTime` first — any upcoming booking
+    // sorts before any past one. `upcoming=true` narrows it to the bookings that
+    // start at or after this moment, soonest first, so a long history can never
+    // push the client's next appointment out of the page.
+    const result = await this.bookingsService.findAll(
+      query.upcoming === 'true'
+        ? {
+            userId: subject.userId,
+            from: new Date(),
+            sortBy: 'startTime',
+            order: 'asc',
+            page: query.page,
+            limit: query.limit,
+          }
+        : { userId: subject.userId, page: query.page, limit: query.limit },
+    );
 
     const timezone = this.configService.get<string>('TENANT_TIMEZONE') || DEFAULT_TIMEZONE;
 
     return {
       timezone,
       bookings: result.data.map((booking) => this.toContractBooking(booking, timezone)),
+      // Signal that there are more results beyond this page, so the assistant
+      // can ask for the next one instead of assuming the list is complete.
+      hasMore: result.page * result.limit < result.total,
     };
   }
 

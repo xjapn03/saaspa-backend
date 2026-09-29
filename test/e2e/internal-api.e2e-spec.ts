@@ -307,7 +307,9 @@ describe('Internal API (e2e)', () => {
       });
       otherUserId = other.id;
 
-      // `startTime` desc is the listing order, so these are returned newest first.
+      // `startTime` desc is the listing order, so these are returned newest first,
+      // and the past one is the tail of the whole history.
+      bookingIds.push((await createBooking(userId, '2026-01-01T13:00:00Z', 'COMPLETADA')).id);
       bookingIds.push((await createBooking(userId, '2027-05-01T13:00:00Z', 'CONFIRMADA')).id);
       bookingIds.push((await createBooking(userId, '2027-06-01T13:00:00Z', 'EXPIRADA')).id);
       bookingIds.push((await createBooking(userId, '2027-07-01T13:00:00Z', 'PAGO_TARDE')).id);
@@ -333,11 +335,19 @@ describe('Internal API (e2e)', () => {
         .set(headers(turnToken({ userId, role: 'CLIENTE', channel: 'WEB_LOGGED' })));
 
       expect(response.status).toBe(200);
-      expect(Object.keys(response.body).sort()).toEqual(['bookings', 'timezone']);
+      expect(Object.keys(response.body).sort()).toEqual(['bookings', 'hasMore', 'timezone']);
       expect(response.body.timezone).toBe('America/Bogota');
+      expect(response.body.hasMore).toBe(false);
 
       const bookings = response.body.bookings;
-      expect(bookings.map((booking) => booking.status)).toEqual(['PAGO_TARDE', 'EXPIRADA', 'CONFIRMADA']);
+      // Whole history, latest start first: the past booking comes last and cannot
+      // push the upcoming ones out of the page.
+      expect(bookings.map((booking) => booking.status)).toEqual([
+        'PAGO_TARDE',
+        'EXPIRADA',
+        'CONFIRMADA',
+        'COMPLETADA',
+      ]);
       expect(bookings.some((booking) => booking.id === otherBookingId)).toBe(false);
 
       for (const booking of bookings) {
@@ -365,21 +375,47 @@ describe('Internal API (e2e)', () => {
       }
     });
 
-    it('paginates with the requested page and limit', async () => {
+    it('paginates with the requested page and limit and reports hasMore', async () => {
       const firstPage = await request(app.getHttpServer())
         .get('/api/internal/v1/me/bookings?page=1&limit=2')
         .set(headers(turnToken({ userId, role: 'CLIENTE', channel: 'WEB_LOGGED' })));
 
       expect(firstPage.status).toBe(200);
       expect(firstPage.body.bookings).toHaveLength(2);
+      expect(firstPage.body.hasMore).toBe(true);
 
       const secondPage = await request(app.getHttpServer())
         .get('/api/internal/v1/me/bookings?page=2&limit=2')
         .set(headers(turnToken({ userId, role: 'CLIENTE', channel: 'WEB_LOGGED' })));
 
       expect(secondPage.status).toBe(200);
-      expect(secondPage.body.bookings).toHaveLength(1);
+      expect(secondPage.body.bookings).toHaveLength(2);
+      expect(secondPage.body.hasMore).toBe(false);
       expect(secondPage.body.bookings[0].id).not.toBe(firstPage.body.bookings[0].id);
+    });
+
+    it('with upcoming=true returns only the bookings from now on, soonest first', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/internal/v1/me/bookings?upcoming=true')
+        .set(headers(turnToken({ userId, role: 'CLIENTE', channel: 'WEB_LOGGED' })));
+
+      expect(response.status).toBe(200);
+      // The past booking is filtered out and the next appointment comes first,
+      // so a long history can never hide what is still valid.
+      expect(response.body.bookings.map((booking) => booking.status)).toEqual([
+        'CONFIRMADA',
+        'EXPIRADA',
+        'PAGO_TARDE',
+      ]);
+      expect(response.body.hasMore).toBe(false);
+    });
+
+    it('rejects an unknown value for upcoming', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/internal/v1/me/bookings?upcoming=quizas')
+        .set(headers(turnToken({ userId, role: 'CLIENTE', channel: 'WEB_LOGGED' })));
+
+      expect(response.status).toBe(400);
     });
 
     it('rejects a limit above the contract maximum', async () => {

@@ -81,13 +81,29 @@ describe('InternalMeBookingsController', () => {
       expect(bookingsService.findAll).toHaveBeenCalledWith({ userId: 'user-1', page: 2, limit: 5 });
     });
 
+    it('with upcoming=true filters from now and sorts soonest first', async () => {
+      bookingsService.findAll.mockResolvedValue(page([]) as never);
+
+      await controller.myBookings(turn(), { upcoming: 'true' });
+
+      expect(bookingsService.findAll).toHaveBeenCalledWith({
+        userId: 'user-1',
+        from: expect.any(Date),
+        sortBy: 'startTime',
+        order: 'asc',
+        page: undefined,
+        limit: undefined,
+      });
+    });
+
     it('returns exactly the contract shape, with offset ISO instants', async () => {
       bookingsService.findAll.mockResolvedValue(page([booking()]) as never);
 
       const result = await controller.myBookings(turn(), {});
 
-      expect(Object.keys(result).sort()).toEqual(['bookings', 'timezone']);
+      expect(Object.keys(result).sort()).toEqual(['bookings', 'hasMore', 'timezone']);
       expect(result.timezone).toBe('America/Bogota');
+      expect(result.hasMore).toBe(false);
 
       const [first] = result.bookings;
       expect(Object.keys(first).sort()).toEqual([
@@ -108,6 +124,20 @@ describe('InternalMeBookingsController', () => {
       expect(first.end).toBe('2027-03-15T09:00:00-05:00');
       expect(OFFSET_ISO.test(first.start)).toBe(true);
       expect(first.status).toBe('CONFIRMADA');
+    });
+
+    it('signals with hasMore that the page is not the whole list', async () => {
+      bookingsService.findAll.mockResolvedValue({
+        data: [booking()],
+        total: 21,
+        page: 1,
+        limit: 20,
+        totalPages: 2,
+      } as never);
+
+      const result = await controller.myBookings(turn(), {});
+
+      expect(result.hasMore).toBe(true);
     });
 
     it('keeps EXPIRADA and PAGO_TARDE and never returns PII or internals', async () => {
