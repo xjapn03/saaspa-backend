@@ -235,6 +235,7 @@ describe('Internal identity contract (ADR 0012)', () => {
     it('discovers every internal controller from the module folder', () => {
       expect(controllers.map((controller) => controller.name).sort()).toEqual([
         'InternalAvailabilityController',
+        'InternalMeBookingsController',
         'InternalServicesController',
       ]);
     });

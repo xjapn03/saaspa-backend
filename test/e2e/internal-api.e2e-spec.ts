@@ -264,4 +264,166 @@ describe('Internal API (e2e)', () => {
       expect(response.status).toBe(404);
     });
   });
+
+  describe('GET /api/internal/v1/me/bookings', () => {
+    const EMAIL = 'me-bookings-e2e@test.com';
+    const OTHER_EMAIL = 'me-bookings-other-e2e@test.com';
+
+    let userId = '';
+    let otherUserId = '';
+    let otherBookingId = '';
+    const bookingIds: string[] = [];
+
+    const createBooking = (ownerId: string, isoStart: string, status: string) =>
+      prisma.booking.create({
+        data: {
+          user: { connect: { id: ownerId } },
+          service: { connect: { id: SERVICE_ID } },
+          startTime: new Date(isoStart),
+          endTime: new Date(new Date(isoStart).getTime() + 60 * 60000),
+          status: status as never,
+        },
+        select: { id: true },
+      });
+
+    beforeAll(async () => {
+      const client = await prisma.user.create({
+        data: {
+          email: EMAIL,
+          firstName: 'Mia',
+          lastName: 'Citas',
+          passwordHash: 'password123',
+        },
+      });
+      userId = client.id;
+
+      const other = await prisma.user.create({
+        data: {
+          email: OTHER_EMAIL,
+          firstName: 'Otra',
+          lastName: 'Clienta',
+          passwordHash: 'password123',
+        },
+      });
+      otherUserId = other.id;
+
+      // `startTime` desc is the listing order, so these are returned newest first,
+      // and the past one is the tail of the whole history.
+      bookingIds.push((await createBooking(userId, '2026-01-01T13:00:00Z', 'COMPLETADA')).id);
+      bookingIds.push((await createBooking(userId, '2027-05-01T13:00:00Z', 'CONFIRMADA')).id);
+      bookingIds.push((await createBooking(userId, '2027-06-01T13:00:00Z', 'EXPIRADA')).id);
+      bookingIds.push((await createBooking(userId, '2027-07-01T13:00:00Z', 'PAGO_TARDE')).id);
+      otherBookingId = (await createBooking(otherUserId, '2027-08-01T13:00:00Z', 'CANCELADA')).id;
+    });
+
+    afterAll(async () => {
+      await prisma.booking.deleteMany({ where: { id: { in: [...bookingIds, otherBookingId] } } });
+      await prisma.user.deleteMany({ where: { email: { in: [EMAIL, OTHER_EMAIL] } } });
+    });
+
+    it('returns 403 for an anonymous turn', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/internal/v1/me/bookings')
+        .set(headers(turnToken()));
+
+      expect(response.status).toBe(403);
+    });
+
+    it('returns only the client bookings in the contract shape, EXPIRADA and PAGO_TARDE included', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/internal/v1/me/bookings')
+        .set(headers(turnToken({ userId, role: 'CLIENTE', channel: 'WEB_LOGGED' })));
+
+      expect(response.status).toBe(200);
+      expect(Object.keys(response.body).sort()).toEqual(['bookings', 'hasMore', 'timezone']);
+      expect(response.body.timezone).toBe('America/Bogota');
+      expect(response.body.hasMore).toBe(false);
+
+      const bookings = response.body.bookings;
+      // Whole history, latest start first: the past booking comes last and cannot
+      // push the upcoming ones out of the page.
+      expect(bookings.map((booking) => booking.status)).toEqual([
+        'PAGO_TARDE',
+        'EXPIRADA',
+        'CONFIRMADA',
+        'COMPLETADA',
+      ]);
+      expect(bookings.some((booking) => booking.id === otherBookingId)).toBe(false);
+
+      for (const booking of bookings) {
+        expect(Object.keys(booking).sort()).toEqual([
+          'end',
+          'id',
+          'price',
+          'serviceId',
+          'serviceName',
+          'start',
+          'status',
+        ]);
+        expect(booking.serviceId).toBe(SERVICE_ID);
+        expect(booking.serviceName).toBe(SERVICE_NAME);
+        expect(booking.price).toBe(150000);
+        expect(OFFSET_ISO.test(booking.start)).toBe(true);
+        expect(OFFSET_ISO.test(booking.end)).toBe(true);
+      }
+
+      // No PII and no internals ever leave: the shape is exact, so this is a
+      // double check against a projection regression.
+      const body = JSON.stringify(response.body);
+      for (const leaked of [EMAIL, OTHER_EMAIL, 'idempotencyKey', 'googleEventId', 'notes']) {
+        expect(body).not.toContain(leaked);
+      }
+    });
+
+    it('paginates with the requested page and limit and reports hasMore', async () => {
+      const firstPage = await request(app.getHttpServer())
+        .get('/api/internal/v1/me/bookings?page=1&limit=2')
+        .set(headers(turnToken({ userId, role: 'CLIENTE', channel: 'WEB_LOGGED' })));
+
+      expect(firstPage.status).toBe(200);
+      expect(firstPage.body.bookings).toHaveLength(2);
+      expect(firstPage.body.hasMore).toBe(true);
+
+      const secondPage = await request(app.getHttpServer())
+        .get('/api/internal/v1/me/bookings?page=2&limit=2')
+        .set(headers(turnToken({ userId, role: 'CLIENTE', channel: 'WEB_LOGGED' })));
+
+      expect(secondPage.status).toBe(200);
+      expect(secondPage.body.bookings).toHaveLength(2);
+      expect(secondPage.body.hasMore).toBe(false);
+      expect(secondPage.body.bookings[0].id).not.toBe(firstPage.body.bookings[0].id);
+    });
+
+    it('with upcoming=true returns only the bookings from now on, soonest first', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/internal/v1/me/bookings?upcoming=true')
+        .set(headers(turnToken({ userId, role: 'CLIENTE', channel: 'WEB_LOGGED' })));
+
+      expect(response.status).toBe(200);
+      // The past booking is filtered out and the next appointment comes first,
+      // so a long history can never hide what is still valid.
+      expect(response.body.bookings.map((booking) => booking.status)).toEqual([
+        'CONFIRMADA',
+        'EXPIRADA',
+        'PAGO_TARDE',
+      ]);
+      expect(response.body.hasMore).toBe(false);
+    });
+
+    it('rejects an unknown value for upcoming', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/internal/v1/me/bookings?upcoming=quizas')
+        .set(headers(turnToken({ userId, role: 'CLIENTE', channel: 'WEB_LOGGED' })));
+
+      expect(response.status).toBe(400);
+    });
+
+    it('rejects a limit above the contract maximum', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/internal/v1/me/bookings?limit=51')
+        .set(headers(turnToken({ userId, role: 'CLIENTE', channel: 'WEB_LOGGED' })));
+
+      expect(response.status).toBe(400);
+    });
+  });
 });
